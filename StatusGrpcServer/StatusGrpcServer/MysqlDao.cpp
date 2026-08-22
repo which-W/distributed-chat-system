@@ -74,7 +74,7 @@ bool MysqlDao::CheckEmail(const std::string& name, const std::string& email) {
 
 		// 遍历结果集
 		while (res->next()) {
-			std::cout << "Check Email: " << res->getString("email") << std::endl;
+			std::cout << "Email lookup completed" << std::endl;
 			if (email != res->getString("email")) {
 				pool_->returnConnection(std::move(con));
 				return false;
@@ -145,7 +145,6 @@ bool MysqlDao::CheckPwd(const std::string& name, const std::string& pwd, UserInf
 		while (res->next()) {
 			origin_pwd = res->getString("pwd");
 			// 输出查询到的密码
-			std::cout << "Password: " << origin_pwd << std::endl;
 			break;
 		}
 

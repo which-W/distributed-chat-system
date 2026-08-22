@@ -90,8 +90,7 @@ bool LogicSystem::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<Use
         userinfo->desc = root["desc"].asString();
         userinfo->sex = root["sex"].asInt();
         userinfo->icon = root["icon"].asString();
-        std::cout << "user login uid is  " << userinfo->uid << " name  is "
-            << userinfo->name << " pwd is " << userinfo->pwd << " email is " << userinfo->email << endl;
+        std::cout << "user login uid is " << userinfo->uid << " name is " << userinfo->name << endl;
     }
     else {
         //redis中没有则查询mysql
@@ -124,8 +123,7 @@ void LogicSystem::LoginChatCallback(shared_ptr<CSession> session, short msg_id, 
     Json::Reader reader;
     Json::Value root;
     reader.parse(msg_data, root);
-    std::cout << "user login uid is  " << root["uid"].asInt() << " user token  is "
-        << root["token"].asString() << endl;
+    std::cout << "user login uid is " << root["uid"].asInt() << endl;
 	auto uid = root["uid"].asInt();
     auto token = root["token"].asString();
     Json::Value rtvalue;
@@ -158,7 +156,6 @@ void LogicSystem::LoginChatCallback(shared_ptr<CSession> session, short msg_id, 
         return;
     }
     rtvalue["uid"] = uid;
-    rtvalue["pwd"] = user_info->pwd;
     rtvalue["name"] = user_info->name;
     rtvalue["email"] = user_info->email;
     rtvalue["nick"] = user_info->nick;
@@ -515,17 +512,14 @@ void LogicSystem::GetUserByUid(std::string uid_str, Json::Value& rtvalue)
         reader.parse(info_str, root);
         auto uid = root["uid"].asInt();
         auto name = root["name"].asString();
-        auto pwd = root["pwd"].asString();
         auto email = root["email"].asString();
         auto nick = root["nick"].asString();
         auto desc = root["desc"].asString();
         auto sex = root["sex"].asInt();
         auto icon = root["icon"].asString();
-        std::cout << "user  uid is  " << uid << " name  is "
-            << name << " pwd is " << pwd << " email is " << email << " icon is " << icon << endl;
+        std::cout << "user uid is " << uid << " name is " << name << endl;
 
         rtvalue["uid"] = uid;
-        rtvalue["pwd"] = pwd;
         rtvalue["name"] = name;
         rtvalue["email"] = email;
         rtvalue["nick"] = nick;
@@ -560,7 +554,6 @@ void LogicSystem::GetUserByUid(std::string uid_str, Json::Value& rtvalue)
 
     //返回数据
     rtvalue["uid"] = user_info->uid;
-    rtvalue["pwd"] = user_info->pwd;
     rtvalue["name"] = user_info->name;
     rtvalue["email"] = user_info->email;
     rtvalue["nick"] = user_info->nick;
@@ -594,16 +587,13 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue)
         reader.parse(info_str, root);
         auto uid = root["uid"].asInt();
         auto name = root["name"].asString();
-        auto pwd = root["pwd"].asString();
         auto email = root["email"].asString();
         auto nick = root["nick"].asString();
         auto desc = root["desc"].asString();
         auto sex = root["sex"].asInt();
-        std::cout << "user  uid is  " << uid << " name  is "
-            << name << " pwd is " << pwd << " email is " << email << endl;
+        std::cout << "user uid is " << uid << " name is " << name << endl;
 
         rtvalue["uid"] = uid;
-        rtvalue["pwd"] = pwd;
         rtvalue["name"] = name;
         rtvalue["email"] = email;
         rtvalue["nick"] = nick;
@@ -635,7 +625,6 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue)
 
     //返回数据
     rtvalue["uid"] = user_info->uid;
-    rtvalue["pwd"] = user_info->pwd;
     rtvalue["name"] = user_info->name;
     rtvalue["email"] = user_info->email;
     rtvalue["nick"] = user_info->nick;

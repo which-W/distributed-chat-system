@@ -74,7 +74,7 @@ bool MysqlDao::CheckEmail(const std::string& name, const std::string& email) {
 
 		// 遍历结果集
 		while (res->next()) {
-			std::cout << "Check Email: " << res->getString("email") << std::endl;
+			std::cout << "Email lookup completed" << std::endl;
 			if (email != res->getString("email")) {
 				pool_->returnConnection(std::move(con));
 				return false;

@@ -144,8 +144,7 @@ bool ChatServiceImp::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<
 		userinfo->desc = root["desc"].asString();
 		userinfo->sex = root["sex"].asInt();
 		userinfo->icon = root["icon"].asString();
-		std::cout << "user login uid is  " << userinfo->uid << " name  is "
-			<< userinfo->name << " pwd is " << userinfo->pwd << " email is " << userinfo->email << endl;
+		std::cout << "user login uid is " << userinfo->uid << " name is " << userinfo->name << endl;
 	}
 	else {
 		//redis中没有则查询mysql
@@ -170,6 +169,7 @@ bool ChatServiceImp::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<
 		redis_root["icon"] = userinfo->icon;
 		RedisMgr::GetInstance()->Set(base_key, redis_root.toStyledString());
 	}
+	return true;
 }
 
 void ChatServiceImp::RegisterServer(std::shared_ptr<CServer> pServer)

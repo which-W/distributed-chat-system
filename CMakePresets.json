@@ -13,7 +13,8 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_INSTALL_OPTIONS": "--clean-buildtrees-after-build;--clean-packages-after-build"
       }
     },
     {
@@ -35,7 +36,9 @@
         "CHAT_BUILD_SERVERS": "ON",
         "CHAT_BUILD_CLIENT": "OFF",
         "VCPKG_MANIFEST_FEATURES": "servers",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-release",
+        "VCPKG_HOST_TRIPLET": "x64-windows-release",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets"
       }
     },
     {

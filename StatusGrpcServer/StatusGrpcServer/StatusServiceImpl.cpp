@@ -25,7 +25,6 @@ Status StatusServiceImpl::GetChatServer(ServerContext* context, const GetChatSer
 	reply->set_error(ErrorCodes::Success);
 	reply->set_token(generate_unique_string());
 	std::cout << request->uid() << std::endl;
-	std::cout << reply->token() << std::endl;
 	insertToken(request->uid(), reply->token());
 	return Status::OK;
 }

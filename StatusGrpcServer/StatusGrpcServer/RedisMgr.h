@@ -18,6 +18,7 @@ public:
 				continue;
 			}
 
+			if (pwd != nullptr && pwd[0] != '\0') {
 			auto reply = (redisReply*)redisCommand(context, "AUTH %s", pwd);
 			if (reply->type == REDIS_REPLY_ERROR) {
 				std::cout << "认证失败" << std::endl;
@@ -29,6 +30,7 @@ public:
 			//执行成功 释放redisCommand执行后返回的redisReply所占用的内存
 			freeReplyObject(reply);
 			std::cout << "认证成功" << std::endl;
+			}
 			connections_.push(context);
 		}
 
@@ -187,6 +189,7 @@ private:
 			return false;
 		}
 
+		if (pwd_ != nullptr && pwd_[0] != '\0') {
 		auto reply = (redisReply*)redisCommand(context, "AUTH %s", pwd_);
 		if (reply->type == REDIS_REPLY_ERROR) {
 			std::cout << "认证失败" << std::endl;
@@ -199,6 +202,7 @@ private:
 		//执行成功，释放redisCommand执行后返回的redisReply所占用的内存
 		freeReplyObject(reply);
 		std::cout << "认证成功" << std::endl;
+		}
 		returnConnection(context);
 		return true;
 	}
@@ -233,6 +237,7 @@ private:
 					continue;
 				}
 
+				if (pwd_ != nullptr && pwd_[0] != '\0') {
 				auto reply = (redisReply*)redisCommand(context, "AUTH %s", pwd_);
 				if (reply->type == REDIS_REPLY_ERROR) {
 					std::cout << "认证失败" << std::endl;
@@ -244,6 +249,7 @@ private:
 				//执行成功 释放redisCommand执行后返回的redisReply所占用的内存
 				freeReplyObject(reply);
 				std::cout << "认证成功" << std::endl;
+				}
 				connections_.push(context);
 			}
 		}

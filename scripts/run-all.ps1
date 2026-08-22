@@ -44,12 +44,18 @@ function Start-ChatProcess {
     if ($ConfigFile) {
         $env:CHAT_CONFIG_FILE = $ConfigFile
     }
-    $process = Start-Process -FilePath $Executable `
-        -ArgumentList $Arguments `
-        -WorkingDirectory $WorkingDirectory `
-        -RedirectStandardOutput (Join-Path $logDir "$Name.stdout.log") `
-        -RedirectStandardError (Join-Path $logDir "$Name.stderr.log") `
-        -WindowStyle Hidden -PassThru
+    $startParams = @{
+        FilePath = $Executable
+        WorkingDirectory = $WorkingDirectory
+        RedirectStandardOutput = Join-Path $logDir "$Name.stdout.log"
+        RedirectStandardError = Join-Path $logDir "$Name.stderr.log"
+        WindowStyle = 'Hidden'
+        PassThru = $true
+    }
+    if ($Arguments.Count -gt 0) {
+        $startParams.ArgumentList = $Arguments
+    }
+    $process = Start-Process @startParams
     $env:CHAT_CONFIG_FILE = $previousConfig
     Set-Content -LiteralPath $pidFile -Value $process.Id
     Write-Host "Started $Name (pid $($process.Id))"

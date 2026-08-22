@@ -12,7 +12,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     add_compile_options(/utf-8 /W3)
+    add_compile_definitions(_WIN32_WINNT=0x0A00 _CRT_SECURE_NO_WARNINGS)
 else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -34,6 +36,7 @@ if(CHAT_BUILD_SERVERS)
     find_package(jsoncpp CONFIG REQUIRED)
     find_package(hiredis CONFIG REQUIRED)
     find_package(MySQLConnectorCPP REQUIRED)
+    find_package(unofficial-libmysql CONFIG REQUIRED)
 
     if(TARGET JsonCpp::JsonCpp)
         set(CHAT_JSONCPP_TARGET JsonCpp::JsonCpp)
@@ -66,9 +69,9 @@ if(CHAT_BUILD_SERVERS)
         OUTPUT ${CHAT_PROTO_SOURCES} ${CHAT_PROTO_HEADERS}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CHAT_PROTO_OUTPUT_DIR}"
         COMMAND $<TARGET_FILE:protobuf::protoc>
-            --proto_path="${CMAKE_CURRENT_SOURCE_DIR}/proto"
-            --cpp_out="${CHAT_PROTO_OUTPUT_DIR}"
-            --grpc_out="${CHAT_PROTO_OUTPUT_DIR}"
+            --proto_path=${CMAKE_CURRENT_SOURCE_DIR}/proto
+            --cpp_out=${CHAT_PROTO_OUTPUT_DIR}
+            --grpc_out=${CHAT_PROTO_OUTPUT_DIR}
             --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
             "${CHAT_PROTO_FILE}"
         DEPENDS "${CHAT_PROTO_FILE}" protobuf::protoc gRPC::grpc_cpp_plugin
@@ -86,7 +89,8 @@ if(CHAT_BUILD_SERVERS)
         Threads::Threads
         ${CHAT_JSONCPP_TARGET}
         ${CHAT_HIREDIS_TARGET}
-        MySQLConnectorCPP::jdbc)
+        MySQLConnectorCPP::jdbc
+        unofficial::libmysql::libmysql)
 
     set(GATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/GateServer/GateServer")
     add_executable(gate_server

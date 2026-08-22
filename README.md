@@ -53,7 +53,7 @@ cmake --build --preset windows-server-release
 npm ci --prefix VarifyServer
 ```
 
-MySQL Connector/C++ 的 JDBC 兼容接口要求静态 vcpkg triplet，因此 Windows 服务器预设使用 `x64-windows-static`。
+MySQL Connector/C++ 的 JDBC 兼容接口要求静态 vcpkg triplet，因此 Windows 服务器预设使用仓库内的 `x64-windows-static-release`，宿主工具使用 `x64-windows-release`。两者只构建发布版依赖，避免 vcpkg 同时生成体积很大的 Debug/Release 库，并会跳过 libmysql 在 Windows 上可选且可能卡住的 WSL ABI 检查。
 
 ## Qt 客户端构建
 
@@ -206,12 +206,10 @@ node VarifyServer/server.js
 
 ## 提交到 GitHub
 
-仓库源码和资源约 1–2MB；原目录超过 1.5GB 的原因是 PDB、ILK、OBJ、DLL、EXE、Qt 运行库和 `node_modules`。它们均已删除并由 `.gitignore` 阻止再次提交。
+仓库只保存源码和必需资源。PDB、ILK、OBJ、DLL、EXE、Qt 运行库、`build/`、`node_modules/` 和开发证书均由 `.gitignore` 排除。
 
-不要使用 Git LFS 保存构建产物。只有未来确实需要版本控制的大型模型、音视频或测试数据才考虑 Git LFS。
-
-如果曾在其他 Git 仓库中提交过大文件，仅添加 `.gitignore` 不会缩小历史，需要使用 `git filter-repo` 清理历史；本仓库的远端目前只有初始提交，不需要重写历史。
+不要用 Git LFS 保存构建产物。只有未来确实需要版本控制的大型模型、音视频或测试数据才考虑 Git LFS。如果大文件曾进入 Git 历史，仅添加 `.gitignore` 不会缩小历史，需使用 `git filter-repo` 单独清理。
 
 ## 安全提示
 
-旧目录中曾存在明文 Redis、MySQL 和邮箱凭据。即使这些文件已经移除，也应在对应服务端立即轮换原凭据。生产环境推荐启用本文的 mTLS 方案，并继续完善密码哈希、密钥轮换和 RPC 级授权。
+不要把 Redis、MySQL、SMTP 密码或 TLS 私钥写入仓库。生产环境应使用环境变量或密钥管理服务注入凭据，启用本文的 mTLS 方案，并对历史中曾出现过的凭据立即轮换。用户密码在正式上线前还应改为 Argon2id 或 bcrypt 哈希，不应明文存储。

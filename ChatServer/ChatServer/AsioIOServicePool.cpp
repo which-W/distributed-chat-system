@@ -3,7 +3,7 @@
 using namespace std;
 AsioIOServicePool::AsioIOServicePool(std::size_t size ) : _size(size), _ioServces(size), _works(size), _nextIOService(0){
 	for (std::size_t i = 0; i < size; i++) {
-		_works[i] = std::unique_ptr<Work>(new Work(_ioServces[i]));
+		_works[i] = std::make_unique<Work>(_ioServces[i].get_executor());
 	}
 
 	//遍历多个ioservice,创建多个线程，每个线程内部启动ioservice
@@ -30,7 +30,7 @@ boost::asio::io_context& AsioIOServicePool::GetIOServer() {
 
 void AsioIOServicePool::Stop() {
 	for (auto & work : _works) {
-		work->get_io_context().stop();
+		static_cast<boost::asio::io_context&>(work->get_executor().context()).stop();
 		work.reset();
 	}
 

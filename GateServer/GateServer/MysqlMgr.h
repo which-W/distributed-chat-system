@@ -7,7 +7,7 @@
 
 class MysqlMgr:public Singleton<MysqlMgr>
 {
-	friend class Singleton;
+	friend class Singleton<MysqlMgr>;
 public:
 
 	~MysqlMgr();

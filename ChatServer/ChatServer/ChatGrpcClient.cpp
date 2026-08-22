@@ -103,8 +103,7 @@ bool ChatGrpcClient::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<
 		userinfo->desc = root["desc"].asString();
 		userinfo->sex = root["sex"].asInt();
 		userinfo->icon = root["icon"].asString();
-		std::cout << "user login uid is  " << userinfo->uid << " name  is "
-			<< userinfo->name << " pwd is " << userinfo->pwd << " email is " << userinfo->email << std::endl;
+		std::cout << "user login uid is " << userinfo->uid << " name is " << userinfo->name << std::endl;
 	}
 	else {
 		//redis中没有则查询mysql
@@ -129,6 +128,7 @@ bool ChatGrpcClient::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<
 		redis_root["icon"] = userinfo->icon;
 		RedisMgr::GetInstance()->Set(base_key, redis_root.toStyledString());
 	}
+	return true;
 }
 
 TextChatMsgRsp ChatGrpcClient::NotifyTextChatMsg(std::string server_ip, const TextChatMsgReq& req, const Json::Value& rtvalue)

@@ -58,7 +58,6 @@ LogicSystem::LogicSystem() {
         auto email = src_root["email"].asString();
         auto name = src_root["user"].asString();
         auto pwd = src_root["passwd"].asString();
-        auto confirm = src_root["confirm"].asString();
         auto icon = src_root["icon"].asString();
 
         //先查找redis中email对应的验证码是否合理
@@ -91,7 +90,6 @@ LogicSystem::LogicSystem() {
         root["uid"] = uid;
         root["email"] = email;
         root["user"] = name;
-        root["confirm"] = confirm;
         root["varifycode"] = src_root["varifycode"].asString();
         std::string jsonstr = root.toStyledString();
         beast::ostream(connection->_res.body()) << jsonstr;

@@ -82,7 +82,7 @@ int MysqlDao::RegUserTransaction(const std::string& name, const std::string& ema
         auto email_exist = res_email->next();
         if (email_exist) {
             con->_con->rollback();
-            std::cout << "email " << email << " exist";
+            std::cout << "email already exists";
             return 0;
         }
 
@@ -166,7 +166,7 @@ bool MysqlDao::CheckEmail(const std::string& name, const std::string& email)
         std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
         // 遍历结果集
         while (res->next()) {
-            std::cout << "Check Email: " << res->getString("email") << std::endl;
+            std::cout << "Email lookup completed" << std::endl;
             if (email != res->getString("email")) {
                 pool_->returnConnection(std::move(con));
                 return false;
@@ -174,6 +174,8 @@ bool MysqlDao::CheckEmail(const std::string& name, const std::string& email)
             pool_->returnConnection(std::move(con));
             return true;
         }
+        pool_->returnConnection(std::move(con));
+        return false;
     }
     catch (sql::SQLException& e) {
         pool_->returnConnection(std::move(con));

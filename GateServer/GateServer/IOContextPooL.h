@@ -6,7 +6,7 @@ class IOContextPool : public Singleton<IOContextPool>
 	friend Singleton<IOContextPool>;
 public:
 	using IOContext = boost::asio::io_context;
-	using Work = boost::asio::io_context::work;
+	using Work = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
 	using WorkPtr = std::unique_ptr<Work>;
 	~IOContextPool();
 	IOContextPool(const IOContextPool&) = delete;

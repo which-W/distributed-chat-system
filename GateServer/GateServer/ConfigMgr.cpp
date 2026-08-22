@@ -21,8 +21,9 @@ Sectioninfo& Sectioninfo::operator=(const Sectioninfo& session)
 {
     if (this == &session) {
         return *this;
-   }
+    }
     this->_section_datas = session._section_datas;
+    return *this;
 }
 
 std::string Sectioninfo::operator[](const std::string key)
