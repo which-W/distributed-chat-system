@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>res/tipclose.png</file>
+        <file>res/arowdown.png</file>
+    </qresource>
+</RCC>

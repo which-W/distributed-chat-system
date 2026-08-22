@@ -1,0 +1,65 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "linux-server-release",
+      "inherits": "base",
+      "displayName": "Linux servers (Release)",
+      "cacheVariables": {
+        "CHAT_BUILD_SERVERS": "ON",
+        "CHAT_BUILD_CLIENT": "OFF",
+        "VCPKG_MANIFEST_FEATURES": "servers",
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
+      }
+    },
+    {
+      "name": "windows-server-release",
+      "inherits": "base",
+      "displayName": "Windows servers (Release)",
+      "cacheVariables": {
+        "CHAT_BUILD_SERVERS": "ON",
+        "CHAT_BUILD_CLIENT": "OFF",
+        "VCPKG_MANIFEST_FEATURES": "servers",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+      }
+    },
+    {
+      "name": "desktop-release",
+      "inherits": "base",
+      "displayName": "Qt desktop client (Release)",
+      "cacheVariables": {
+        "CHAT_BUILD_SERVERS": "OFF",
+        "CHAT_BUILD_CLIENT": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-server-release",
+      "configurePreset": "linux-server-release"
+    },
+    {
+      "name": "windows-server-release",
+      "configurePreset": "windows-server-release"
+    },
+    {
+      "name": "desktop-release",
+      "configurePreset": "desktop-release"
+    }
+  ]
+}

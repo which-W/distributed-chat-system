@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>res/add_friend.png</file>
+        <file>res/red_point.png</file>
+    </qresource>
+</RCC>

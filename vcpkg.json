@@ -1,0 +1,27 @@
+{
+  "name": "chat-project",
+  "version-string": "1.0.0",
+  "dependencies": [],
+  "features": {
+    "servers": {
+      "description": "Dependencies required by the C++ server processes",
+      "dependencies": [
+        "boost-asio",
+        "boost-beast",
+        "boost-filesystem",
+        "boost-uuid",
+        "grpc",
+        "hiredis",
+        "jsoncpp",
+        {
+          "name": "mysql-connector-cpp",
+          "default-features": false,
+          "features": [
+            "jdbc"
+          ]
+        },
+        "protobuf"
+      ]
+    }
+  }
+}

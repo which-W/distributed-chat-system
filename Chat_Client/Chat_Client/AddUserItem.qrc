@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>res/addtip.png</file>
+        <file>res/right_tip.png</file>
+    </qresource>
+</RCC>

@@ -1,0 +1,16 @@
+{
+  "email": {
+    "user": "sender@example.com",
+    "pass": ""
+  },
+  "smtp": {
+    "host": "smtp.example.com",
+    "port": 465,
+    "secure": true
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "passwd": ""
+  }
+}

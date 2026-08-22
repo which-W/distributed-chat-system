@@ -1,0 +1,26 @@
+* text=auto
+*.cpp text eol=lf
+*.h text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+*.proto text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.ini text eol=lf
+*.ui text eol=lf
+*.qrc text eol=lf
+*.qss text eol=lf
+*.sql text eol=lf
+*.env text eol=lf
+.env.example text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary

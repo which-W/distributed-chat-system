@@ -1,0 +1,23 @@
+<RCC>
+    <qresource prefix="/">
+        <file>res/chat_icon.png</file>
+        <file>res/chat_icon_hover.png</file>
+        <file>res/chat_icon_press.png</file>
+        <file>res/chat_icon_select_hover.png</file>
+        <file>res/chat_icon_select_press.png</file>
+        <file>res/filedir.png</file>
+        <file>res/filedir_hover.png</file>
+        <file>res/filedir_press.png</file>
+        <file>res/smile.png</file>
+        <file>res/smile_hover.png</file>
+        <file>res/smile_press.png</file>
+        <file>res/video_chat_hover.png</file>
+        <file>res/video_chat_normal.png</file>
+        <file>res/video_chat_press.png</file>
+        <file>res/voice_chat_hover.png</file>
+        <file>res/voice_chat_normal.png</file>
+        <file>res/voice_chat_press.png</file>
+        <file>res/msg_chat_hover.png</file>
+        <file>res/msg_chat_normal.png</file>
+    </qresource>
+</RCC>
