@@ -2,8 +2,6 @@
 
 基于 Qt、Boost.Asio、gRPC、Redis 和 MySQL 的分布式即时通信系统。
 
-项目现在使用 **CMake 作为唯一 C++ 构建入口**。Visual Studio 工程、生成的 protobuf 文件、二进制产物和本机依赖均不再保存在仓库中。
-
 ## 组件
 
 - `gate_server`：HTTP 注册、重置密码和登录网关，默认端口 `8080`。
@@ -16,7 +14,7 @@
 
 ## 服务端目录结构
 
-三个 C++ 服务统一放在 `servers/` 下，按职责拆分，不再把所有源文件堆在同一层：
+三个 C++ 服务统一放在 `servers/` 下：
 
 ```text
 servers/
@@ -46,8 +44,6 @@ servers/
     ├── service/   # 聊天业务、worker 和用户会话管理
     └── storage/   # 分布式锁、MySQL 和 Redis
 ```
-
-`common/` 只放多个服务共享的 C++ 能力，`proto/` 保存 gRPC 协议，`config/` 保存运行时配置。添加新代码时应按职责放入对应目录，避免再建立新的“大杂烩”源文件层。
 
 ## 前置条件
 
@@ -239,12 +235,3 @@ node VarifyServer/server.js
 
 多主机部署时，修改 `config/status.ini` 中提供给客户端的聊天节点地址，以及两份 `config/chatserver*.ini` 中的 peer 地址。
 
-## 提交到 GitHub
-
-仓库只保存源码和必需资源。PDB、ILK、OBJ、DLL、EXE、Qt 运行库、`build/`、`node_modules/` 和开发证书均由 `.gitignore` 排除。
-
-不要用 Git LFS 保存构建产物。只有未来确实需要版本控制的大型模型、音视频或测试数据才考虑 Git LFS。如果大文件曾进入 Git 历史，仅添加 `.gitignore` 不会缩小历史，需使用 `git filter-repo` 单独清理。
-
-## 安全提示
-
-不要把 Redis、MySQL、SMTP 密码或 TLS 私钥写入仓库。生产环境应使用环境变量或密钥管理服务注入凭据，启用本文的 mTLS 方案，并对历史中曾出现过的凭据立即轮换。用户密码在正式上线前还应改为 Argon2id 或 bcrypt 哈希，不应明文存储。
