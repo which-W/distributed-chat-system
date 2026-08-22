@@ -1,0 +1,6 @@
+# Merge this section into the production gate.ini. Nginx is the only public
+# listener and proxies HTTPS requests to this loopback endpoint.
+
+[GateServer]
+Host = 127.0.0.1
+Port = 8080

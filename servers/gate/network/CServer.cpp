@@ -1,7 +1,7 @@
 #include "CServer.h"
 #include "IOContextPooL.h"
-CServer::CServer(net::io_context& ioc, unsigned short& port)
-	: _acceptor(ioc, tcp::endpoint(tcp::v4(), port)), _ioc(ioc)
+CServer::CServer(net::io_context& ioc, const std::string& listen_host, unsigned short port)
+	: _acceptor(ioc, tcp::endpoint(net::ip::make_address(listen_host), port)), _ioc(ioc)
 {
 }
 

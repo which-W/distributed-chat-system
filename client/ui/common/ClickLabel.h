@@ -1,5 +1,6 @@
 #pragma once
 #include <QLabel>
+#include <QEnterEvent>
 #include "global.h"
 class ClickLabel : public QLabel
 {
@@ -8,7 +9,11 @@ public:
     ClickLabel(QWidget* parent);
     virtual void mousePressEvent(QMouseEvent* ev) override;
     virtual void mouseReleaseEvent(QMouseEvent* ev) override;
-    virtual void enterEvent(QEvent* event) override;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    void enterEvent(QEnterEvent* event) override;
+#else
+    void enterEvent(QEvent* event) override;
+#endif
     virtual void leaveEvent(QEvent* event) override;
     void SetState(QString normal = "", QString hover = "", QString press = "",
         QString select = "", QString select_hover = "", QString select_press = "");

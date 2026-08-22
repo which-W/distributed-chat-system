@@ -22,7 +22,7 @@ ChatItemBase::ChatItemBase(ChatRole role, QWidget* parent)
     QGridLayout* pGLayout = new QGridLayout();
     pGLayout->setVerticalSpacing(3);
     pGLayout->setHorizontalSpacing(3);
-    pGLayout->setMargin(3);
+    pGLayout->setContentsMargins(3, 3, 3, 3);
     //将消息框推到一边
     QSpacerItem* pSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
     //区分“自己”和“对方”的布局分支

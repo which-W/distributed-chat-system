@@ -25,9 +25,18 @@ int main()
 			});
 
 		boost::asio::io_context  io_context;
+		auto listen_host = cfg["SelfServer"]["ListenHost"];
+		if (listen_host.empty()) {
+			listen_host = "127.0.0.1";
+		}
 		auto port_str = cfg["SelfServer"]["Port"];
+		const int configured_port = std::stoi(port_str);
+		if (configured_port < 1 || configured_port > 65535) {
+			throw std::out_of_range("SelfServer.Port must be between 1 and 65535");
+		}
 		//创建Cserver智能指针
-		auto pointer_server = std::make_shared<CServer>(io_context, atoi(port_str.c_str()));
+		auto pointer_server = std::make_shared<CServer>(
+			io_context, listen_host, static_cast<unsigned short>(configured_port));
 		//启动定时器
 		//pointer_server->StartTimer();
 

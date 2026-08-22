@@ -1,0 +1,20 @@
+# Merge these public endpoint fields into the matching sections of status.ini.
+# Host/Port are retained as local-development fallbacks; PublicHost/PublicPort
+# are the addresses returned to desktop clients.
+
+[chatservers]
+Name = chatserver1,chatserver2
+
+[chatserver1]
+Name = chatserver1
+PublicHost = chat1.chat.example.com
+PublicPort = 443
+Transport = tls
+TLSName = chat1.chat.example.com
+
+[chatserver2]
+Name = chatserver2
+PublicHost = chat2.chat.example.com
+PublicPort = 443
+Transport = tls
+TLSName = chat2.chat.example.com

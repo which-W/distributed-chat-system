@@ -6,7 +6,7 @@ ChatView::ChatView(QWidget* parent) : QWidget(parent)
 	//创建主布局
     QVBoxLayout* pMainLayout = new QVBoxLayout();
     this->setLayout(pMainLayout);
-    pMainLayout->setMargin(0);
+    pMainLayout->setContentsMargins(0, 0, 0, 0);
 	//添加滚动区域
     m_pScrollArea = new QScrollArea();
     m_pScrollArea->setObjectName("chat_area");
@@ -31,7 +31,7 @@ ChatView::ChatView(QWidget* parent) : QWidget(parent)
     //把垂直ScrollBar放到上边 而不是原来的并排
     QHBoxLayout* pHLayout_2 = new QHBoxLayout();
     pHLayout_2->addWidget(pVScrollBar, 0, Qt::AlignRight);
-    pHLayout_2->setMargin(0);
+    pHLayout_2->setContentsMargins(0, 0, 0, 0);
     m_pScrollArea->setLayout(pHLayout_2);
     pVScrollBar->setHidden(true);
     //其它设置
@@ -107,7 +107,7 @@ bool ChatView::eventFilter(QObject* o, QEvent* e)
 void ChatView::paintEvent(QPaintEvent* event)
 {
     QStyleOption opt;
-    opt.init(this);
+    opt.initFrom(this);
     QPainter p(this);
     style()->drawPrimitive(QStyle::PE_Widget, &opt, &p, this);
 }

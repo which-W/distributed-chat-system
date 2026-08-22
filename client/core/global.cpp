@@ -1,6 +1,7 @@
 #include "global.h"
 
 QString gate_url_prefix = "";
+bool allow_insecure_transport = false;
 //刷新qss
 std::function<void(QWidget*)> repolish = [](QWidget* w) {
 	w->style()->unpolish(w);

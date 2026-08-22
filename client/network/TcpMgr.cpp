@@ -1,9 +1,32 @@
 #include "TcpMgr.h"
 
-TcpMgr::TcpMgr():_socket(nullptr),_host(""),_port(0),_b_recv_pending(false), _message_id(0), _message_len(0) {
+TcpMgr::TcpMgr():_socket(nullptr),_host(""),_transport("tls"),_tls_server_name(""),_port(0),
+	_use_tls(true),_connect_result_emitted(false),_b_recv_pending(false), _message_id(0), _message_len(0) {
 	// 初始化QTcpSocket并建立连接
 	connect(&_socket, &QTcpSocket::connected, this, [this]() {
-		emit sig_con_success(true);
+		if (!_use_tls && !_connect_result_emitted) {
+			_connect_result_emitted = true;
+			emit sig_con_success(true);
+		}
+		});
+	connect(&_socket, &QSslSocket::encrypted, this, [this]() {
+		if (_use_tls && !_connect_result_emitted) {
+			_connect_result_emitted = true;
+			qDebug() << "TLS established with" << _host
+				<< "using" << _socket.sessionCipher().name();
+			emit sig_con_success(true);
+		}
+		});
+	connect(&_socket, QOverload<const QList<QSslError>&>::of(&QSslSocket::sslErrors),
+		this, [this](const QList<QSslError>& errors) {
+			for (const auto& error : errors) {
+				qWarning() << "Chat TLS verification failed:" << error.errorString();
+			}
+			_socket.abort();
+			if (!_connect_result_emitted) {
+				_connect_result_emitted = true;
+				emit sig_con_success(false);
+			}
 		});
 	connect(&_socket, &QTcpSocket::readyRead, this, [this]() {
 		_buffer.append(_socket.readAll());	// 读取接收到的数据
@@ -44,24 +67,43 @@ TcpMgr::TcpMgr():_socket(nullptr),_host(""),_port(0),_b_recv_pending(false), _me
 	});
 
 	// 处理错误（适用于Qt 5.15之前的版本）
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+	connect(&_socket, &QAbstractSocket::errorOccurred, this,
+		[this](QAbstractSocket::SocketError socketError) {
+			qWarning() << "Chat socket error:" << socketError << _socket.errorString();
+			if (!_connect_result_emitted) {
+				_connect_result_emitted = true;
+				emit sig_con_success(false);
+			}
+		});
+#else
 	QObject::connect(&_socket, static_cast<void (QTcpSocket::*)(QTcpSocket::SocketError)>(&QTcpSocket::error),
 		[&](QTcpSocket::SocketError socketError) {
 			qDebug() << "Error:" << _socket.errorString();
 			switch (socketError) {
 			case QTcpSocket::ConnectionRefusedError:
 				qDebug() << "Connection Refused!";
-				emit sig_con_success(false);
+				if (!_connect_result_emitted) {
+					_connect_result_emitted = true;
+					emit sig_con_success(false);
+				}
 				break;
 			case QTcpSocket::RemoteHostClosedError:
 				qDebug() << "Remote Host Closed Connection!";
 				break;
 			case QTcpSocket::HostNotFoundError:
 				qDebug() << "Host Not Found!";
-				emit sig_con_success(false);
+				if (!_connect_result_emitted) {
+					_connect_result_emitted = true;
+					emit sig_con_success(false);
+				}
 				break;
 			case QTcpSocket::SocketTimeoutError:
 				qDebug() << "Connection Timeout!";
-				emit sig_con_success(false);
+				if (!_connect_result_emitted) {
+					_connect_result_emitted = true;
+					emit sig_con_success(false);
+				}
 				break;
 			case QTcpSocket::NetworkError:
 				qDebug() << "Network Error!";
@@ -71,6 +113,7 @@ TcpMgr::TcpMgr():_socket(nullptr),_host(""),_port(0),_b_recv_pending(false), _me
 				break;
 			}
 		});
+#endif
 
 
 
@@ -409,9 +452,49 @@ void TcpMgr::handleMsg(Req id, int len, QByteArray data)
 
 void TcpMgr::slot_tcp_connect(ServerInfo info)
 {
+	_socket.abort();
+	_buffer.clear();
+	_b_recv_pending = false;
+	_connect_result_emitted = false;
 	_host = info.Host;
 	_port = static_cast<uint16_t>(info.Port.toUShort());
-	std::cout << "Connecting to server at " << _host.toStdString() << ":" << _port << std::endl;
+	_transport = info.Transport.trimmed().toLower();
+	_tls_server_name = info.TlsServerName.trimmed();
+	if (_tls_server_name.isEmpty()) {
+		_tls_server_name = _host;
+	}
+
+	if (_host.isEmpty() || _port == 0) {
+		qWarning() << "Invalid chat endpoint" << _host << info.Port;
+		_connect_result_emitted = true;
+		emit sig_con_success(false);
+		return;
+	}
+
+	_use_tls = (_transport == "tls");
+	if (!_use_tls && (_transport != "insecure" || !info.AllowInsecure)) {
+		qWarning() << "Refusing insecure chat transport:" << _transport;
+		_connect_result_emitted = true;
+		emit sig_con_success(false);
+		return;
+	}
+
+	qDebug() << "Connecting to chat server" << _host << _port << "via" << _transport;
+	if (_use_tls) {
+		if (!QSslSocket::supportsSsl()) {
+			qWarning() << "TLS is unavailable in this Qt runtime:" << QSslSocket::sslLibraryBuildVersionString();
+			_connect_result_emitted = true;
+			emit sig_con_success(false);
+			return;
+		}
+		QSslConfiguration sslConfig = QSslConfiguration::defaultConfiguration();
+		sslConfig.setProtocol(QSsl::TlsV1_2OrLater);
+		_socket.setSslConfiguration(sslConfig);
+		_socket.setPeerVerifyMode(QSslSocket::VerifyPeer);
+		_socket.connectToHostEncrypted(_host, _port, _tls_server_name);
+		return;
+	}
+
 	_socket.connectToHost(_host, _port);
 }
 
@@ -419,6 +502,15 @@ void TcpMgr::slot_send_data(Req reqId, QByteArray data)
 {
 	if (_socket.state() != QAbstractSocket::ConnectedState) {
 		qDebug() << "Socket is not connected!";
+		return;
+	}
+	if (_use_tls && !_socket.isEncrypted()) {
+		qWarning() << "Refusing to send chat data before TLS is established";
+		return;
+	}
+	constexpr int maxMessageLength = 2048;
+	if (data.isEmpty() || data.size() > maxMessageLength) {
+		qWarning() << "Refusing invalid chat payload length:" << data.size();
 		return;
 	}
 	uint16_t id = reqId;

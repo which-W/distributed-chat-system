@@ -19,10 +19,21 @@ void Httpmgr::PostHttpRequest(const QString& url, const QJsonObject& jsonObj, Re
 	// 将 QJsonObject 转换为 QByteArray 并设置请求头
 	QByteArray postData = QJsonDocument(jsonObj).toJson();
 	QNetworkRequest request(url);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
+	request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+		QNetworkRequest::NoLessSafeRedirectPolicy);
+#endif
 	request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 	request.setHeader(QNetworkRequest::ContentLengthHeader, QByteArray::number(postData.length()));
 	auto self = shared_from_this();
 	QNetworkReply* reply = _manager.post(request, postData);
+	connect(reply, &QNetworkReply::sslErrors, this,
+		[reply](const QList<QSslError>& errors) {
+			for (const auto& error : errors) {
+				qWarning() << "Gate TLS verification failed:" << error.errorString();
+			}
+			reply->abort();
+		});
 	// 连接信号槽处理网络请求完成
 	connect(reply, &QNetworkReply::finished, this, [self, req_id, mod, reply]() {
 		if (reply->error() == QNetworkReply::NoError) {

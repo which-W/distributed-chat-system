@@ -1,4 +1,5 @@
 #include "LoginDialog.h"
+#include <QPainterPath>
 #include "ClickLabel.h"
 #include "TcpMgr.h"
 LoginDialog::LoginDialog(QWidget *parent)
@@ -157,6 +158,9 @@ void LoginDialog::initHttpHandlers()
 		si.Host = jsonObj["host"].toString();
 		si.Port = jsonObj["port"].toString();
 		si.Token = jsonObj["token"].toString();
+		si.Transport = jsonObj["transport"].toString("insecure").toLower();
+		si.TlsServerName = jsonObj["tls_server_name"].toString();
+		si.AllowInsecure = allow_insecure_transport;
 		_uid = si.Uid;
 		_token = si.Token;
 		emit sig_connect_tcp(si);

@@ -1,5 +1,6 @@
 #pragma once
-#include <QTcpSocket>
+#include <QSslSocket>
+#include <QSslCipher>
 #include "Singleton.h"
 #include "global.h"
 #include "usermgr.h"
@@ -13,9 +14,13 @@ public:
 private:
 	friend class Singleton<TcpMgr>;
 	TcpMgr();
-    QTcpSocket _socket;
+    QSslSocket _socket;
     QString _host;
+    QString _transport;
+    QString _tls_server_name;
     uint16_t _port;
+    bool _use_tls;
+    bool _connect_result_emitted;
     QByteArray _buffer;
     bool _b_recv_pending;
     quint16 _message_id;

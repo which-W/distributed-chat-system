@@ -2,6 +2,7 @@
 #include <QtWidgets/QApplication>
 #include <qfile.h>
 #include <qdebug.h>
+#include <QUrl>
 #include "global.h"
 int main(int argc, char *argv[])
 {
@@ -21,9 +22,23 @@ int main(int argc, char *argv[])
     QString app_path = QCoreApplication::applicationDirPath();
     QString config_path = QDir::toNativeSeparators(app_path + QDir::separator() + fileName);
     QSettings settings(config_path, QSettings::IniFormat);
-    QString Gate_Host = settings.value("GateServer/host").toString();
-    QString Gate_Port = settings.value("GateServer/port").toString();
-    gate_url_prefix = "http://" + Gate_Host + ":" + Gate_Port;
+    allow_insecure_transport = settings.value("Security/AllowInsecure", false).toBool();
+    gate_url_prefix = settings.value("GateServer/BaseUrl").toString().trimmed();
+    if (gate_url_prefix.isEmpty()) {
+        const QString gateHost = settings.value("GateServer/host").toString().trimmed();
+        const QString gatePort = settings.value("GateServer/port").toString().trimmed();
+        gate_url_prefix = "http://" + gateHost + ":" + gatePort;
+    }
+    while (gate_url_prefix.endsWith('/')) {
+        gate_url_prefix.chop(1);
+    }
+
+    const QUrl gateUrl(gate_url_prefix);
+    if (!gateUrl.isValid() || gateUrl.host().isEmpty() ||
+        (gateUrl.scheme() != "https" && !allow_insecure_transport)) {
+        qCritical() << "Gate URL is invalid or insecure HTTP is disabled:" << gate_url_prefix;
+        return EXIT_FAILURE;
+    }
 
     MainWindow w;
     w.show();

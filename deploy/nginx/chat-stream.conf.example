@@ -1,0 +1,34 @@
+# This file belongs in the top-level Nginx context, not inside `http {}`.
+# Add `include /etc/nginx/streams-enabled/*.conf;` beside the `http {}` block
+# in /etc/nginx/nginx.conf, then install this as chat.conf in that directory.
+# The installed Nginx package must include ngx_stream_ssl_module.
+
+stream {
+    log_format chat_tls '$remote_addr [$time_local] $protocol $status '
+                        '$bytes_sent $bytes_received $session_time';
+
+    access_log /var/log/nginx/chat-access.log chat_tls;
+    error_log /var/log/nginx/chat-error.log warn;
+
+    upstream local_chat {
+        server 127.0.0.1:8989;
+    }
+
+    server {
+        listen 443 ssl;
+        listen [::]:443 ssl;
+        proxy_pass local_chat;
+
+        ssl_certificate /etc/letsencrypt/live/chat1.chat.example.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/chat1.chat.example.com/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_handshake_timeout 10s;
+        ssl_session_cache shared:CHAT_SSL:20m;
+        ssl_session_timeout 1h;
+        ssl_session_tickets off;
+
+        proxy_connect_timeout 3s;
+        proxy_timeout 30m;
+        proxy_socket_keepalive on;
+    }
+}

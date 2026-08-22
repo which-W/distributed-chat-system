@@ -30,6 +30,8 @@ message GetChatServerRsp {
   string host = 2;
   string port = 3;
   string token = 4;
+  string transport = 5;
+  string tls_server_name = 6;
 }
 
 message LoginReq {

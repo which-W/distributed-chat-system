@@ -46,7 +46,7 @@ void CSession::Start(){
 void CSession::Send(std::string msg, short msgid) {
 	std::lock_guard<std::mutex> lock(_send_lock);
 	int send_que_size = _send_que.size();
-	if (send_que_size > MAX_SENDQUE) {
+    if (send_que_size >= MAX_SENDQUE) {
 		std::cout << "session: " << _session_id << " send que fulled, size is " << MAX_SENDQUE << endl;
 		return;
 	}
@@ -63,7 +63,7 @@ void CSession::Send(std::string msg, short msgid) {
 void CSession::Send(char* msg, short max_length, short msgid) {
 	std::lock_guard<std::mutex> lock(_send_lock);
 	int send_que_size = _send_que.size();
-	if (send_que_size > MAX_SENDQUE) {
+	if (send_que_size >= MAX_SENDQUE) {
 		std::cout << "session: " << _session_id << " send que fulled, size is " << MAX_SENDQUE << endl;
 		return;
 	}
@@ -167,18 +167,18 @@ void CSession::AsyncReadHead(int total_len)
 			memcpy(_recv_head_node->_data, _data, bytes_transfered);
 
 			//获取头部MSGID数据
-			short msg_id = 0;
+			std::uint16_t msg_id = 0;
 			memcpy(&msg_id, _recv_head_node->_data, HEAD_ID_LEN);
 			//网络字节序转化为本地字节序
 			msg_id = boost::asio::detail::socket_ops::network_to_host_short(msg_id);
 			std::cout << "msg_id is " << msg_id << endl;
 			//id非法
-			if (msg_id > MAX_LENGTH) {
+			if (msg_id == 0 || msg_id > MAX_LENGTH) {
 				std::cout << "invalid msg_id is " << msg_id << endl;
 				_server->ClearSession(_session_id);
 				return;
 			}
-			short msg_len = 0;
+			std::uint16_t msg_len = 0;
 			memcpy(&msg_len, _recv_head_node->_data + HEAD_ID_LEN, HEAD_DATA_LEN);
 			//网络字节序转化为本地字节序
 			msg_len = boost::asio::detail::socket_ops::network_to_host_short(msg_len);

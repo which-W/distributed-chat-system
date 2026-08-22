@@ -54,7 +54,11 @@ void ClickLabel::mouseReleaseEvent(QMouseEvent* event)
 }
 
 // 处理鼠标悬停进入事件
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+void ClickLabel::enterEvent(QEnterEvent* event) {
+#else
 void ClickLabel::enterEvent(QEvent* event) {
+#endif
     // 在这里处理鼠标悬停进入的逻辑
     if (_curstate == ClickLbState::Normal) {
         // qDebug()<<"enter , change to normal hover: "<< _normal_hover;

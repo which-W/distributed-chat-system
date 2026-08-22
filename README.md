@@ -1,5 +1,12 @@
 # distributed-chat-system
 
+## Public HTTPS and Chat TLS
+
+Gate HTTPS, Chat TCP TLS, certificates, firewall rules and production templates
+are documented in [docs/public-edge-tls.md](docs/public-edge-tls.md). Deployable
+examples are under `deploy/nginx/` and `deploy/config/`. Production clients must
+set `AllowInsecure=false`; insecure mode is only for explicit local integration.
+
 基于 Qt、Boost.Asio、gRPC、Redis 和 MySQL 的分布式即时通信系统。
 
 ## 组件
@@ -56,7 +63,7 @@ Qt 客户端统一放在 `client/` 下：`app/` 是入口和主窗口，`core/` 
 - Node.js 18+
 - Redis 6+
 - MySQL 8+
-- 构建桌面客户端时额外安装 Qt 5（推荐）或 Qt 6
+- 构建桌面客户端时额外安装受维护的 Qt 6；Windows 公网 TLS 不再推荐 Qt 5.12
 
 依赖由根目录的 `vcpkg.json` 声明，不再使用任何写死的本机库路径。
 
@@ -93,19 +100,20 @@ MySQL Connector/C++ 的 JDBC 兼容接口要求静态 vcpkg triplet，因此 Win
 把 Qt 的 CMake 目录加入 `CMAKE_PREFIX_PATH` 后执行：
 
 ```bash
-cmake --preset desktop-release -DCMAKE_PREFIX_PATH=/path/to/Qt/5.15/gcc_64
+cmake --preset desktop-release -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/gcc_64
 cmake --build --preset desktop-release -j
 ```
 
-本机已可在不打开 Visual Studio/Qt Creator 的情况下使用 G 盘 Qt 构建。`CMakeUserPresets.json` 保存本机的 Qt/Ninja 路径并已被 Git 忽略。在 **MSVC Developer PowerShell/Command Prompt** 中执行：
+本机已安装 `G:\QT\6.10.3\msvc2022_64`，可在不打开 Visual Studio/Qt Creator 的情况下构建。`CMakeUserPresets.json` 保存本机的 Qt/Ninja 路径并已被 Git 忽略。在 **MSVC Developer PowerShell/Command Prompt** 中执行：
 
 ```powershell
 $env:VCPKG_ROOT = 'F:\DevTools\vcpkg'
 cmake --preset desktop-local
 cmake --build --preset desktop-local
+& '.\build\desktop-qt6-local\bin\chat_tls_probe.exe'
 ```
 
-这里只使用 MSVC 的命令行编译环境，不使用 Visual Studio 工程或 IDE。Windows 构建完成后 CMake 会自动运行 `windeployqt`，把 Qt DLL 和平台插件复制到客户端输出目录。
+本机预设显式复制 `config/client.local.ini` 以保留单机明文联调；普通 `desktop-release` 使用安全的生产默认配置 `config/client.ini`。这里只使用 MSVC 的命令行编译环境，不使用 Visual Studio 工程或 IDE。Windows 构建完成后 CMake 会自动运行 `windeployqt`，把 Qt DLL 和 Schannel TLS 插件复制到客户端输出目录；探针必须显示 `TLS available: yes`。
 
 ## 配置
 

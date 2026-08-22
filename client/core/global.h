@@ -20,6 +20,7 @@ extern std::function<void(QWidget*)> repolish;
 extern std::function<QString(QString)> xosString;
 
 extern QString gate_url_prefix;
+extern bool allow_insecure_transport;
 
 enum Req
 {
@@ -79,6 +80,9 @@ struct ServerInfo {
 	QString Host;
 	QString Port;
 	QString Token;
+	QString Transport;
+	QString TlsServerName;
+	bool AllowInsecure = false;
 	int Uid;
 };
 

@@ -1,0 +1,9 @@
+# Merge this section into each production chatserver*.ini. ListenHost is the
+# Nginx-to-Chat client protocol endpoint. Host is the private gRPC bind address.
+
+[SelfServer]
+Name = chatserver1
+ListenHost = 127.0.0.1
+Port = 8989
+Host = 0.0.0.0
+RPCPort = 50055

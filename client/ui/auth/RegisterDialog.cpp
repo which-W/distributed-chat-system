@@ -95,7 +95,7 @@ void RegisterDialog::showTip(QString  str ,bool b_ok)
 void RegisterDialog::initHandlers()
 {
 	_handlers.insert(ID_GET_VERIFT_CODE, [this](const QJsonObject& jsonObj) {
-		if (jsonObj.contains("error") && jsonObj["error"].toString() == ErrorCode::ERR_OK) {
+		if (jsonObj.contains("error") && jsonObj["error"].toInt() == ErrorCode::ERR_OK) {
 			showTip(tr("注册成功"), true);
 		}
 		else {

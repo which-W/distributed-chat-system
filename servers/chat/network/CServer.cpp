@@ -5,10 +5,12 @@
 #include "RedisMgr.h"
 #include "ConfigMgr.h"
 
-CServer::CServer(boost::asio::io_context& io_context, short port) :_io_context(io_context), _port(port),
-_acceptor(io_context, tcp::endpoint(tcp::v4(), port)), _timer(_io_context, std::chrono::seconds(60))
+CServer::CServer(boost::asio::io_context& io_context, const std::string& listen_host, unsigned short port)
+    : _io_context(io_context), _port(port),
+      _acceptor(io_context, tcp::endpoint(boost::asio::ip::make_address(listen_host), port)),
+      _timer(_io_context, std::chrono::seconds(60))
 {
-	cout << "Server start success, listen on port : " << _port << endl;
+	cout << "Chat server is listening on " << listen_host << ':' << _port << endl;
 
 	StartAccept();
 }

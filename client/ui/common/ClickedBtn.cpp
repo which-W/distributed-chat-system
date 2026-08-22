@@ -20,7 +20,11 @@ void ClickedBtn::SetState(QString normal, QString hover, QString press)
     update();
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+void ClickedBtn::enterEvent(QEnterEvent* event)
+#else
 void ClickedBtn::enterEvent(QEvent* event)
+#endif
 {
     setProperty("state", _hover);
     repolish(this);

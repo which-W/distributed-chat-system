@@ -5,6 +5,7 @@
 #include <climits>
 #include <algorithm>
 #include <cctype>
+#include <stdexcept>
 
 std::string generate_unique_string() {
 	// 创建UUID对象
@@ -22,6 +23,8 @@ Status StatusServiceImpl::GetChatServer(ServerContext* context, const GetChatSer
 	const auto& server = getChatServer();
 	reply->set_host(server.host);
 	reply->set_port(server.port);
+	reply->set_transport(server.transport);
+	reply->set_tls_server_name(server.tls_server_name);
 	reply->set_error(ErrorCodes::Success);
 	reply->set_token(generate_unique_string());
 	std::cout << request->uid() << std::endl;
@@ -57,17 +60,44 @@ StatusServiceImpl::StatusServiceImpl()
 			continue;
 		}
 		ChatServer server;
-		server.port = cfg[word]["Port"];
-		server.host = cfg[word]["Host"];
+		server.port = cfg[word]["PublicPort"];
+		if (server.port.empty()) {
+			server.port = cfg[word]["Port"];
+		}
+		server.host = cfg[word]["PublicHost"];
+		if (server.host.empty()) {
+			server.host = cfg[word]["Host"];
+		}
 		server.name = cfg[word]["Name"];
+		server.transport = cfg[word]["Transport"];
+		if (server.transport.empty()) {
+			server.transport = "insecure";
+		}
+		std::transform(server.transport.begin(), server.transport.end(), server.transport.begin(),
+			[](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+		if (server.transport != "tls" && server.transport != "insecure") {
+			throw std::runtime_error("Chat server " + word + " has invalid Transport");
+		}
+		server.tls_server_name = cfg[word]["TLSName"];
+		if (server.transport == "tls" && server.tls_server_name.empty()) {
+			server.tls_server_name = server.host;
+		}
+		if (server.host.empty() || server.port.empty()) {
+			throw std::runtime_error("Chat server " + word + " has no public host or port");
+		}
 		std::cout << "server name: " << server.name << std::endl;
 		_servers[server.name] = server;
 	}
-
+	if (_servers.empty()) {
+		throw std::runtime_error("No valid chat servers are configured");
+	}
 }
 
 ChatServer StatusServiceImpl::getChatServer() {
 	std::lock_guard<std::mutex> guard(_server_mtx);
+	if (_servers.empty()) {
+		throw std::runtime_error("No chat servers are configured");
+	}
 	ChatServer minServer = _servers.begin()->second;
 	std::string count_str = RedisMgr::GetInstance()->HGet(LOGIN_COUNT, minServer.name);
 	std::cout << "minServer name: " << minServer.name << std::endl;

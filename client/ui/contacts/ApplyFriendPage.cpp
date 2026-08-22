@@ -46,7 +46,7 @@ void ApplyFriendPage::AddNewApply(std::shared_ptr<AddFriendApply> apply)
 void ApplyFriendPage::paintEvent(QPaintEvent* event)
 {
     QStyleOption opt;
-    opt.init(this);
+    opt.initFrom(this);
     QPainter p(this);
     style()->drawPrimitive(QStyle::PE_Widget, &opt, &p, this);
 }

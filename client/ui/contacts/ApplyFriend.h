@@ -11,7 +11,8 @@
 #include "global.h"
 #include "TcpMgr.h"
 #include <QApplication>
-#include <QDesktopWidget>
+#include <QGuiApplication>
+#include <QScreen>
 QT_BEGIN_NAMESPACE
 namespace Ui { class ApplyFriendClass; };
 QT_END_NAMESPACE

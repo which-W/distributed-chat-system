@@ -204,6 +204,8 @@ LogicSystem::LogicSystem() {
         root["token"] = reply.token();
         root["host"] = reply.host();
         root["port"] = reply.port();
+        root["transport"] = reply.transport();
+        root["tls_server_name"] = reply.tls_server_name();
         std::string jsonstr = root.toStyledString();
         beast::ostream(connection->_res.body()) << jsonstr;
         return true;

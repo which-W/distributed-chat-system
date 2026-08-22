@@ -9,13 +9,19 @@
 
 int main()
 {
-
-    auto& GCPCfgMgr = ConfigMgr::ins();
-    std:: string get_port_str = GCPCfgMgr["GateServer"]["Port"];
-    unsigned short gate_port = atoi(get_port_str.c_str());
     try
     {
-        unsigned short port = gate_port;
+        auto& GCPCfgMgr = ConfigMgr::ins();
+        std::string gate_host = GCPCfgMgr["GateServer"]["Host"];
+        if (gate_host.empty()) {
+            gate_host = "127.0.0.1";
+        }
+        const std::string get_port_str = GCPCfgMgr["GateServer"]["Port"];
+        const int configured_port = std::stoi(get_port_str);
+        if (configured_port < 1 || configured_port > 65535) {
+            throw std::out_of_range("GateServer.Port must be between 1 and 65535");
+        }
+        const auto gate_port = static_cast<unsigned short>(configured_port);
         net::io_context ioc{ 1 };
         boost::asio::signal_set signals(ioc, SIGINT, SIGTERM);
         signals.async_wait([&ioc](const boost::system::error_code& error, int signal_number) {
@@ -25,8 +31,8 @@ int main()
             }
             ioc.stop();
             });
-        std::make_shared<CServer>(ioc, port)->do_accept();
-		std::cout << "GateServer is running on port " << port << std::endl;
+        std::make_shared<CServer>(ioc, gate_host, gate_port)->do_accept();
+		std::cout << "GateServer is listening on " << gate_host << ':' << gate_port << std::endl;
         ioc.run();
     }
     catch (std::exception const& e)

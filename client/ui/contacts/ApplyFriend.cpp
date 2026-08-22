@@ -63,7 +63,7 @@ void ApplyFriend::InitTipLbs()
         connect(lb, &ClickLabel::clicked, this, &ApplyFriend::SlotChangeFriendLabelByTip);
 
         QFontMetrics fontMetrics(lb->font()); // 获取QLabel控件的字体信息
-        int textWidth = fontMetrics.width(lb->text()); // 获取文本的宽度
+        int textWidth = fontMetrics.horizontalAdvance(lb->text()); // 获取文本的宽度
         int textHeight = fontMetrics.height(); // 获取文本的高度
 
         if (_tip_cur_point.x() + textWidth + tip_offset > ui->lb_list->width()) {
@@ -125,7 +125,7 @@ void ApplyFriend::ShowMoreLabel()
         auto added_lb = _add_labels[added_key];
 
         QFontMetrics fontMetrics(added_lb->font()); // 获取QLabel控件的字体信息
-        textWidth = fontMetrics.width(added_lb->text()); // 获取文本的宽度
+        textWidth = fontMetrics.horizontalAdvance(added_lb->text()); // 获取文本的宽度
         textHeight = fontMetrics.height(); // 获取文本的高度
 
         if (_tip_cur_point.x() + textWidth + tip_offset > ui->lb_list->width()) {
@@ -156,7 +156,7 @@ void ApplyFriend::ShowMoreLabel()
         connect(lb, &ClickLabel::clicked, this, &ApplyFriend::SlotChangeFriendLabelByTip);
 
         QFontMetrics fontMetrics(lb->font()); // 获取QLabel控件的字体信息
-        int textWidth = fontMetrics.width(lb->text()); // 获取文本的宽度
+        int textWidth = fontMetrics.horizontalAdvance(lb->text()); // 获取文本的宽度
         int textHeight = fontMetrics.height(); // 获取文本的高度
 
         if (_tip_cur_point.x() + textWidth + tip_offset > ui->lb_list->width()) {
@@ -303,7 +303,7 @@ void ApplyFriend::SlotLabelEnter()
     qDebug() << "_tip_cur_point.x() is " << _tip_cur_point.x();
 
     QFontMetrics fontMetrics(lb->font()); // 获取QLabel控件的字体信息
-    int textWidth = fontMetrics.width(lb->text()); // 获取文本的宽度
+    int textWidth = fontMetrics.horizontalAdvance(lb->text()); // 获取文本的宽度
     int textHeight = fontMetrics.height(); // 获取文本的高度
     qDebug() << "textWidth is " << textWidth;
 
@@ -447,7 +447,7 @@ void ApplyFriend::SlotAddFirendLabelByClickTip(QString text)
     qDebug() << "_tip_cur_point.x() is " << _tip_cur_point.x();
 
     QFontMetrics fontMetrics(lb->font()); // 获取QLabel控件的字体信息
-    int textWidth = fontMetrics.width(lb->text()); // 获取文本的宽度
+    int textWidth = fontMetrics.horizontalAdvance(lb->text()); // 获取文本的宽度
     int textHeight = fontMetrics.height(); // 获取文本的高度
     qDebug() << "textWidth is " << textWidth;
 
@@ -521,20 +521,23 @@ void ApplyFriend::centerOnParent()
         int y = parentGeometry.y() + (parentGeometry.height() - this->height()) / 2;
 
         // 确保不会超出屏幕边界
-        QDesktopWidget* desktop = QApplication::desktop();
-        QRect screenRect = desktop->screenGeometry();
+        QScreen* screen = QGuiApplication::screenAt(parent->mapToGlobal(parent->rect().center()));
+        if (!screen) {
+            screen = QGuiApplication::primaryScreen();
+        }
+        QRect screenRect = screen->availableGeometry();
 
-        x = qMax(0, qMin(x, screenRect.width() - this->width()));
-        y = qMax(0, qMin(y, screenRect.height() - this->height()));
+        x = qBound(screenRect.left(), x, screenRect.right() - this->width() + 1);
+        y = qBound(screenRect.top(), y, screenRect.bottom() - this->height() + 1);
 
         this->move(x, y);
     }
     else {
         // 屏幕居中
-        QDesktopWidget* desktop = QApplication::desktop();
-        QRect screenRect = desktop->screenGeometry();
-        int x = (screenRect.width() - this->width()) / 2;
-        int y = (screenRect.height() - this->height()) / 2;
+        QScreen* screen = QGuiApplication::primaryScreen();
+        QRect screenRect = screen->availableGeometry();
+        int x = screenRect.left() + (screenRect.width() - this->width()) / 2;
+        int y = screenRect.top() + (screenRect.height() - this->height()) / 2;
         this->move(x, y);
     }
 }
