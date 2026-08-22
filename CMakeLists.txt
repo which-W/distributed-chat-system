@@ -23,7 +23,7 @@ function(chat_copy_runtime_config target_name config_name output_name)
     add_custom_command(TARGET ${target_name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/config"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/config/${config_name}"
+            "${PROJECT_SOURCE_DIR}/config/${config_name}"
             "$<TARGET_FILE_DIR:${target_name}>/config/${output_name}"
         VERBATIM)
 endfunction()
@@ -92,62 +92,9 @@ if(CHAT_BUILD_SERVERS)
         MySQLConnectorCPP::jdbc
         unofficial::libmysql::libmysql)
 
-    set(GATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/GateServer/GateServer")
-    add_executable(gate_server
-        "${GATE_DIR}/GateServer.cpp"
-        "${GATE_DIR}/ConfigMgr.cpp"
-        "${GATE_DIR}/CServer.cpp"
-        "${GATE_DIR}/HttpConnection.cpp"
-        "${GATE_DIR}/IOContextPooL.cpp"
-        "${GATE_DIR}/LogicSystem.cpp"
-        "${GATE_DIR}/MysqlDao.cpp"
-        "${GATE_DIR}/MysqlMgr.cpp"
-        "${GATE_DIR}/RedisMgr.cpp"
-        "${GATE_DIR}/StatusGrpcClient.cpp"
-        "${GATE_DIR}/VerifyGrpcClient.cpp")
-    target_include_directories(gate_server PRIVATE "${GATE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/common")
-    target_link_libraries(gate_server PRIVATE chat_server_dependencies)
-    chat_copy_runtime_config(gate_server "gate.ini" "gate.ini")
-
-    set(STATUS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/StatusGrpcServer/StatusGrpcServer")
-    add_executable(status_server
-        "${STATUS_DIR}/StatusGrpcServer.cpp"
-        "${STATUS_DIR}/AsioIOServicePool.cpp"
-        "${STATUS_DIR}/ChatGrpcClient.cpp"
-        "${STATUS_DIR}/ConfigMgr.cpp"
-        "${STATUS_DIR}/DistLock.cpp"
-        "${STATUS_DIR}/MysqlDao.cpp"
-        "${STATUS_DIR}/MysqlMgr.cpp"
-        "${STATUS_DIR}/RedisMgr.cpp"
-        "${STATUS_DIR}/StatusServiceImpl.cpp")
-    target_include_directories(status_server PRIVATE "${STATUS_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/common")
-    target_link_libraries(status_server PRIVATE chat_server_dependencies)
-    chat_copy_runtime_config(status_server "status.ini" "status.ini")
-
-    set(CHAT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ChatServer/ChatServer")
-    add_executable(chat_server
-        "${CHAT_DIR}/ChatServer.cpp"
-        "${CHAT_DIR}/AsioIOServicePool.cpp"
-        "${CHAT_DIR}/ChatGrpcClient.cpp"
-        "${CHAT_DIR}/ChatServiceImp.cpp"
-        "${CHAT_DIR}/ConfigMgr.cpp"
-        "${CHAT_DIR}/CServer.cpp"
-        "${CHAT_DIR}/CSession.cpp"
-        "${CHAT_DIR}/DistLock.cpp"
-        "${CHAT_DIR}/FileSystem.cpp"
-        "${CHAT_DIR}/FileWorker.cpp"
-        "${CHAT_DIR}/LogicSystem.cpp"
-        "${CHAT_DIR}/LogicWorker.cpp"
-        "${CHAT_DIR}/MsgNode.cpp"
-        "${CHAT_DIR}/MysqlDao.cpp"
-        "${CHAT_DIR}/MysqlMgr.cpp"
-        "${CHAT_DIR}/RedisMgr.cpp"
-        "${CHAT_DIR}/StatusGrpcClient.cpp"
-        "${CHAT_DIR}/UserMgr.cpp")
-    target_include_directories(chat_server PRIVATE "${CHAT_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/common")
-    target_link_libraries(chat_server PRIVATE chat_server_dependencies)
-    chat_copy_runtime_config(chat_server "chatserver1.ini" "chatserver1.ini")
-    chat_copy_runtime_config(chat_server "chatserver2.ini" "chatserver2.ini")
+    add_subdirectory(servers/gate)
+    add_subdirectory(servers/status)
+    add_subdirectory(servers/chat)
 
     install(TARGETS gate_server status_server chat_server RUNTIME DESTINATION bin)
     install(FILES

@@ -14,6 +14,41 @@
 
 架构与调用关系见 [CODEGRAPH.md](CODEGRAPH.md)。
 
+## 服务端目录结构
+
+三个 C++ 服务统一放在 `servers/` 下，按职责拆分，不再把所有源文件堆在同一层：
+
+```text
+servers/
+├── gate/
+│   ├── app/       # 程序入口
+│   ├── config/    # INI 配置读取
+│   ├── core/      # 常量和通用基类
+│   ├── network/   # HTTP 服务、连接和 IO 池
+│   ├── rpc/       # Status / Verify gRPC 客户端
+│   ├── service/   # 注册、登录等业务编排
+│   └── storage/   # MySQL / Redis 访问
+├── status/
+│   ├── app/       # 程序入口
+│   ├── config/    # 配置
+│   ├── core/      # 常量和通用基类
+│   ├── runtime/   # Asio 运行时
+│   ├── rpc/       # Status RPC 实现与 Chat RPC 客户端
+│   └── storage/   # 分布式锁、MySQL 和 Redis
+└── chat/
+    ├── app/       # 程序入口
+    ├── config/    # 配置
+    ├── core/      # 常量、数据结构和通用基类
+    ├── files/     # 文件处理
+    ├── network/   # TCP 服务、会话和消息帧
+    ├── rpc/       # 节点间 RPC 和 Status RPC 客户端
+    ├── runtime/   # IO 线程池
+    ├── service/   # 聊天业务、worker 和用户会话管理
+    └── storage/   # 分布式锁、MySQL 和 Redis
+```
+
+`common/` 只放多个服务共享的 C++ 能力，`proto/` 保存 gRPC 协议，`config/` 保存运行时配置。添加新代码时应按职责放入对应目录，避免再建立新的“大杂烩”源文件层。
+
 ## 前置条件
 
 - CMake 3.24+

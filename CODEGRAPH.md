@@ -114,10 +114,10 @@ flowchart TB
 | 组件 | 入口 | 核心调度对象 | 职责 |
 |---|---|---|---|
 | Qt 客户端 | `Chat_Client/Chat_Client/main.cpp` | `MainWindow`, `Httpmgr`, `TcpMgr` | UI、HTTP 短请求、TCP 长连接、消息分发 |
-| HTTP 网关 | `GateServer/GateServer/GateServer.cpp` | `CServer → HttpConnection → LogicSystem` | 账户认证、验证码入口、聊天节点发现 |
+| HTTP 网关 | `servers/gate/app/main.cpp` | `CServer → HttpConnection → LogicSystem` | 账户认证、验证码入口、聊天节点发现 |
 | 验证码服务 | `VarifyServer/server.js` | `GetVarifyCode` | 验证码生成、Redis TTL、邮件发送 |
-| 状态服务 | `StatusGrpcServer/StatusGrpcServer/StatusGrpcServer.cpp` | `StatusServiceImpl` | 按在线数选节点、签发 token |
-| 聊天节点 | `ChatServer/ChatServer/ChatServer.cpp` | `CServer → CSession → LogicSystem` | TCP 会话、好友业务、文本消息、跨节点转发 |
+| 状态服务 | `servers/status/app/main.cpp` | `StatusServiceImpl` | 按在线数选节点、签发 token |
+| 聊天节点 | `servers/chat/app/main.cpp` | `CServer → CSession → LogicSystem` | TCP 会话、好友业务、文本消息、跨节点转发 |
 | 节点间入口 | 同上 | `ChatServiceImp` | 接收其他聊天节点的 gRPC 通知并投递本地 session |
 
 ## 4. 登录运行链路
@@ -257,9 +257,9 @@ flowchart LR
 建议按以下顺序进入代码：
 
 1. `Chat_Client/Chat_Client/LoginDialog.cpp`：理解 HTTP 登录到 TCP 登录的切换。
-2. `GateServer/GateServer/LogicSystem.cpp`：理解全部账户类 HTTP 路由。
-3. `StatusGrpcServer/StatusGrpcServer/StatusServiceImpl.cpp`：理解节点选择与 token。
-4. `ChatServer/ChatServer/CSession.cpp`：理解 TCP 拆包、组包和会话生命周期。
-5. `ChatServer/ChatServer/LogicSystem.cpp`：理解消息号到业务回调的主分发。
-6. `ChatServer/ChatServer/ChatGrpcClient.cpp` 与 `ChatServiceImp.cpp`：理解跨节点通知。
+2. `servers/gate/service/LogicSystem.cpp`：理解全部账户类 HTTP 路由。
+3. `servers/status/rpc/StatusServiceImpl.cpp`：理解节点选择与 token。
+4. `servers/chat/network/CSession.cpp`：理解 TCP 拆包、组包和会话生命周期。
+5. `servers/chat/service/LogicSystem.cpp`：理解消息号到业务回调的主分发。
+6. `servers/chat/rpc/ChatGrpcClient.cpp` 与 `ChatServiceImp.cpp`：理解跨节点通知。
 7. `Chat_Client/Chat_Client/TcpMgr.cpp`：理解客户端协议解析与 Qt signal 分发。
