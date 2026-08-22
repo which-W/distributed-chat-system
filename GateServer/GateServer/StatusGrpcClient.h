@@ -8,6 +8,7 @@
 #include<queue>
 #include<atomic>
 #include"ConfigMgr.h"
+#include "GrpcTlsSupport.h"
 using grpc::Channel;
 using grpc::Status;
 using grpc::ClientContext;
@@ -18,11 +19,11 @@ using message::LoginReq;
 using message::LoginRsp;
 class StatusConPool {
 public:
-    StatusConPool(size_t poolSize, std::string host, std::string port)
+    StatusConPool(size_t poolSize, std::string host, std::string port,
+        const chat::grpc_tls::Options& tls, const std::string& tls_name)
         : poolSize_(poolSize), host_(host), port_(port), b_stop_(false) {
         for (size_t i = 0; i < poolSize_; ++i) {
-            std::shared_ptr<Channel> channel = grpc::CreateChannel(host + ":" + port,
-                grpc::InsecureChannelCredentials());
+            std::shared_ptr<Channel> channel = chat::grpc_tls::make_channel(host, port, tls, tls_name);
             connections_.push(StatusService::NewStub(channel));
         }
     }

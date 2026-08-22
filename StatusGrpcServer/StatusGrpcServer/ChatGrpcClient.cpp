@@ -20,7 +20,9 @@ ChatGrpcClient::ChatGrpcClient()
 			continue;
 		}
 
-		_pools[cfg[word]["Name"]] = std::make_unique<ChatConPool>(5, cfg[word]["Host"], cfg[word]["Port"]);
+		_pools[cfg[word]["Name"]] = std::make_unique<ChatConPool>(
+			5, cfg[word]["Host"], cfg[word]["Port"], chat::grpc_tls::from_config(cfg),
+			cfg[word]["TLSName"]);
 	}
 
 }

@@ -45,6 +45,10 @@ VarifyServer/config.json
 **/config.ini
 *.pid
 /run/
+/certs/
+*.key
+*.pem
+*.crt
 
 # OS/editor noise
 .DS_Store

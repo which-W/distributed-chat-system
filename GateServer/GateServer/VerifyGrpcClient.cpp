@@ -1,4 +1,5 @@
 #include "VerifyGrpcClient.h"
+#include "GrpcTlsSupport.h"
 
 message::GetVarifyRsp VerifyGrpcClient::GetVarifyCode(std::string email) {
     ClientContext context;
@@ -31,8 +32,9 @@ RPConPool::RPConPool(size_t poolSize, std::string host, std::string port)
     : poolSize_(poolSize), host_(host), port_(port), b_stop_(false) {
     for (size_t i = 0; i < poolSize_; ++i) {
 
-        std::shared_ptr<Channel> channel = grpc::CreateChannel(host + ":" + port,
-            grpc::InsecureChannelCredentials());
+        auto& cfg = ConfigMgr::ins();
+        std::shared_ptr<Channel> channel = chat::grpc_tls::make_channel(
+            host, port, chat::grpc_tls::from_config(cfg), cfg["VarifyServer"]["TLSName"]);
 
         connections_.emplace(VarifyService::NewStub(channel));
     }

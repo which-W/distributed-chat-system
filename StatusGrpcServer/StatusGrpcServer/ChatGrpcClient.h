@@ -5,6 +5,7 @@
 #include <grpcpp/grpcpp.h>
 #include "message.grpc.pb.h"
 #include "message.pb.h"
+#include "GrpcTlsSupport.h"
 
 using grpc::Channel;
 using grpc::Status;
@@ -20,12 +21,12 @@ using message::ChatService;
 
 class ChatConPool {
 public:
-	ChatConPool(size_t poolSize, std::string host, std::string port)
+	ChatConPool(size_t poolSize, std::string host, std::string port,
+		const chat::grpc_tls::Options& tls, const std::string& tls_name)
 		: poolSize_(poolSize), host_(host), port_(port), b_stop_(false) {
 		for (size_t i = 0; i < poolSize_; ++i) {
 
-			std::shared_ptr<Channel> channel = grpc::CreateChannel(host + ":" + port,
-				grpc::InsecureChannelCredentials());
+			std::shared_ptr<Channel> channel = chat::grpc_tls::make_channel(host, port, tls, tls_name);
 
 			connections_.push(ChatService::NewStub(channel));
 		}

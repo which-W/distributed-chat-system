@@ -6,6 +6,7 @@
 #include "CServer.h"
 #include "ConfigMgr.h"
 #include "ChatServiceImp.h"
+#include "GrpcTlsSupport.h"
 bool bstop = false;
 std::condition_variable cond_quit;
 std::mutex mutex_quit;
@@ -35,7 +36,8 @@ int main()
 		ChatServiceImp service;
 		grpc::ServerBuilder builder;
 		// 监听端口和添加服务
-		builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+		builder.AddListeningPort(server_address, chat::grpc_tls::server_credentials(
+			chat::grpc_tls::from_config(cfg)));
 		builder.RegisterService(&service);
 		service.RegisterServer(pointer_server);
 		// 构建并启动gRPC服务器

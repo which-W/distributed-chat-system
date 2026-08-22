@@ -5,6 +5,27 @@ const config = require('./config')
 const {v4:uuidv4} = require('uuid')
 const emailModule = require('./email')
 const redis_module = require('./redis')
+const fs = require('fs')
+
+function readRequiredFile(envName) {
+    const file = process.env[envName]
+    if (!file) throw new Error(`${envName} is required when gRPC TLS is enabled`)
+    return fs.readFileSync(file)
+}
+
+function serverCredentials() {
+    const mode = (process.env.VARIFY_GRPC_TLS_MODE || 'insecure').toLowerCase()
+    if (mode === 'insecure') return grpc.ServerCredentials.createInsecure()
+    if (mode !== 'tls' && mode !== 'mtls') {
+        throw new Error('VARIFY_GRPC_TLS_MODE must be insecure, tls, or mtls')
+    }
+    const ca = mode === 'mtls' ? readRequiredFile('VARIFY_GRPC_CA_CERT') : null
+    const keyCertPairs = [{
+        private_key: readRequiredFile('VARIFY_GRPC_KEY'),
+        cert_chain: readRequiredFile('VARIFY_GRPC_CERT'),
+    }]
+    return grpc.ServerCredentials.createSsl(ca, keyCertPairs, mode === 'mtls')
+}
 
 async function GetVarifyCode(call, callback) {
     console.log("email is ", call.request.email)
@@ -58,7 +79,8 @@ function main() {
     var server = new grpc.Server()
     server.addService(message_proto.VarifyService.service, { GetVarifyCode: GetVarifyCode })
     const bindAddress = process.env.VARIFY_BIND_ADDRESS || '0.0.0.0:5000'
-    server.bindAsync(bindAddress, grpc.ServerCredentials.createInsecure(), () => {
+    server.bindAsync(bindAddress, serverCredentials(), (error) => {
+        if (error) throw error
         console.log(`grpc server started on ${bindAddress}`)
     })
 }

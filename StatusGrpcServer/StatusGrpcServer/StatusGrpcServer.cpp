@@ -14,13 +14,15 @@
 #include <thread>
 #include <boost/asio.hpp>
 #include "StatusServiceImpl.h"
+#include "GrpcTlsSupport.h"
 void RunServer() {
     auto& cfg = ConfigMgr::Inst();
     std::string server_address(cfg["StatusServer"]["Host"] + ":" + cfg["StatusServer"]["Port"]);
     StatusServiceImpl service;
     grpc::ServerBuilder builder;
     // 监听端口和添加服务
-    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.AddListeningPort(server_address, chat::grpc_tls::server_credentials(
+        chat::grpc_tls::from_config(cfg)));
     builder.RegisterService(&service);
     // 构建并启动gRPC服务器
     std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
