@@ -7,7 +7,7 @@
 
 这是一个采用分布式服务端架构的即时通信系统：
 
-- `Chat_Client`：Qt 5 桌面客户端，负责注册、登录、好友关系和聊天 UI。
+- `client`：Qt 桌面客户端，负责注册、登录、好友关系和聊天 UI。
 - `GateServer`：HTTP 接入层，处理验证码、注册、重置密码和登录。
 - `VarifyServer`：Node.js gRPC 验证码服务，生成验证码、写 Redis 并发送邮件。
 - `StatusGrpcServer`：聊天节点发现与负载选择服务，签发登录 token。
@@ -19,7 +19,7 @@
 
 ```mermaid
 flowchart LR
-    Client["Chat_Client<br/>Qt UI"]
+    Client["client<br/>Qt UI"]
 
     subgraph Access[接入与认证]
         Gate["GateServer<br/>HTTP :8080"]
@@ -61,7 +61,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph Client[Chat_Client]
+    subgraph Client[client]
         CMain[main.cpp] --> MainWindow
         MainWindow --> AuthUI[LoginDialog / RegisterDialog / ResetDialog]
         MainWindow --> ChatUI[ChatDialog / ChatPage / 好友组件]
@@ -113,7 +113,7 @@ flowchart TB
 
 | 组件 | 入口 | 核心调度对象 | 职责 |
 |---|---|---|---|
-| Qt 客户端 | `Chat_Client/Chat_Client/main.cpp` | `MainWindow`, `Httpmgr`, `TcpMgr` | UI、HTTP 短请求、TCP 长连接、消息分发 |
+| Qt 客户端 | `client/app/main.cpp` | `MainWindow`, `Httpmgr`, `TcpMgr` | UI、HTTP 短请求、TCP 长连接、消息分发 |
 | HTTP 网关 | `servers/gate/app/main.cpp` | `CServer → HttpConnection → LogicSystem` | 账户认证、验证码入口、聊天节点发现 |
 | 验证码服务 | `VarifyServer/server.js` | `GetVarifyCode` | 验证码生成、Redis TTL、邮件发送 |
 | 状态服务 | `servers/status/app/main.cpp` | `StatusServiceImpl` | 按在线数选节点、签发 token |
@@ -125,7 +125,7 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     actor U as 用户
-    participant C as Chat_Client
+    participant C as client
     participant G as GateServer
     participant DB as MySQL
     participant S as StatusGrpcServer
@@ -256,10 +256,10 @@ flowchart LR
 
 建议按以下顺序进入代码：
 
-1. `Chat_Client/Chat_Client/LoginDialog.cpp`：理解 HTTP 登录到 TCP 登录的切换。
+1. `client/ui/auth/LoginDialog.cpp`：理解 HTTP 登录到 TCP 登录的切换。
 2. `servers/gate/service/LogicSystem.cpp`：理解全部账户类 HTTP 路由。
 3. `servers/status/rpc/StatusServiceImpl.cpp`：理解节点选择与 token。
 4. `servers/chat/network/CSession.cpp`：理解 TCP 拆包、组包和会话生命周期。
 5. `servers/chat/service/LogicSystem.cpp`：理解消息号到业务回调的主分发。
 6. `servers/chat/rpc/ChatGrpcClient.cpp` 与 `ChatServiceImp.cpp`：理解跨节点通知。
-7. `Chat_Client/Chat_Client/TcpMgr.cpp`：理解客户端协议解析与 Qt signal 分发。
+7. `client/network/TcpMgr.cpp`：理解客户端协议解析与 Qt signal 分发。

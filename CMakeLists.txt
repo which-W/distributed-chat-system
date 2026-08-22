@@ -106,38 +106,7 @@ if(CHAT_BUILD_SERVERS)
 endif()
 
 if(CHAT_BUILD_CLIENT)
-    set(CMAKE_AUTOMOC ON)
-    set(CMAKE_AUTOUIC ON)
-    set(CMAKE_AUTORCC ON)
-
-    find_package(QT NAMES Qt5 Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
-    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Network)
-
-    set(CLIENT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Chat_Client/Chat_Client")
-    file(GLOB CLIENT_SOURCES CONFIGURE_DEPENDS "${CLIENT_DIR}/*.cpp")
-    file(GLOB CLIENT_HEADERS CONFIGURE_DEPENDS "${CLIENT_DIR}/*.h")
-    file(GLOB CLIENT_FORMS CONFIGURE_DEPENDS "${CLIENT_DIR}/*.ui")
-    file(GLOB CLIENT_RESOURCES CONFIGURE_DEPENDS "${CLIENT_DIR}/*.qrc")
-
-    add_executable(chat_client WIN32
-        ${CLIENT_SOURCES}
-        ${CLIENT_HEADERS}
-        ${CLIENT_FORMS}
-        ${CLIENT_RESOURCES})
-    target_include_directories(chat_client PRIVATE "${CLIENT_DIR}")
-    target_link_libraries(chat_client PRIVATE
-        Qt${QT_VERSION_MAJOR}::Core
-        Qt${QT_VERSION_MAJOR}::Gui
-        Qt${QT_VERSION_MAJOR}::Widgets
-        Qt${QT_VERSION_MAJOR}::Network)
-
-    add_custom_command(TARGET chat_client POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/config/client.ini"
-            "$<TARGET_FILE_DIR:chat_client>/config.ini"
-        VERBATIM)
-    install(TARGETS chat_client RUNTIME DESTINATION bin BUNDLE DESTINATION bin)
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config/client.ini" DESTINATION bin RENAME config.ini)
+    add_subdirectory(client)
 endif()
 
 if(CHAT_BUILD_SERVERS)

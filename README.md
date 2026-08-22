@@ -45,6 +45,8 @@ servers/
     └── storage/   # 分布式锁、MySQL 和 Redis
 ```
 
+Qt 客户端统一放在 `client/` 下：`app/` 是入口和主窗口，`core/` 是全局定义，`model/` 是数据模型与用户状态，`network/` 是 HTTP/TCP 通信，`ui/` 按 `auth / chat / contacts / common` 拆分界面组件，`resources/` 保存 QRC、图片和 QSS。客户端构建规则位于 `client/CMakeLists.txt`。
+
 ## 前置条件
 
 - CMake 3.24+
@@ -234,4 +236,3 @@ node VarifyServer/server.js
 | 50055 / 50056 | gRPC | 两个 ChatServer 节点间入口 |
 
 多主机部署时，修改 `config/status.ini` 中提供给客户端的聊天节点地址，以及两份 `config/chatserver*.ini` 中的 peer 地址。
-

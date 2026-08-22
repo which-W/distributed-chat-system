@@ -3,7 +3,7 @@
 #include <QDialog>
 #include "ui_ResetDialog.h"
 #include "global.h"
-#include "HttpMgr.h"
+#include "httpmgr.h"
 #include <QTimer>
 QT_BEGIN_NAMESPACE
 namespace Ui { class ResetDialogClass; };

@@ -1,6 +1,6 @@
 #pragma once
 #include <QTcpSocket>
-#include "singleton.h"
+#include "Singleton.h"
 #include "global.h"
 #include "usermgr.h"
 #include "UserData.h"
