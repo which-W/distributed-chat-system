@@ -39,5 +39,18 @@ add_custom_command(TARGET chat_client POST_BUILD
         "$<TARGET_FILE_DIR:chat_client>/style"
     VERBATIM)
 
+if(WIN32)
+    get_target_property(QT_QMAKE_EXECUTABLE Qt${QT_VERSION_MAJOR}::qmake IMPORTED_LOCATION)
+    get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
+    find_program(WINDEPLOYQT_EXECUTABLE windeployqt
+        HINTS "${QT_BIN_DIR}"
+        NO_DEFAULT_PATH
+        REQUIRED)
+    add_custom_command(TARGET chat_client POST_BUILD
+        COMMAND "${WINDEPLOYQT_EXECUTABLE}"
+            --release --no-translations "$<TARGET_FILE:chat_client>"
+        VERBATIM)
+endif()
+
 install(TARGETS chat_client RUNTIME DESTINATION bin BUNDLE DESTINATION bin)
 install(FILES "${PROJECT_SOURCE_DIR}/config/client.ini" DESTINATION bin RENAME config.ini)

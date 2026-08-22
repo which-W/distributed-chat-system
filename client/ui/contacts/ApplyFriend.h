@@ -44,7 +44,6 @@ private:
     std::vector<QString> _tip_data;
     QPoint _tip_cur_point;
     std::shared_ptr<SearchInfo> _si;
-    QTextCodec* codec;
     bool _is_expanded = false;  // 是否为展开状态
 public slots:
     //显示更多label标签

@@ -4,7 +4,6 @@
 #include <memory>
 #include <QMouseEvent>
 #include <QDebug>
-#include <QTextCodec>
 class TimerBtn:public QPushButton
 {
 public:
@@ -16,5 +15,4 @@ public:
 private:
 	QTimer* _timer;
 	int _count;
-	QTextCodec* codec;
 };

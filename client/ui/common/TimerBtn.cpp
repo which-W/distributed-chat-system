@@ -3,14 +3,13 @@
 TimerBtn::TimerBtn(QWidget* parent):QPushButton(parent),_count(10)
 {
 	_timer = new QTimer(this);
-	codec = QTextCodec::codecForName("GBK");
 	connect(_timer, &QTimer::timeout, [this]() {
 		_count--;
 		if (_count <= 0) {
 			_timer->stop();
 			_count = 10;
 			this->setEnabled(true);
-			this->setText(codec->toUnicode("获取"));
+			this->setText(tr("获取"));
 			return;
 		}
 		this->setText(QString::number(_count));

@@ -5,16 +5,15 @@ ApplyFriend::ApplyFriend(QWidget* parent) :
     ui(new Ui::ApplyFriendClass), _label_point(2, 6)
 {
     ui->setupUi(this);
-    codec = QTextCodec::codecForName("GBK");
     // 隐藏对话框标题栏
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
     this->setObjectName("ApplyFriend");
     this->setModal(true);
 
 
-    ui->name_ed->setPlaceholderText(codec->toUnicode("添加人名称"));
-    ui->lb_edit->setPlaceholderText(codec->toUnicode("搜索、添加标签"));
-    ui->other_name_ed->setPlaceholderText(codec->toUnicode("请添加好友名"));
+    ui->name_ed->setPlaceholderText(tr("添加人名称"));
+    ui->lb_edit->setPlaceholderText(tr("搜索、添加标签"));
+    ui->other_name_ed->setPlaceholderText(tr("请添加好友名"));
 
     connect(ui->more_lb, &ClickOnceLabel::clicked, this, &ApplyFriend::ShowMoreLabel);
     ui->input_widght->hide();
@@ -25,9 +24,9 @@ ApplyFriend::ApplyFriend(QWidget* parent) :
     ui->lb_edit->setMaxLength(10);
     _tip_cur_point = QPoint(5, 5);
 
-    _tip_data = { codec->toUnicode("情人") ,codec->toUnicode("仇人") ,codec->toUnicode("死人") ,codec->toUnicode("python好友") ,
-    codec->toUnicode("C++大师") ,codec->toUnicode("好基友"),codec->toUnicode("一生不分离的最好的朋友"),
-    codec->toUnicode("好基友") };
+    _tip_data = { tr("情人"), tr("仇人"), tr("死人"), tr("python好友"),
+    tr("C++大师"), tr("好基友"), tr("一生不分离的最好的朋友"),
+    tr("好基友") };
     InitTipLbs();
     //链接输入标签回车事件
     connect(ui->lb_edit, &CustomizeEdit::returnPressed, this, &ApplyFriend::SlotLabelEnter);
@@ -393,7 +392,7 @@ void ApplyFriend::SlotChangeFriendLabelByTip(QString lbtext, ClickLbState state)
 
 void ApplyFriend::SlotLabelTextChange(const QString& text)
 {
-    QString add_prefix = QTextCodec::codecForName("GBK")->toUnicode("添加标签: ");
+    QString add_prefix = tr("添加标签: ");
     if (text.isEmpty()) {
         ui->tip_label->setText("");
         ui->input_widght->hide();

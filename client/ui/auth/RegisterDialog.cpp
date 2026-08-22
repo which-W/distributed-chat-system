@@ -20,7 +20,6 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 	ui->err_tip->setProperty("state", "normal");
 	repolish(ui->err_tip);
 	//消息发送逻辑
-	codec = QTextCodec::codecForName("GBK");
 	connect(ui->get_code, &QPushButton::clicked, this, &RegisterDialog::get_code_func);
 	connect(Httpmgr::Getinstance().get(), &Httpmgr::sig_reg_mod_finish, this, &RegisterDialog::slot_req_mod_finished);
 	connect(ui->sure_btn, &QPushButton::clicked, this, &RegisterDialog::slot_reg_finished);
@@ -54,7 +53,7 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 			return;
 		}
 		_counter--;
-		auto str = QString(codec->toUnicode("在 %1 s后将返回登录页面")).arg(_counter);
+		auto str = tr("在 %1 s后将返回登录页面").arg(_counter);
 		ui->show_tip->setText(str);
 		});
 
@@ -70,7 +69,7 @@ void RegisterDialog::get_code_func() {
 		Httpmgr::Getinstance()->PostHttpRequest(gate_url_prefix + "/post_email", json, Req::ID_GET_VERIFT_CODE, Modules::MOD_REGISTER);
 	}
 	else {
-		showTip(codec->toUnicode("邮箱输入错误"),false);
+		showTip(tr("邮箱输入错误"),false);
 	}
 
 }
@@ -97,24 +96,24 @@ void RegisterDialog::initHandlers()
 {
 	_handlers.insert(ID_GET_VERIFT_CODE, [this](const QJsonObject& jsonObj) {
 		if (jsonObj.contains("error") && jsonObj["error"].toString() == ErrorCode::ERR_OK) {
-			showTip(codec->toUnicode("注册成功"), true);
+			showTip(tr("注册成功"), true);
 		}
 		else {
-			showTip(codec->toUnicode("未知参数失败，请重试"), false);
+			showTip(tr("未知参数失败，请重试"), false);
 		}
 		auto emial = jsonObj["email"].toString();
-		showTip(codec->toUnicode("验证码已发送到邮箱") , true);
+		showTip(tr("验证码已发送到邮箱") , true);
 
 		});
 
 	_handlers.insert(Req::ID_REQ_USER, [this](QJsonObject jsonObj) {
 		int error = jsonObj["error"].toInt();
 		if (error != ErrorCode::ERR_OK) {
-			showTip(codec->toUnicode("用户或密码错误"), false);
+			showTip(tr("用户或密码错误"), false);
 			return;
 		}
 		auto email = jsonObj["email"].toString();
-		showTip(codec->toUnicode("用户注册成功"), true);
+		showTip(tr("用户注册成功"), true);
 		qDebug() << "email is " << email;
 		changeRegisterWidgepage();
 		});
@@ -123,16 +122,16 @@ void RegisterDialog::initHandlers()
 void RegisterDialog::slot_req_mod_finished(Req id, QString res, ErrorCode error)
 {
 	if (error == ERR_OK) {
-		showTip(codec->toUnicode("注册成功"), true);
+		showTip(tr("注册成功"), true);
 	}
 	else {
-		showTip(codec->toUnicode("网络请求错误"), false);
+		showTip(tr("网络请求错误"), false);
 		return;
 	}
 	//解析json数据
 	QJsonDocument jsonDoc = QJsonDocument::fromJson(res.toUtf8());
 	if (jsonDoc.isNull() || !jsonDoc.isObject()) {
-		showTip(codec->toUnicode("服务器返回数据错误"), false);
+		showTip(tr("服务器返回数据错误"), false);
 		return;
 	}
 	//创建json对象,并调用对应的处理函数
@@ -244,7 +243,7 @@ void RegisterDialog::DelTipErr(TipErr te)
 bool RegisterDialog::checkUserValid()
 {
 	if (ui->user_edit->text() == "") {
-		AddTipErr(TipErr::TIP_USER_ERR, codec->toUnicode("用户名不能为空"));
+		AddTipErr(TipErr::TIP_USER_ERR, tr("用户名不能为空"));
 		return false;
 	}
 	DelTipErr(TipErr::TIP_USER_ERR);
@@ -257,7 +256,7 @@ bool RegisterDialog::checkPassValid()
 	auto pass_confirm = ui->psw_edit_2->text();
 	if (pass.length() < 6 || pass.length() > 15) {
 		//提示长度不准确
-		AddTipErr(TipErr::TIP_PWD_ERR, codec->toUnicode("密码长度应为6~15"));
+		AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为6~15"));
 		return false;
 	}
 	// 创建一个正则表达式对象，按照上述密码要求
@@ -267,7 +266,7 @@ bool RegisterDialog::checkPassValid()
 	bool match = regExp.match(pass).hasMatch();
 	if (!match) {
 		//提示字符非法
-		AddTipErr(TipErr::TIP_PWD_ERR, codec->toUnicode("不能包含非法字符"));
+		AddTipErr(TipErr::TIP_PWD_ERR, tr("不能包含非法字符"));
 		return false;;
 	}
 	DelTipErr(TipErr::TIP_PWD_ERR);
@@ -280,7 +279,7 @@ bool RegisterDialog::checkConfirmValid()
 	auto pass_con = ui->psw_edit_2->text();
 
 	if (pass != pass_con) {
-		AddTipErr(TipErr::TIP_PWD_CONFIRM, codec->toUnicode("密码第二次输入错误"));
+		AddTipErr(TipErr::TIP_PWD_CONFIRM, tr("密码第二次输入错误"));
 		return false;
 	}
 	else {
@@ -298,7 +297,7 @@ bool RegisterDialog::checkEmailValid()
 	bool match = regex.match(email).hasMatch(); // 执行正则表达式匹配
 	if (!match) {
 		//提示邮箱不正确
-		AddTipErr(TipErr::TIP_EMAIL_ERR, codec->toUnicode("邮箱地址不正确"));
+		AddTipErr(TipErr::TIP_EMAIL_ERR, tr("邮箱地址不正确"));
 		return false;
 	}
 	DelTipErr(TipErr::TIP_EMAIL_ERR);
@@ -309,7 +308,7 @@ bool RegisterDialog::checkVarifyValid()
 {
 	auto pass = ui->code_edit->text();
 	if (pass.isEmpty()) {
-		AddTipErr(TipErr::TIP_VARIFY_ERR, codec->toUnicode("验证码不能为空"));
+		AddTipErr(TipErr::TIP_VARIFY_ERR, tr("验证码不能为空"));
 		return false;
 	}
 	DelTipErr(TipErr::TIP_VARIFY_ERR);

@@ -22,7 +22,6 @@ private slots:
     void on_add_friend_btn_clicked();
 
 private:
-    QTextCodec* codec;
     Ui::FindSuccessWidghtClass* ui;
     QWidget* _parent;
     std::shared_ptr<SearchInfo> _si;

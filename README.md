@@ -97,6 +97,16 @@ cmake --preset desktop-release -DCMAKE_PREFIX_PATH=/path/to/Qt/5.15/gcc_64
 cmake --build --preset desktop-release -j
 ```
 
+本机已可在不打开 Visual Studio/Qt Creator 的情况下使用 G 盘 Qt 构建。`CMakeUserPresets.json` 保存本机的 Qt/Ninja 路径并已被 Git 忽略。在 **MSVC Developer PowerShell/Command Prompt** 中执行：
+
+```powershell
+$env:VCPKG_ROOT = 'F:\DevTools\vcpkg'
+cmake --preset desktop-local
+cmake --build --preset desktop-local
+```
+
+这里只使用 MSVC 的命令行编译环境，不使用 Visual Studio 工程或 IDE。Windows 构建完成后 CMake 会自动运行 `windeployqt`，把 Qt DLL 和平台插件复制到客户端输出目录。
+
 ## 配置
 
 仓库中的 `config/*.ini` 只包含安全的本机默认值。生产环境不要把密码写入 Git，复制 `.env.example` 为 `.env` 并填写：

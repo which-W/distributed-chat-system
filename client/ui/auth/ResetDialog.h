@@ -35,7 +35,6 @@ private:
     Ui::ResetDialogClass* ui;
     QMap<TipErr, QString> _tip_errs;
     QMap<Req, std::function<void(const QJsonObject&)>> _handlers;
-    QTextCodec* codec;
 	QTimer* _timer;
     int _counter;
 signals:

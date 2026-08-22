@@ -9,7 +9,6 @@
 #include "ClickOnceLabel.h"
 #include "TcpMgr.h"
 #include <QScrollBar>
-#include <QTextCodec>
 QT_BEGIN_NAMESPACE
 namespace Ui { class AuthenFriendClass; };
 QT_END_NAMESPACE
@@ -38,7 +37,6 @@ private:
     void addLabel(QString name);
     std::vector<QString> _tip_data;
     QPoint _tip_cur_point;
-    QTextCodec* codec;
 public slots:
     //显示更多label标签
     void ShowMoreLabel();

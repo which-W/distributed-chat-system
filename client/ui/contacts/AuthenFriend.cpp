@@ -6,11 +6,10 @@ AuthenFriend::AuthenFriend(QWidget* parent) :
 {
     ui->setupUi(this);
     // 隐藏对话框标题栏
-    codec = QTextCodec::codecForName("GBK");
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
     this->setObjectName("AuthenFriend");
     this->setModal(true);
-    ui->lb_edit->setPlaceholderText(codec->toUnicode("搜索、添加标签"));
+    ui->lb_edit->setPlaceholderText(tr("搜索、添加标签"));
     ui->other_name_ed->setPlaceholderText("小飞棍来了");
 
     ui->lb_edit->SetMaxLength(21);
@@ -21,9 +20,9 @@ AuthenFriend::AuthenFriend(QWidget* parent) :
 
     _tip_cur_point = QPoint(5, 5);
 
-    _tip_data = { codec->toUnicode("情人") ,codec->toUnicode("仇人") ,codec->toUnicode("死人") ,codec->toUnicode("python好友") ,
-    codec->toUnicode("C++大师") ,codec->toUnicode("好基友"),codec->toUnicode("一生不分离的最好的朋友"),
-    codec->toUnicode("好基友") };
+    _tip_data = { tr("情人"), tr("仇人"), tr("死人"), tr("python好友"),
+    tr("C++大师"), tr("好基友"), tr("一生不分离的最好的朋友"),
+    tr("好基友") };
 
     connect(ui->more_lb, &ClickOnceLabel::clicked, this, &AuthenFriend::ShowMoreLabel);
     InitTipLbs();

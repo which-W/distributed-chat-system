@@ -5,7 +5,6 @@ ResetDialog::ResetDialog(QWidget *parent)
 	, ui(new Ui::ResetDialogClass()), _counter(5)
 {
 	ui->setupUi(this);
-	codec = QTextCodec::codecForName("GBK");
    connect(ui->user_edit , &QLineEdit::editingFinished, this, [this]() {
 	   checkUserValid();
 	   });
@@ -48,7 +47,7 @@ void ResetDialog::on_varify_btn_clicked()
 	//获取验证码按钮点击事件
 	auto email = ui->email_edit->text();
 	if (email.isEmpty()) {
-		showTip(codec->toUnicode("邮箱不能为空"), false);
+		showTip(tr("邮箱不能为空"), false);
 		return;
 	}
 	QRegularExpression regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
@@ -65,7 +64,7 @@ void ResetDialog::on_varify_btn_clicked()
 void ResetDialog::slot_reset_mod_finish(Req id, QString res, ErrorCode err)
 {
 	if (err != ErrorCode::ERR_OK) {
-		showTip(codec->toUnicode("网络请求错误"), false);
+		showTip(tr("网络请求错误"), false);
 		return;
 	}
 
@@ -73,13 +72,13 @@ void ResetDialog::slot_reset_mod_finish(Req id, QString res, ErrorCode err)
 	QJsonDocument jsonDoc = QJsonDocument::fromJson(res.toUtf8());
 	//json解析错误
 	if (jsonDoc.isNull()) {
-		showTip(codec->toUnicode("json解析错误"), false);
+		showTip(tr("json解析错误"), false);
 		return;
 	}
 
 	//json解析错误
 	if (!jsonDoc.isObject()) {
-		showTip(codec->toUnicode("json解析错误"), false);
+		showTip(tr("json解析错误"), false);
 		return;
 	}
 
@@ -125,7 +124,7 @@ void ResetDialog::on_sure_btn_clicked()
 bool ResetDialog::checkUserValid()
 {
 	if (ui->user_edit->text() == "") {
-		AddTipErr(TipErr::TIP_USER_ERR, codec->toUnicode("用户名不能为空"));
+		AddTipErr(TipErr::TIP_USER_ERR, tr("用户名不能为空"));
 		return false;
 	}
 
@@ -140,7 +139,7 @@ bool ResetDialog::checkPassValid()
 
 	if (pass.length() < 6 || pass.length() > 15) {
 		//提示长度不准确
-		AddTipErr(TipErr::TIP_PWD_ERR, codec->toUnicode("密码长度应为6~15"));
+		AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为6~15"));
 		return false;
 	}
 
@@ -151,7 +150,7 @@ bool ResetDialog::checkPassValid()
 	bool match = regExp.match(pass).hasMatch();
 	if (!match) {
 		//提示字符非法
-		AddTipErr(TipErr::TIP_PWD_ERR, codec->toUnicode("不能包含非法字符"));
+		AddTipErr(TipErr::TIP_PWD_ERR, tr("不能包含非法字符"));
 		return false;;
 	}
 
@@ -184,7 +183,7 @@ bool ResetDialog::checkEmailValid()
 	bool match = regex.match(email).hasMatch(); // 执行正则表达式匹配
 	if (!match) {
 		//提示邮箱不正确
-		AddTipErr(TipErr::TIP_EMAIL_ERR, codec->toUnicode("邮箱地址不正确"));
+		AddTipErr(TipErr::TIP_EMAIL_ERR, tr("邮箱地址不正确"));
 		return false;
 	}
 
@@ -196,7 +195,7 @@ bool ResetDialog::checkVarifyValid()
 {
 	auto pass = ui->varify_edit->text();
 	if (pass.isEmpty()) {
-		AddTipErr(TipErr::TIP_VARIFY_ERR, codec->toUnicode("验证码不能为空"));
+		AddTipErr(TipErr::TIP_VARIFY_ERR, tr("验证码不能为空"));
 		return false;
 	}
 
@@ -227,11 +226,11 @@ void ResetDialog::initHandlers()
 	_handlers.insert(Req::ID_GET_VERIFT_CODE, [this](QJsonObject jsonObj) {
 		int error = jsonObj["error"].toInt();
 		if (error != ErrorCode::ERR_OK) {
-			showTip(codec->toUnicode("参数错误"), false);
+			showTip(tr("参数错误"), false);
 			return;
 		}
 		auto email = jsonObj["email"].toString();
-		showTip(codec->toUnicode("验证码已发送到邮箱，注意查收"), true);
+		showTip(tr("验证码已发送到邮箱，注意查收"), true);
 		qDebug() << "email is " << email;
 		});
 
@@ -239,11 +238,11 @@ void ResetDialog::initHandlers()
 	_handlers.insert(Req::ID_RESET_PWD, [this](QJsonObject jsonObj) {
 		int error = jsonObj["error"].toInt();
 		if (error != ErrorCode::ERR_OK) {
-			showTip(codec->toUnicode("参数错误"), false);
+			showTip(tr("参数错误"), false);
 			return;
 		}
 		auto email = jsonObj["email"].toString();
-		showTip(codec->toUnicode("重置成功,点击返回登录"), true);
+		showTip(tr("重置成功,点击返回登录"), true);
 		qDebug() << "email is " << email;
 		qDebug() << "user uuid is " << jsonObj["uuid"].toString();
 		});

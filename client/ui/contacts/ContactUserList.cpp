@@ -4,7 +4,6 @@ ContactUserList::ContactUserList(QWidget* parent) : _add_friend_item(nullptr)
 , _load_pending(false)
 {
     Q_UNUSED(parent);
-    codec = QTextCodec::codecForName("GBK");
     this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     // 安装事件过滤器
@@ -97,7 +96,7 @@ void ContactUserList::addContactUserList()
 
     _add_friend_item = new ConUserItem();
     _add_friend_item->setObjectName("new_friend_item");
-    _add_friend_item->SetInfo(0, codec->toUnicode("新的朋友"), ":/res/add_friend.png");
+    _add_friend_item->SetInfo(0, tr("新的朋友"), ":/res/add_friend.png");
     _add_friend_item->SetItemType(ListItemType::APPLY_FRIEND_ITEM);
 
     QListWidgetItem* add_item = new QListWidgetItem;
@@ -109,7 +108,7 @@ void ContactUserList::addContactUserList()
     this->setCurrentItem(add_item);
 
     auto* groupCon = new GroupTipItem();
-    groupCon->SetGroupTip(codec->toUnicode("联系人"));
+    groupCon->SetGroupTip(tr("联系人"));
     _groupitem = new QListWidgetItem;
     _groupitem->setSizeHint(groupCon->sizeHint());
     this->addItem(_groupitem);

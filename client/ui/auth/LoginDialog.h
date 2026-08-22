@@ -32,7 +32,6 @@ private:
 	void DelTipErr(TipErr te);
 	void showTip(QString  str, bool b_ok);
 	void Enablebtn(bool enabled);
-	QTextCodec* codec;
 	Ui::LoginDialogClass* ui;
 	QMap<TipErr, QString> _tip_errs;
 	QMap<Req, std::function<void(const QJsonObject&)>> _handlers;

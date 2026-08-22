@@ -3,7 +3,6 @@
 #include"qstyle.h"
 #include<QWidget>
 #include<QRegularExpression>
-#include<QTextCodec>
 #include<memory>
 #include<iostream>
 #include <QByteArray>

@@ -5,9 +5,8 @@ FindSuccessWidght::FindSuccessWidght(QWidget *parent)
 	, ui(new Ui::FindSuccessWidghtClass())
 {
 	ui->setupUi(this);
-	codec = QTextCodec::codecForName("GBK");
     // 设置对话框标题
-    setWindowTitle(codec->toUnicode("添加"));
+    setWindowTitle(tr("添加"));
     // 隐藏对话框标题栏
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
     this->setObjectName("FindSuccessWidghtClass");

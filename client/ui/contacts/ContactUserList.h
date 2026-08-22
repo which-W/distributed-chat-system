@@ -12,7 +12,6 @@
 #include <QScrollBar>
 #include "GroupTipItem.h"
 #include <QRandomGenerator>
-#include <QTextCodec>
 #include "statewidget.h"
 #include "ConUserItem.h"
 class ContactUserList:public QListWidget
@@ -39,6 +38,5 @@ private:
     bool _load_pending;
     ConUserItem* _add_friend_item;
     QListWidgetItem* _groupitem;
-    QTextCodec* codec;
 
 };

@@ -38,7 +38,6 @@ private:
 	void AddTipErr(TipErr te, QString tips);
 	void DelTipErr(TipErr te);
 
-	QTextCodec* codec;
 	QMap<Req, std::function<void(const QJsonObject&)>> _handlers;
 	QMap<TipErr, QString> _tip_errs;
 	QAction* toggleAction;

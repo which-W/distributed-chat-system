@@ -7,7 +7,6 @@ LoginDialog::LoginDialog(QWidget *parent)
 {
 	ui->setupUi(this);
 	ui->psw_line_edit->setEchoMode(QLineEdit::Password);
-	codec = QTextCodec::codecForName("GBK");
 
 	toggleAction = ui->psw_line_edit->addAction(QIcon(":/res/close.png"), QLineEdit::TrailingPosition);
 	connect(toggleAction, &QAction::triggered, this, &LoginDialog::togglePasswordVisibility);
@@ -83,19 +82,19 @@ void LoginDialog::slot_login_btn()
 void LoginDialog::slot_login_mod_finish(Req id, QString res, ErrorCode err)
 {
 	if (err != ErrorCode::ERR_OK){
-		showTip(codec->toUnicode("网络请求错误"), false);
+		showTip(tr("网络请求错误"), false);
 		return;
 	}
 	// 解析 JSON 字符串,res需转化为QByteArray
 	QJsonDocument jsonDoc = QJsonDocument::fromJson(res.toUtf8());
 	//json解析错误
 	if (jsonDoc.isNull()) {
-		showTip(codec->toUnicode("json解析错误"), false);
+		showTip(tr("json解析错误"), false);
 		return;
 	}
 	//json解析错误
 	if (!jsonDoc.isObject()) {
-		showTip(codec->toUnicode("json解析错误"), false);
+		showTip(tr("json解析错误"), false);
 		return;
 	}
 	//调用对应的逻辑,根据id回调。
@@ -106,7 +105,7 @@ void LoginDialog::slot_login_mod_finish(Req id, QString res, ErrorCode err)
 void LoginDialog::slot_tcp_con_finish(bool bsuccess)
 {
 	if (bsuccess) {
-		showTip(codec->toUnicode("聊天服务连接成功，正在登录..."), true);
+		showTip(tr("聊天服务连接成功，正在登录..."), true);
 		QJsonObject jsonObj;
 		jsonObj["uid"] = _uid;
 		jsonObj["token"] = _token;
@@ -116,7 +115,7 @@ void LoginDialog::slot_tcp_con_finish(bool bsuccess)
 		emit TcpMgr::Getinstance()->sig_send_data(Req::ID_CHAT_LOGIN, jsonData);
 	}
 	else {
-		showTip(codec->toUnicode("网络异常"), false);
+		showTip(tr("网络异常"), false);
 		Enablebtn(true);
 	}
 }
@@ -126,16 +125,16 @@ void LoginDialog::slot_login_failed(int err)
 	qDebug() << "Login failed, error code: " << err;
 	switch (err) {
 	case ErrorCode::ERR_FAIL:
-		showTip(codec->toUnicode("登录失败，请检查用户名或密码"), false);
+		showTip(tr("登录失败，请检查用户名或密码"), false);
 		break;
 	case ErrorCode::ERR_NETWORK:
-		showTip(codec->toUnicode("网络异常，请稍后再试"), false);
+		showTip(tr("网络异常，请稍后再试"), false);
 		break;
 	case ErrorCode::ERR_JSON:
-		showTip(codec->toUnicode("服务器返回数据异常"), false);
+		showTip(tr("服务器返回数据异常"), false);
 		break;
 	default:
-		showTip(codec->toUnicode("未知错误，请稍后再试"), false);
+		showTip(tr("未知错误，请稍后再试"), false);
 		break;
 	}
 	Enablebtn(true);
@@ -147,7 +146,7 @@ void LoginDialog::initHttpHandlers()
 	_handlers.insert(Req::ID_LOGIN_USER, [this](QJsonObject jsonObj) {
 		int error = jsonObj["error"].toInt();
 		if (error != ErrorCode::ERR_OK){
-			showTip(codec->toUnicode("账号或者密码错误"), false);
+			showTip(tr("账号或者密码错误"), false);
 			Enablebtn(true);
 			return;
 		}
@@ -202,7 +201,7 @@ bool LoginDialog::checkEmailValid()
 	bool match = regex.match(email).hasMatch(); // 执行正则表达式匹配
 	if (!match) {
 		//提示邮箱不正确
-		AddTipErr(TipErr::TIP_EMAIL_ERR, codec->toUnicode("邮箱地址不正确"));
+		AddTipErr(TipErr::TIP_EMAIL_ERR, tr("邮箱地址不正确"));
 		return false;
 	}
 
@@ -216,7 +215,7 @@ bool LoginDialog::checkPassValid()
 
 	if (pass.length() < 6 || pass.length() > 15) {
 		//提示长度不准确
-		AddTipErr(TipErr::TIP_PWD_ERR, codec->toUnicode("密码长度应为6~15"));
+		AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为6~15"));
 		return false;
 	}
 
@@ -227,7 +226,7 @@ bool LoginDialog::checkPassValid()
 	bool match = regExp.match(pass).hasMatch();
 	if (!match) {
 		//提示字符非法
-		AddTipErr(TipErr::TIP_PWD_ERR, codec->toUnicode("不能包含非法字符"));
+		AddTipErr(TipErr::TIP_PWD_ERR, tr("不能包含非法字符"));
 		return false;;
 	}
 
