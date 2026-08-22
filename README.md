@@ -1,11 +1,11 @@
 # distributed-chat-system
 
-## Public HTTPS and Chat TLS
+## 公网 HTTPS 与 Chat TLS
 
-Gate HTTPS, Chat TCP TLS, certificates, firewall rules and production templates
-are documented in [docs/public-edge-tls.md](docs/public-edge-tls.md). Deployable
-examples are under `deploy/nginx/` and `deploy/config/`. Production clients must
-set `AllowInsecure=false`; insecure mode is only for explicit local integration.
+Gate HTTPS、Chat TCP TLS、证书、防火墙规则和生产环境模板详见
+[公网 TLS 部署文档](docs/public-edge-tls.md)。可直接修改使用的示例位于
+`deploy/nginx/` 和 `deploy/config/`。生产客户端必须设置
+`AllowInsecure=false`，明文模式只能用于明确的本地联调。
 
 基于 Qt、Boost.Asio、gRPC、Redis 和 MySQL 的分布式即时通信系统。
 
@@ -113,7 +113,7 @@ cmake --build --preset desktop-local
 & '.\build\desktop-qt6-local\bin\chat_tls_probe.exe'
 ```
 
-本机预设显式复制 `config/client.local.ini` 以保留单机明文联调；普通 `desktop-release` 使用安全的生产默认配置 `config/client.ini`。这里只使用 MSVC 的命令行编译环境，不使用 Visual Studio 工程或 IDE。Windows 构建完成后 CMake 会自动运行 `windeployqt`，把 Qt DLL 和 Schannel TLS 插件复制到客户端输出目录；探针必须显示 `TLS available: yes`。
+本机预设显式复制 `config/client.local.ini` 以保留单机明文联调；普通 `desktop-release` 使用安全的生产默认配置 `config/client.ini`。这里只使用 MSVC 的命令行编译环境，不使用 Visual Studio 工程或 IDE。Windows 构建完成后 CMake 会自动运行 `windeployqt`，把 Qt DLL 和 Schannel TLS 插件复制到客户端输出目录；探针必须显示 `TLS 可用: 是`。
 
 ## 配置
 

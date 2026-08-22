@@ -1,7 +1,7 @@
-# This file belongs in the top-level Nginx context, not inside `http {}`.
-# Add `include /etc/nginx/streams-enabled/*.conf;` beside the `http {}` block
-# in /etc/nginx/nginx.conf, then install this as chat.conf in that directory.
-# The installed Nginx package must include ngx_stream_ssl_module.
+# 此文件属于 Nginx 顶层配置，不能放在 `http {}` 内部。
+# 在 /etc/nginx/nginx.conf 的 `http {}` 配置块旁加入
+# `include /etc/nginx/streams-enabled/*.conf;`，然后将本文件以 chat.conf
+# 的名称安装到该目录。Nginx 安装包必须包含 ngx_stream_ssl_module。
 
 stream {
     log_format chat_tls '$remote_addr [$time_local] $protocol $status '

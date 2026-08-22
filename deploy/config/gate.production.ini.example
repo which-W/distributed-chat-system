@@ -1,5 +1,5 @@
-# Merge this section into the production gate.ini. Nginx is the only public
-# listener and proxies HTTPS requests to this loopback endpoint.
+# 将本节合并到生产环境的 gate.ini。Nginx 是唯一的公网监听器，
+# 并将 HTTPS 请求转发到此回环地址端点。
 
 [GateServer]
 Host = 127.0.0.1

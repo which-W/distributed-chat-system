@@ -1,5 +1,5 @@
-# Merge this section into each production chatserver*.ini. ListenHost is the
-# Nginx-to-Chat client protocol endpoint. Host is the private gRPC bind address.
+# 将本节合并到每个生产环境的 chatserver*.ini。ListenHost 是
+# Nginx 到 Chat 的客户端协议端点，Host 是内部 gRPC 绑定地址。
 
 [SelfServer]
 Name = chatserver1

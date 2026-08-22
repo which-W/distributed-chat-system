@@ -1,6 +1,6 @@
-# Merge these public endpoint fields into the matching sections of status.ini.
-# Host/Port are retained as local-development fallbacks; PublicHost/PublicPort
-# are the addresses returned to desktop clients.
+# 将这些公网端点字段合并到 status.ini 的对应配置节。
+# Host/Port 保留为本地开发的后备配置；PublicHost/PublicPort
+# 是返回给桌面客户端的公网地址。
 
 [chatservers]
 Name = chatserver1,chatserver2

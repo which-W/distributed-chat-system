@@ -6,16 +6,16 @@ find_package(QT NAMES Qt5 Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Network)
 
 set(CHAT_CLIENT_CONFIG_FILE "${PROJECT_SOURCE_DIR}/config/client.ini" CACHE FILEPATH
-    "Client INI copied beside the desktop executable")
+    "复制到桌面客户端可执行文件旁的 INI 配置")
 if(NOT EXISTS "${CHAT_CLIENT_CONFIG_FILE}")
-    message(FATAL_ERROR "CHAT_CLIENT_CONFIG_FILE does not exist: ${CHAT_CLIENT_CONFIG_FILE}")
+    message(FATAL_ERROR "CHAT_CLIENT_CONFIG_FILE 指定的文件不存在：${CHAT_CLIENT_CONFIG_FILE}")
 endif()
 
 if(WIN32 AND QT_VERSION_MAJOR LESS 6)
     message(WARNING
-        "Qt 5 on Windows requires a matching OpenSSL runtime for QSslSocket. "
-        "Run chat_tls_probe from the output directory before shipping; Qt 6 "
-        "with its maintained Windows TLS backend is recommended for production.")
+        "Windows 上的 Qt 5 需要与 QSslSocket 匹配的 OpenSSL 运行库。"
+        "发布前请从输出目录运行 chat_tls_probe；生产环境推荐使用 Qt 6 "
+        "及其仍受维护的 Windows TLS 后端。")
 endif()
 
 file(GLOB_RECURSE CLIENT_FILES CONFIGURE_DEPENDS
