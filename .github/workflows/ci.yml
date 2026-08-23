@@ -7,9 +7,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   linux-server:
     runs-on: ubuntu-24.04
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
     steps:
       - uses: actions/checkout@v4
       - name: Install build tools
@@ -19,8 +25,23 @@ jobs:
           git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
           "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+      - name: Restore vcpkg binary cache
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: .vcpkg-binary-cache
+          key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'cmake/triplets/x64-linux-release.cmake') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-linux-${{ hashFiles('vcpkg.json', 'cmake/triplets/x64-linux-release.cmake') }}-
       - name: Configure
         run: cmake --fresh --preset linux-server-release
+      - name: Save vcpkg binary cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .vcpkg-binary-cache
+          key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'cmake/triplets/x64-linux-release.cmake') }}-${{ github.run_id }}
       - name: Build
         run: cmake --build --preset linux-server-release
       - name: Test
