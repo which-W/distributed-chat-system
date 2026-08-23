@@ -67,4 +67,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check C++ formatting
-        run: clang-format --dry-run --Werror common/PasswordHasher.cpp common/PasswordHasher.h tests/password_hasher_test.cpp
+        run: >-
+          clang-format --dry-run --Werror
+          common/PasswordHasher.cpp common/PasswordHasher.h
+          common/ChatServerSelector.cpp common/ChatServerSelector.h
+          tests/password_hasher_test.cpp tests/chat_server_selector_test.cpp

@@ -2,6 +2,7 @@
 #include <grpcpp/grpcpp.h>
 #include "message.grpc.pb.h"
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -48,9 +49,8 @@ public:
 		LoginRsp* reply) override;
 private:
 	bool insertToken(int uid, const std::string& token, const std::string& server_name);
-	ChatServer getChatServer();
+	std::optional<ChatServer> getChatServer();
 	std::unordered_map<std::string, ChatServer> _servers;
 	std::mutex _server_mtx;
-	std::unordered_map<int, std::string> _tokens; // uid -> token
-	std::mutex _token_mtx;
+	std::size_t _round_robin_cursor{0};
 };

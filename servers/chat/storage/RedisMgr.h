@@ -276,6 +276,7 @@ public:
 	bool Get(const std::string &key, std::string& value);
 	bool GetDel(const std::string& key, std::string& value);
 	bool Set(const std::string &key, const std::string &value);
+	bool SetWithTtl(const std::string& key, const std::string& value, int ttl_seconds);
 	bool LPush(const std::string &key, const std::string &value);
 	bool LPop(const std::string &key, std::string& value);
 	bool RPush(const std::string& key, const std::string& value);

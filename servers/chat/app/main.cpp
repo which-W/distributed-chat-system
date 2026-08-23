@@ -17,10 +17,8 @@ int main()
 	auto server_name = cfg["SelfServer"]["Name"];
 	try {
 		auto pool = AsioIOServicePool::GetInstance();
-		//将登录数设置为0
-		RedisMgr::GetInstance()->HSet(LOGIN_COUNT, server_name, "0");
 		Defer derfer([server_name]() {
-			RedisMgr::GetInstance()->HDel(LOGIN_COUNT, server_name);
+			RedisMgr::GetInstance()->Del(CHAT_HEALTH_PREFIX + server_name);
 			RedisMgr::GetInstance()->Close();
 			});
 
@@ -38,7 +36,7 @@ int main()
 		auto pointer_server = std::make_shared<CServer>(
 			io_context, listen_host, static_cast<unsigned short>(configured_port));
 		//启动定时器
-		//pointer_server->StartTimer();
+		pointer_server->StartTimer();
 
 		//定义一个GrpcServer
 		std::string server_address(cfg["SelfServer"]["Host"] + ":" + cfg["SelfServer"]["RPCPort"]);

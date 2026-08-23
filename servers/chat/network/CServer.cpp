@@ -8,7 +8,7 @@
 CServer::CServer(boost::asio::io_context& io_context, const std::string& listen_host, unsigned short port)
     : _io_context(io_context), _port(port),
       _acceptor(io_context, tcp::endpoint(boost::asio::ip::make_address(listen_host), port)),
-      _timer(_io_context, std::chrono::seconds(60))
+      _timer(_io_context)
 {
 	cout << "Chat server is listening on " << listen_host << ':' << _port << endl;
 
@@ -75,60 +75,52 @@ bool CServer::CheckValid(std::string uuid)
 }
 
 void CServer::on_timer(const boost::system::error_code& ec) {
-	//if (ec) {
-	//	std::cout << "timer error: " << ec.message() << std::endl;
-	//	return;
-	//}
-	//std::vector<std::shared_ptr<CSession>> _expired_sessions;
-	//int session_count = 0;
-	////此处加锁遍历session
-	//std::map<std::string, shared_ptr<CSession>> sessions_copy;
-	//{
-	//	lock_guard<mutex> lock(_mutex);
-	//	sessions_copy = _sessions;
-	//}
+	if (ec == boost::asio::error::operation_aborted) {
+		return;
+	}
+	if (ec) {
+		std::cerr << "Chat health timer failed: " << ec.message() << std::endl;
+	}
+	else {
+		PublishHealth();
+	}
 
-	//time_t now = std::time(nullptr);
-	//for (auto iter = sessions_copy.begin(); iter != sessions_copy.end(); iter++) {
-	//	auto b_expired = iter->second->IsHeartbeatExpired(now);
-	//	if (b_expired) {
-	//		//关闭socket, 其实这里也会触发async_read的错误处理
-	//		iter->second->Close();
-	//		//收集过期信息
-	//		_expired_sessions.push_back(iter->second);
-	//		continue;
-	//	}
-	//	session_count++;
-	//}
-
-	////设置session数量
-	//auto& cfg = ConfigMgr::Inst();
-	//auto self_name = cfg["SelfServer"]["Name"];
-	//auto count_str = std::to_string(session_count);
-	//RedisMgr::GetInstance()->HSet(LOGIN_COUNT, self_name, count_str);
-
-	////处理过期session, 单独提出，防止死锁
-	//for (auto& session : _expired_sessions) {
-	//	session->DealExceptionSession();
-	//}
-
-	////再次设置，下一个60s检测
-	//_timer.expires_after(std::chrono::seconds(60));
-	//_timer.async_wait([this](boost::system::error_code ec) {
-	//	on_timer(ec);
-	//	});
+	_timer.expires_after(std::chrono::seconds(CHAT_HEARTBEAT_INTERVAL_SECONDS));
+	auto self = shared_from_this();
+	_timer.async_wait([self](const boost::system::error_code& error) {
+		self->on_timer(error);
+	});
 }
 
 void CServer::StartTimer()
 {
-	////启动定时器
-	//auto self(shared_from_this());
-	//_timer.async_wait([self](boost::system::error_code ec) {
-	//	self->on_timer(ec);
-	//	});
+	PublishHealth();
+	_timer.expires_after(std::chrono::seconds(CHAT_HEARTBEAT_INTERVAL_SECONDS));
+	auto self = shared_from_this();
+	_timer.async_wait([self](const boost::system::error_code& error) {
+		self->on_timer(error);
+	});
 }
 
 void CServer::StopTimer()
 {
-	//_timer.cancel();
+	_timer.cancel();
+	auto& cfg = ConfigMgr::Inst();
+	RedisMgr::GetInstance()->Del(CHAT_HEALTH_PREFIX + cfg["SelfServer"]["Name"]);
+}
+
+void CServer::PublishHealth()
+{
+	std::size_t session_count = 0;
+	{
+		lock_guard<mutex> lock(_mutex);
+		session_count = _sessions.size();
+	}
+	auto& cfg = ConfigMgr::Inst();
+	const auto key = CHAT_HEALTH_PREFIX + cfg["SelfServer"]["Name"];
+	if (!RedisMgr::GetInstance()->SetWithTtl(
+			key, std::to_string(session_count), CHAT_HEARTBEAT_TTL_SECONDS)) {
+		std::cerr << "Failed to publish chat health for "
+			<< cfg["SelfServer"]["Name"] << std::endl;
+	}
 }

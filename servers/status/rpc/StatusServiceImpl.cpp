@@ -2,8 +2,9 @@
 #include "ConfigMgr.h"
 #include "const.h"
 #include "RedisMgr.h"
-#include <climits>
+#include "ChatServerSelector.h"
 #include <algorithm>
+#include <charconv>
 #include <cctype>
 #include <stdexcept>
 
@@ -20,15 +21,19 @@ std::string generate_unique_string() {
 Status StatusServiceImpl::GetChatServer(ServerContext* context, const GetChatServerReq* request, GetChatServerRsp* reply)
 {
 	std::string prefix("StatusServer has received :  ");
-	const auto& server = getChatServer();
-	reply->set_host(server.host);
-	reply->set_port(server.port);
-	reply->set_transport(server.transport);
-	reply->set_tls_server_name(server.tls_server_name);
+	const auto server = getChatServer();
+	if (!server.has_value()) {
+		reply->set_error(ErrorCodes::RPCFailed);
+		return Status::OK;
+	}
+	reply->set_host(server->host);
+	reply->set_port(server->port);
+	reply->set_transport(server->transport);
+	reply->set_tls_server_name(server->tls_server_name);
 	reply->set_error(ErrorCodes::Success);
 	reply->set_token(generate_unique_string());
 	std::cout << request->uid() << std::endl;
-	if (!insertToken(request->uid(), reply->token(), server.name)) {
+	if (!insertToken(request->uid(), reply->token(), server->name)) {
 		reply->set_error(ErrorCodes::RPCFailed);
 		reply->clear_token();
 	}
@@ -96,44 +101,41 @@ StatusServiceImpl::StatusServiceImpl()
 	}
 }
 
-ChatServer StatusServiceImpl::getChatServer() {
+std::optional<ChatServer> StatusServiceImpl::getChatServer() {
 	std::lock_guard<std::mutex> guard(_server_mtx);
 	if (_servers.empty()) {
-		throw std::runtime_error("No chat servers are configured");
-	}
-	ChatServer minServer = _servers.begin()->second;
-	std::string count_str = RedisMgr::GetInstance()->HGet(LOGIN_COUNT, minServer.name);
-	std::cout << "minServer name: " << minServer.name << std::endl;
-	std::cout << "count_str is" << count_str << std::endl;
-	if (count_str.empty()) {
-		//不存在则默认设置为最大
-		minServer.con_count = INT_MAX;
-	}
-	else {
-		minServer.con_count = std::stoi(count_str);
+		return std::nullopt;
 	}
 
-
-	// 使用范围基于for循环，寻找连接数最小的服务器
-	for ( auto& server : _servers) {
-
-		if (server.second.name == minServer.name) {
+	std::vector<chat::routing::ServerLoad> healthy_servers;
+	for (const auto& [name, server] : _servers) {
+		std::string count_text;
+		if (!RedisMgr::GetInstance()->Get(CHAT_HEALTH_PREFIX + name, count_text)) {
 			continue;
 		}
-
-		auto count_str = RedisMgr::GetInstance()->HGet(LOGIN_COUNT, server.second.name);
-		if (count_str.empty()) {
-			server.second.con_count = INT_MAX;
+		int connection_count = 0;
+		const auto parse = std::from_chars(
+			count_text.data(), count_text.data() + count_text.size(), connection_count);
+		if (parse.ec != std::errc{} || parse.ptr != count_text.data() + count_text.size()
+			|| connection_count < 0) {
+			continue;
 		}
-		else {
-			server.second.con_count = std::stoi(count_str);
-		}
-
-		if (server.second.con_count < minServer.con_count) {
-			minServer = server.second;
-		}
+		healthy_servers.push_back({server.name, connection_count});
 	}
-	return minServer;
+
+	const auto selected_name =
+		chat::routing::selectLeastLoaded(healthy_servers, _round_robin_cursor);
+	if (!selected_name.has_value()) {
+		return std::nullopt;
+	}
+	++_round_robin_cursor;
+	auto selected = _servers.at(*selected_name);
+	const auto load = std::find_if(
+		healthy_servers.begin(), healthy_servers.end(), [&](const auto& candidate) {
+			return candidate.name == *selected_name;
+		});
+	selected.con_count = load->connection_count;
+	return selected;
 }
 
 Status StatusServiceImpl::Login(ServerContext* context, const LoginReq* request, LoginRsp* reply)

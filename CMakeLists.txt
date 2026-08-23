@@ -113,6 +113,9 @@ if(CHAT_BUILD_SERVERS)
     target_include_directories(chat_security PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/common")
     target_link_libraries(chat_security PUBLIC unofficial-sodium::sodium)
 
+    add_library(chat_server_selection STATIC common/ChatServerSelector.cpp)
+    target_include_directories(chat_server_selection PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/common")
+
     add_subdirectory(servers/gate)
     add_subdirectory(servers/status)
     add_subdirectory(servers/chat)

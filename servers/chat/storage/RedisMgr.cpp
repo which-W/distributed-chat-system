@@ -101,6 +101,29 @@ bool RedisMgr::Set(const std::string &key, const std::string &value){
 	return true;
 }
 
+bool RedisMgr::SetWithTtl(const std::string& key, const std::string& value, int ttl_seconds)
+{
+	if (ttl_seconds <= 0) {
+		return false;
+	}
+	auto* connection = _con_pool->getConnection();
+	if (connection == nullptr) {
+		return false;
+	}
+	const std::string ttl = std::to_string(ttl_seconds);
+	const char* argv[] = {"SET", key.c_str(), value.c_str(), "EX", ttl.c_str()};
+	const size_t argvlen[] = {3, key.size(), value.size(), 2, ttl.size()};
+	auto* reply = static_cast<redisReply*>(redisCommandArgv(connection, 5, argv, argvlen));
+	_con_pool->returnConnection(connection);
+	if (reply == nullptr) {
+		return false;
+	}
+	const bool success = reply->type == REDIS_REPLY_STATUS && reply->str != nullptr
+		&& std::strcmp(reply->str, "OK") == 0;
+	freeReplyObject(reply);
+	return success;
+}
+
 bool RedisMgr::LPush(const std::string &key, const std::string &value)
 {
 	auto connect = _con_pool->getConnection();

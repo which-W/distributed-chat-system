@@ -104,9 +104,11 @@ enum Msg_ID {
 
 #define USERIPPREFIX  "uip_"
 #define CHAT_TICKET_PREFIX "chat_ticket_"
+#define CHAT_HEALTH_PREFIX "chat_health_"
+#define CHAT_HEARTBEAT_INTERVAL_SECONDS 5
+#define CHAT_HEARTBEAT_TTL_SECONDS 15
 #define IPCOUNTPREFIX  "ipcount_"
 #define USER_BASE_INFO "ubaseinfo_"
-#define LOGIN_COUNT  "logincount"
 #define NAME_INFO  "nameinfo_"
 #define LOCK_PREFIX "lock_"
 #define USER_SESSION_PREFIX "usession_"
