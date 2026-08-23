@@ -4,6 +4,8 @@ const Errors = {
     Success : 0,
     RedisErr : 1,
     Exception : 2,
+    InvalidEmail : 3,
+    RateLimited : 4,
 };
 
 

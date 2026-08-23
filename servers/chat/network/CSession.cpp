@@ -31,12 +31,12 @@ std::string& CSession::GetSessionId() {
 
 void CSession::SetUserId(int uid)
 {
-	_user_uid = uid;
+	_user_uid.store(uid);
 }
 
 int CSession::GetUserId()
 {
-	return _user_uid;
+	return _user_uid.load();
 }
 
 void CSession::Start(){

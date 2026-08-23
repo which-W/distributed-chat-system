@@ -153,5 +153,6 @@ public:
     bool UpdatePwd(const std::string& name, const std::string& newpwd);
     bool CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userInfo);
 private:
+    void MigrateLegacyPasswords();
     std::unique_ptr<MySqlPool> pool_;
 };

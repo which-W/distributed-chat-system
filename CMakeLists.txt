@@ -4,6 +4,10 @@ project(ChatProject VERSION 1.0.0 LANGUAGES CXX)
 
 option(CHAT_BUILD_SERVERS "Build Gate, Status and Chat server executables" ON)
 option(CHAT_BUILD_CLIENT "Build the Qt desktop client" OFF)
+option(CHAT_ENABLE_CLANG_TIDY "Run clang-tidy while compiling C++ targets" OFF)
+option(CHAT_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,10 +17,22 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-    add_compile_options(/utf-8 /W3)
+    add_compile_options(/utf-8 /W4 /permissive-)
+    if(CHAT_WARNINGS_AS_ERRORS)
+        add_compile_options(/WX)
+    endif()
     add_compile_definitions(_WIN32_WINNT=0x0A00 _CRT_SECURE_NO_WARNINGS)
 else()
-    add_compile_options(-Wall -Wextra -Wpedantic)
+    add_compile_options(-Wall -Wextra -Wpedantic -Wshadow)
+    if(CHAT_WARNINGS_AS_ERRORS)
+        add_compile_options(-Werror)
+    endif()
+endif()
+
+if(CHAT_ENABLE_CLANG_TIDY)
+    find_program(CHAT_CLANG_TIDY_EXECUTABLE NAMES clang-tidy REQUIRED)
+    set(CMAKE_CXX_CLANG_TIDY
+        "${CHAT_CLANG_TIDY_EXECUTABLE};--config-file=${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy")
 endif()
 
 function(chat_copy_runtime_config target_name config_name output_name)
@@ -35,6 +51,7 @@ if(CHAT_BUILD_SERVERS)
     find_package(gRPC CONFIG REQUIRED)
     find_package(jsoncpp CONFIG REQUIRED)
     find_package(hiredis CONFIG REQUIRED)
+    find_package(unofficial-sodium CONFIG REQUIRED)
     find_package(MySQLConnectorCPP REQUIRED)
     find_package(unofficial-libmysql CONFIG REQUIRED)
 
@@ -92,6 +109,10 @@ if(CHAT_BUILD_SERVERS)
         MySQLConnectorCPP::jdbc
         unofficial::libmysql::libmysql)
 
+    add_library(chat_security STATIC common/PasswordHasher.cpp)
+    target_include_directories(chat_security PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/common")
+    target_link_libraries(chat_security PUBLIC unofficial-sodium::sodium)
+
     add_subdirectory(servers/gate)
     add_subdirectory(servers/status)
     add_subdirectory(servers/chat)
@@ -103,6 +124,10 @@ if(CHAT_BUILD_SERVERS)
         "${CMAKE_CURRENT_SOURCE_DIR}/config/chatserver1.ini"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/chatserver2.ini"
         DESTINATION config)
+endif()
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
 endif()
 
 if(CHAT_BUILD_CLIENT)

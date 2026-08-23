@@ -2,10 +2,10 @@ const grpc = require('@grpc/grpc-js')
 const message_proto = require('./proto')
 const const_module = require('./const')
 const config = require('./config')
-const {v4:uuidv4} = require('uuid')
 const emailModule = require('./email')
 const redis_module = require('./redis')
 const fs = require('fs')
+const { generateVerificationCode, normalizeEmail } = require('./security')
 
 function readRequiredFile(envName) {
     const file = process.env[envName]
@@ -28,47 +28,43 @@ function serverCredentials() {
 }
 
 async function GetVarifyCode(call, callback) {
-    console.log("email is ", call.request.email)
+    const email = normalizeEmail(call.request.email)
+    if (!email) {
+        callback(null, { email: '', error: const_module.Errors.InvalidEmail })
+        return
+    }
     try{
-        let query_res = await redis_module.GetRedis(const_module.code_prefix+call.request.email);
-        if(query_res == null){
-
+        const uniqueId = generateVerificationCode()
+        const issueResult = await redis_module.IssueVerificationCode(email, uniqueId)
+        if (issueResult === 2 || issueResult === 3) {
+            callback(null, { email, error: const_module.Errors.RateLimited })
+            return
         }
-         let uniqueId = query_res;
-        if(query_res == null){
-            // 生成4位数字验证码（更常见的格式）
-            uniqueId = Math.floor(1000 + Math.random() * 9000).toString();
-            let bres = await redis_module.SetRedisExpire(const_module.code_prefix+call.request.email, uniqueId, 600)
-            if(!bres){
-                callback(null, {
-                    email: call.request.email,
-                    error: const_module.Errors.RedisErr
-                });
-                return;
-            }
+        if (issueResult !== 1) {
+            callback(null, { email, error: const_module.Errors.RedisErr })
+            return
         }
 
-        const htmlContent = emailModule.generateVerifyCodeTemplate(uniqueId, call.request.email);
+        const htmlContent = emailModule.generateVerifyCodeTemplate(uniqueId, email);
         //发送邮件
         let mailOptions = {
             from: config.email_user,
-            to: call.request.email,
-            subject: `🔐 您的验证码：${uniqueId} - 请在10分钟内使用`,
+            to: email,
+            subject: `🔐 您的验证码：${uniqueId} - 请在5分钟内使用`,
             html: htmlContent,
         };
 
-        let send_res = await emailModule.SendMail(mailOptions);
-        console.log("send res is ", send_res)
+        await emailModule.SendMail(mailOptions);
 
-        callback(null, { email:  call.request.email,
+        callback(null, { email,
             error:const_module.Errors.Success
         });
 
 
     }catch(error){
-        console.log("catch error is ", error)
+        console.log("verification email failed:", error.message)
 
-        callback(null, { email:  call.request.email,
+        callback(null, { email,
             error:const_module.Errors.Exception
         });
     }

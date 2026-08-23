@@ -4,7 +4,10 @@
   "description": "A Server for send email",
   "main": "server.js",
   "scripts": {
-    "serve": "node server.js "
+    "serve": "node server.js",
+    "check": "node --check server.js && node --check redis.js && node --check email.js && node --check config.js && node --check security.js",
+    "deps:check": "npm ls --all",
+    "test": "node --test"
   },
   "author": "WGT",
   "license": "ISC",
@@ -12,8 +15,6 @@
     "@grpc/grpc-js": "^1.13.4",
     "@grpc/proto-loader": "^0.7.15",
     "ioredis": "^5.6.1",
-    "nodemailer": "^7.0.3",
-    "redis": "^5.1.1",
-    "uuid": "^11.1.0"
+    "nodemailer": "^7.0.3"
   }
 }

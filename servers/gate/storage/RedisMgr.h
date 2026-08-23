@@ -27,6 +27,13 @@ private:
 class RedisMgr :public Singleton<RedisMgr>,std::enable_shared_from_this<RedisMgr> {
     friend class Singleton<RedisMgr>;
 public:
+    enum class VerificationResult {
+        Success,
+        Expired,
+        Mismatch,
+        TooManyAttempts,
+        RedisError,
+    };
     ~RedisMgr();
     RedisMgr(const RedisMgr&) = delete;
     RedisMgr& operator = (const RedisMgr&) = delete;
@@ -41,6 +48,8 @@ public:
     std::string HGet(const std::string& key, const std::string& hkey);
     bool Del(const std::string& key);
     bool ExistsKey(const std::string& key);
+    VerificationResult ConsumeVerificationCode(
+        const std::string& email, const std::string& submitted_code, int max_attempts = 5);
     void Close();
 private:
     RedisMgr();

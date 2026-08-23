@@ -28,7 +28,10 @@ Status StatusServiceImpl::GetChatServer(ServerContext* context, const GetChatSer
 	reply->set_error(ErrorCodes::Success);
 	reply->set_token(generate_unique_string());
 	std::cout << request->uid() << std::endl;
-	insertToken(request->uid(), reply->token());
+	if (!insertToken(request->uid(), reply->token(), server.name)) {
+		reply->set_error(ErrorCodes::RPCFailed);
+		reply->clear_token();
+	}
 	return Status::OK;
 }
 
@@ -135,31 +138,21 @@ ChatServer StatusServiceImpl::getChatServer() {
 
 Status StatusServiceImpl::Login(ServerContext* context, const LoginReq* request, LoginRsp* reply)
 {
-	auto uid = request->uid();
-	auto token = request->token();
-
-	std::string uid_str = std::to_string(uid);
-	std::string token_key = USERTOKENPREFIX + uid_str;
-	std::string token_value = "";
-	bool success = RedisMgr::GetInstance()->Get(token_key, token_value);
-	if (!success) {
-		reply->set_error(ErrorCodes::UidInvalid);
-		return Status::OK;
-	}
-
-	if (token_value != token) {
-		reply->set_error(ErrorCodes::TokenInvalid);
-		return Status::OK;
-	}
-	reply->set_error(ErrorCodes::Success);
-	reply->set_uid(uid);
-	reply->set_token(token);
+	(void)context;
+	(void)request;
+	// Legacy utoken_* values had no expiry or replay protection. The chat server
+	// now consumes the short-lived ticket issued by GetChatServer directly.
+	reply->set_error(ErrorCodes::TokenInvalid);
 	return Status::OK;
 }
 
-void StatusServiceImpl::insertToken(int uid, std::string token)
+bool StatusServiceImpl::insertToken(
+	int uid, const std::string& token, const std::string& server_name)
 {
-	std::string uid_str = std::to_string(uid);
-	std::string token_key = USERTOKENPREFIX + uid_str;
-	RedisMgr::GetInstance()->Set(token_key, token);
+	Json::Value ticket;
+	ticket["uid"] = uid;
+	ticket["server"] = server_name;
+	const std::string token_key = CHAT_TICKET_PREFIX + token;
+	return RedisMgr::GetInstance()->SetEx(
+		token_key, ticket.toStyledString(), CHAT_TICKET_TTL_SECONDS);
 }

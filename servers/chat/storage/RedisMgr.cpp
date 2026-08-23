@@ -2,6 +2,7 @@
 #include "const.h"
 #include "ConfigMgr.h"
 #include "DistLock.h"
+#include <cstring>
 RedisMgr::RedisMgr() {
 	auto& gCfgMgr = ConfigMgr::Inst();
 	auto host = gCfgMgr["Redis"]["Host"];
@@ -41,6 +42,30 @@ bool RedisMgr::Get(const std::string& key, std::string& value)
 	 std::cout << "Succeed to execute command [ GET " << key << "  ]" << std::endl;
 	 _con_pool->returnConnection(connect);
 	 return true;
+}
+
+bool RedisMgr::GetDel(const std::string& key, std::string& value)
+{
+	static constexpr const char* script =
+		"local value = redis.call('GET', KEYS[1]); "
+		"if value then redis.call('DEL', KEYS[1]); end; return value";
+	auto* connection = _con_pool->getConnection();
+	if (connection == nullptr) {
+		return false;
+	}
+	const char* argv[] = {"EVAL", script, "1", key.c_str()};
+	const size_t argvlen[] = {4, std::strlen(script), 1, key.size()};
+	auto* reply = static_cast<redisReply*>(redisCommandArgv(connection, 4, argv, argvlen));
+	_con_pool->returnConnection(connection);
+	if (reply == nullptr) {
+		return false;
+	}
+	const bool success = reply->type == REDIS_REPLY_STRING;
+	if (success) {
+		value.assign(reply->str, reply->len);
+	}
+	freeReplyObject(reply);
+	return success;
 }
 
 bool RedisMgr::Set(const std::string &key, const std::string &value){

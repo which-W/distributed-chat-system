@@ -1,4 +1,5 @@
 #include "RedisMgr.h"
+#include <cstring>
 
 RedisMgr::RedisMgr() {
     auto& gCfgMgr = ConfigMgr::ins();
@@ -366,4 +367,64 @@ void RedisConPool::Close()
 {
     _b_stop_ = true;
     _cond.notify_all();
+}
+
+RedisMgr::VerificationResult RedisMgr::ConsumeVerificationCode(
+    const std::string& email, const std::string& submitted_code, int max_attempts)
+{
+    static constexpr const char* script = R"lua(
+local expected = redis.call('GET', KEYS[1])
+if not expected then
+  return -1
+end
+if expected ~= ARGV[1] then
+  local attempts = redis.call('INCR', KEYS[2])
+  if attempts == 1 then
+    local ttl = redis.call('TTL', KEYS[1])
+    if ttl < 1 then ttl = 300 end
+    redis.call('EXPIRE', KEYS[2], ttl)
+  end
+  if attempts >= tonumber(ARGV[2]) then
+    redis.call('DEL', KEYS[1])
+    redis.call('DEL', KEYS[2])
+    return -3
+  end
+  return -2
+end
+redis.call('DEL', KEYS[1])
+redis.call('DEL', KEYS[2])
+return 1
+)lua";
+
+    auto* connection = _con_pool->getContext();
+    if (connection == nullptr) {
+        return VerificationResult::RedisError;
+    }
+
+    const std::string code_key = CODE_HEAD + email;
+    const std::string attempts_key = "code_attempts_" + email;
+    const std::string max_attempts_text = std::to_string(max_attempts);
+    const char* argv[] = {
+        "EVAL", script, "2", code_key.c_str(), attempts_key.c_str(),
+        submitted_code.c_str(), max_attempts_text.c_str()};
+    const size_t argvlen[] = {
+        4, std::strlen(script), 1, code_key.size(), attempts_key.size(),
+        submitted_code.size(), max_attempts_text.size()};
+
+    auto* reply = static_cast<redisReply*>(redisCommandArgv(connection, 7, argv, argvlen));
+    _con_pool->returnContext(connection);
+    if (reply == nullptr || reply->type != REDIS_REPLY_INTEGER) {
+        if (reply != nullptr) {
+            freeReplyObject(reply);
+        }
+        return VerificationResult::RedisError;
+    }
+
+    const auto result = reply->integer;
+    freeReplyObject(reply);
+    if (result == 1) return VerificationResult::Success;
+    if (result == -1) return VerificationResult::Expired;
+    if (result == -2) return VerificationResult::Mismatch;
+    if (result == -3) return VerificationResult::TooManyAttempts;
+    return VerificationResult::RedisError;
 }

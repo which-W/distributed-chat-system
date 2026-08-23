@@ -2,6 +2,45 @@
 #include "VerifyGrpcClient.h"
 #include "MysqlMgr.h"
 #include "StatusGrpcClient.h"
+#include <algorithm>
+#include <cctype>
+
+namespace {
+
+std::string normalizeEmail(std::string email)
+{
+    email.erase(email.begin(), std::find_if(email.begin(), email.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+    email.erase(std::find_if(email.rbegin(), email.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), email.end());
+    std::transform(email.begin(), email.end(), email.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return email;
+}
+
+bool consumeVerificationCode(
+    const std::string& email, const std::string& submitted_code, Json::Value& response)
+{
+    const auto result = RedisMgr::GetInstance()->ConsumeVerificationCode(email, submitted_code);
+    if (result == RedisMgr::VerificationResult::Success) {
+        return true;
+    }
+    response["error"] = result == RedisMgr::VerificationResult::Expired
+        ? ERROR_CODE::VarifyExpired
+        : ERROR_CODE::VarifyCodeErr;
+    return false;
+}
+
+bool validNewPassword(const std::string& password)
+{
+    return password.size() >= 10 && password.size() <= 128;
+}
+
+} // namespace
+
 LogicSystem::LogicSystem() {
     //测试
 	RegGet("/get_test", [](std::shared_ptr<HttpConnection> conn) {
@@ -31,7 +70,7 @@ LogicSystem::LogicSystem() {
 			return true;
 		}
 
-		auto email = src_root["email"].asString();
+            auto email = normalizeEmail(src_root["email"].asString());
 		GetVarifyRsp _rsp = VerifyGrpcClient::GetInstance()->GetVarifyCode(email);
 		root["error"] = _rsp.error();
 		root["email"] = email;
@@ -55,24 +94,18 @@ LogicSystem::LogicSystem() {
             beast::ostream(connection->_res.body()) << jsonstr;
             return true;
         }
-        auto email = src_root["email"].asString();
+        auto email = normalizeEmail(src_root["email"].asString());
         auto name = src_root["user"].asString();
         auto pwd = src_root["passwd"].asString();
         auto icon = src_root["icon"].asString();
 
-        //先查找redis中email对应的验证码是否合理
-        std::string  varify_code;
-        bool b_get_varify = RedisMgr::GetInstance()->Get(CODE_HEAD + src_root["email"].asString(), varify_code);
-        if (!b_get_varify) {
-            std::cout << " get varify code expired" << std::endl;
-            root["error"] = ERROR_CODE::VarifyExpired;
-            std::string jsonstr = root.toStyledString();
-            beast::ostream(connection->_res.body()) << jsonstr;
+        if (!validNewPassword(pwd)) {
+            root["error"] = ERROR_CODE::PasswdInvalid;
+            beast::ostream(connection->_res.body()) << root.toStyledString();
             return true;
         }
-        if (varify_code != src_root["varifycode"].asString()) {
-            std::cout << " varify code error" << std::endl;
-            root["error"] = ERROR_CODE::VarifyCodeErr;
+
+        if (!consumeVerificationCode(email, src_root["varifycode"].asString(), root)) {
             std::string jsonstr = root.toStyledString();
             beast::ostream(connection->_res.body()) << jsonstr;
             return true;
@@ -90,7 +123,6 @@ LogicSystem::LogicSystem() {
         root["uid"] = uid;
         root["email"] = email;
         root["user"] = name;
-        root["varifycode"] = src_root["varifycode"].asString();
         std::string jsonstr = root.toStyledString();
         beast::ostream(connection->_res.body()) << jsonstr;
         return true;
@@ -111,22 +143,15 @@ LogicSystem::LogicSystem() {
             beast::ostream(connection->_res.body()) << jsonstr;
             return true;
         }
-        auto email = src_root["email"].asString();
+        auto email = normalizeEmail(src_root["email"].asString());
         auto name = src_root["user"].asString();
         auto pwd = src_root["passwd"].asString();
-        //先查找redis中email对应的验证码是否合理
-        std::string  varify_code;
-        bool b_get_varify = RedisMgr::GetInstance()->Get(CODE_HEAD + src_root["email"].asString(), varify_code);
-        if (!b_get_varify) {
-            std::cout << " get varify code expired" << std::endl;
-            root["error"] = ERROR_CODE::VarifyExpired;
-            std::string jsonstr = root.toStyledString();
-            beast::ostream(connection->_res.body()) << jsonstr;
+        if (!validNewPassword(pwd)) {
+            root["error"] = ERROR_CODE::PasswdInvalid;
+            beast::ostream(connection->_res.body()) << root.toStyledString();
             return true;
         }
-        if (varify_code != src_root["varifycode"].asString()) {
-            std::cout << " varify code error" << std::endl;
-            root["error"] = ERROR_CODE::VarifyCodeErr;
+        if (!consumeVerificationCode(email, src_root["varifycode"].asString(), root)) {
             std::string jsonstr = root.toStyledString();
             beast::ostream(connection->_res.body()) << jsonstr;
             return true;
@@ -153,7 +178,6 @@ LogicSystem::LogicSystem() {
         root["error"] = 0;
         root["email"] = email;
         root["user"] = name;
-        root["varifycode"] = src_root["varifycode"].asString();
         std::string jsonstr = root.toStyledString();
         beast::ostream(connection->_res.body()) << jsonstr;
         return true;
@@ -174,7 +198,7 @@ LogicSystem::LogicSystem() {
             beast::ostream(connection->_res.body()) << jsonstr;
             return true;
         }
-        auto email = src_root["email"].asString();
+        auto email = normalizeEmail(src_root["email"].asString());
         auto pwd = src_root["passwd"].asString();
         UserInfo userInfo;
         //查询数据库判断用户名和密码是否匹配

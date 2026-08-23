@@ -47,7 +47,7 @@ public:
 	Status Login(ServerContext* context, const LoginReq* request,
 		LoginRsp* reply) override;
 private:
-	void insertToken(int uid, std::string token);
+	bool insertToken(int uid, const std::string& token, const std::string& server_name);
 	ChatServer getChatServer();
 	std::unordered_map<std::string, ChatServer> _servers;
 	std::mutex _server_mtx;

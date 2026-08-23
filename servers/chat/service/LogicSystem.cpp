@@ -21,11 +21,17 @@ void LogicSystem::DealMsg() {
             while (!_msg_que.empty()) {
                 auto msg_node = _msg_que.front();
                 cout << "recv_msg id  is " << msg_node->_recvnode->GetRecMsgNodeID() << endl;
-                auto call_back_iter = _func_callback.find(msg_node->_recvnode->GetRecMsgNodeID());
+	    auto call_back_iter = _func_callback.find(msg_node->_recvnode->GetRecMsgNodeID());
                 if (call_back_iter == _func_callback.end()) {
                     _msg_que.pop();
-                    continue;
-                }
+			continue;
+		}
+		if (msg_node->_recvnode->GetRecMsgNodeID() != MSG_CHAT_LOGIN
+			&& msg_node->_session->GetUserId() <= 0) {
+			msg_node->_session->Close();
+			_msg_que.pop();
+			continue;
+		}
                 call_back_iter->second(msg_node->_session, msg_node->_recvnode->GetRecMsgNodeID(),
                     std::string(msg_node->_recvnode->_data, msg_node->_recvnode->_cur_len));
                 _msg_que.pop();
@@ -39,6 +45,12 @@ void LogicSystem::DealMsg() {
             _msg_que.pop();
             continue;
         }
+		if (msg_node->_recvnode->GetRecMsgNodeID() != MSG_CHAT_LOGIN
+			&& msg_node->_session->GetUserId() <= 0) {
+			msg_node->_session->Close();
+			_msg_que.pop();
+			continue;
+		}
 		std::cout << "recv_msg id  is " << msg_node->_recvnode->GetRecMsgNodeID() << std::endl;
 		std::cout << "recv_msg data is " << std::string(msg_node->_recvnode->_data, msg_node->_recvnode->_cur_len) << std::endl;
 		//调用HandHead和HandleMsg的回调函数
@@ -84,7 +96,6 @@ bool LogicSystem::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<Use
         reader.parse(info_str, root);
         userinfo->uid = root["uid"].asInt();
         userinfo->name = root["name"].asString();
-        userinfo->pwd = root["pwd"].asString();
         userinfo->email = root["email"].asString();
         userinfo->nick = root["nick"].asString();
         userinfo->desc = root["desc"].asString();
@@ -106,7 +117,6 @@ bool LogicSystem::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<Use
         //将数据库内容写入redis缓存
         Json::Value redis_root;
         redis_root["uid"] = uid;
-        redis_root["pwd"] = userinfo->pwd;
         redis_root["name"] = userinfo->name;
         redis_root["email"] = userinfo->email;
         redis_root["nick"] = userinfo->nick;
@@ -131,19 +141,24 @@ void LogicSystem::LoginChatCallback(shared_ptr<CSession> session, short msg_id, 
         std::string return_str = rtvalue.toStyledString();
         session->Send(return_str, MSG_CHAT_LOGIN_RSP);
         });
-    //从状态服务器获取token的匹配是否准确
-    std::string uid_str = std::to_string(uid);
-    std::string token_key = USERTOKENPREFIX + uid_str;
-    std::string token_value = "";
-	bool success = RedisMgr::GetInstance()->Get(token_key, token_value);
-    if (!success || token_value.empty()) {
-		rtvalue["error"] = ErrorCodes::UidInvalid;
-		return;
-    }
-    if (token_value != token) {
+	if (session->GetUserId() > 0 || uid <= 0 || token.empty()) {
 		rtvalue["error"] = ErrorCodes::TokenInvalid;
 		return;
-    }
+	}
+	std::string uid_str = std::to_string(uid);
+	std::string ticket_value;
+	const std::string ticket_key = CHAT_TICKET_PREFIX + token;
+	if (!RedisMgr::GetInstance()->GetDel(ticket_key, ticket_value)) {
+			rtvalue["error"] = ErrorCodes::UidInvalid;
+			return;
+	    }
+	Json::Value ticket;
+	if (!reader.parse(ticket_value, ticket)
+		|| ticket["uid"].asInt() != uid
+		|| ticket["server"].asString() != ConfigMgr::Inst()["SelfServer"]["Name"]) {
+			rtvalue["error"] = ErrorCodes::TokenInvalid;
+			return;
+	    }
 
     rtvalue["error"] = ErrorCodes::ERROR_CODE_OK;
 	//如果token匹配成功，则查询用户信息
@@ -257,7 +272,7 @@ void LogicSystem::AddFriendCallback(std::shared_ptr<CSession> session, short msg
 	Json::Reader reader;
     Json::Value root;
 	reader.parse(msg_data, root);
-    auto uid = root["uid"].asInt();
+	    auto uid = session->GetUserId();
 	auto applyname = root["applyname"].asString();
     auto bakname = root["bakname"].asString();
     auto touid = root["touid"].asInt();
@@ -268,8 +283,15 @@ void LogicSystem::AddFriendCallback(std::shared_ptr<CSession> session, short msg
 		std::string return_str = rtvalue.toStyledString();
 		session->Send(return_str, ID_ADD_FRIEND_RSP);
 		});
+	if (touid <= 0 || touid == uid) {
+		rtvalue["error"] = ErrorCodes::UidInvalid;
+		return;
+	}
 
-    MysqlMgr::GetInstance()->AddFriendApply(uid, touid);
+    if (!MysqlMgr::GetInstance()->AddFriendApply(uid, touid)) {
+		rtvalue["error"] = ErrorCodes::UidInvalid;
+		return;
+	}
 
     //查找redis通过用户id查找对应的server ip
 	std::string uid_str = std::to_string(touid);
@@ -288,6 +310,9 @@ void LogicSystem::AddFriendCallback(std::shared_ptr<CSession> session, short msg
     std::string base_key = USER_BASE_INFO + std::to_string(uid);
     auto apply_info = std::make_shared<UserInfo>();
     bool b_info = GetBaseInfo(base_key, uid, apply_info);
+	if (b_info) {
+		applyname = apply_info->name;
+	}
 
     //如果在同一服务器则直接通知对方有申请消息
     if (ip_str == self_name) {
@@ -336,7 +361,7 @@ void LogicSystem::AuthFriendCallback(std::shared_ptr<CSession> session, short ms
     Json::Value root;
     reader.parse(msg_data, root);
 
-    auto uid = root["fromuid"].asInt();
+	    auto uid = session->GetUserId();
     auto touid = root["touid"].asInt();
     auto back_name = root["back"].asString();
     std::cout << "from " << uid << " auth friend to " << touid << std::endl;
@@ -363,12 +388,22 @@ void LogicSystem::AuthFriendCallback(std::shared_ptr<CSession> session, short ms
         std::string return_str = rtvalue.toStyledString();
         session->Send(return_str, ID_AUTH_FRIEND_RSP);
         });
+	if (touid <= 0 || touid == uid || !b_info) {
+		rtvalue["error"] = ErrorCodes::UidInvalid;
+		return;
+	}
 
     //先更新数据库
-    MysqlMgr::GetInstance()->AuthFriendApply(uid, touid);
+    if (!MysqlMgr::GetInstance()->AuthFriendApply(uid, touid)) {
+		rtvalue["error"] = ErrorCodes::UidInvalid;
+		return;
+	}
 
     //更新数据库添加好友
-    MysqlMgr::GetInstance()->AddFriend(uid, touid, back_name);
+    if (!MysqlMgr::GetInstance()->AddFriend(uid, touid, back_name)) {
+		rtvalue["error"] = ErrorCodes::RPC_ERROR;
+		return;
+	}
 
     //查询redis 查找touid对应的server ip
     auto to_str = std::to_string(touid);
@@ -428,7 +463,7 @@ void LogicSystem::TextChatMsgCallback(std::shared_ptr<CSession> session, short m
     Json::Value root;
     reader.parse(msg_data, root);
 
-    auto uid = root["fromuid"].asInt();
+	    auto uid = session->GetUserId();
     auto touid = root["touid"].asInt();
 
     const Json::Value  arrays = root["text_array"];
@@ -443,6 +478,10 @@ void LogicSystem::TextChatMsgCallback(std::shared_ptr<CSession> session, short m
         std::string return_str = rtvalue.toStyledString();
         session->Send(return_str, ID_TEXT_CHAT_MSG_RSP);
         });
+	if (touid <= 0 || touid == uid) {
+		rtvalue["error"] = ErrorCodes::UidInvalid;
+		return;
+	}
 
 
     //查询redis 查找touid对应的server ip
@@ -542,7 +581,6 @@ void LogicSystem::GetUserByUid(std::string uid_str, Json::Value& rtvalue)
     //将数据库内容写入redis缓存
     Json::Value redis_root;
     redis_root["uid"] = user_info->uid;
-    redis_root["pwd"] = user_info->pwd;
     redis_root["name"] = user_info->name;
     redis_root["email"] = user_info->email;
     redis_root["nick"] = user_info->nick;
@@ -614,7 +652,6 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue)
     //将数据库内容写入redis缓存
     Json::Value redis_root;
     redis_root["uid"] = user_info->uid;
-    redis_root["pwd"] = user_info->pwd;
     redis_root["name"] = user_info->name;
     redis_root["email"] = user_info->email;
     redis_root["nick"] = user_info->nick;

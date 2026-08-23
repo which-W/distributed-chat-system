@@ -22,7 +22,7 @@ add_executable(chat_server
 target_include_directories(chat_server PRIVATE
     config core files network rpc runtime service storage
     "${PROJECT_SOURCE_DIR}/common")
-target_link_libraries(chat_server PRIVATE chat_server_dependencies)
+target_link_libraries(chat_server PRIVATE chat_server_dependencies chat_security)
 
 chat_copy_runtime_config(chat_server "chatserver1.ini" "chatserver1.ini")
 chat_copy_runtime_config(chat_server "chatserver2.ini" "chatserver2.ini")

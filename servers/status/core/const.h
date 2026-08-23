@@ -61,7 +61,8 @@ private:
 };
 
 #define USERIPPREFIX  "uip_"
-#define USERTOKENPREFIX  "utoken_"
+#define CHAT_TICKET_PREFIX "chat_ticket_"
+#define CHAT_TICKET_TTL_SECONDS 60
 #define IPCOUNTPREFIX  "ipcount_"
 #define USER_BASE_INFO "ubaseinfo_"
 #define LOGIN_COUNT  "logincount"

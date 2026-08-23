@@ -2,6 +2,7 @@
 #include "const.h"
 #include "ConfigMgr.h"
 #include "DistLock.h"
+#include <cstring>
 RedisMgr::RedisMgr() {
 	auto& gCfgMgr = ConfigMgr::Inst();
 	auto host = gCfgMgr["Redis"]["Host"];
@@ -76,6 +77,26 @@ bool RedisMgr::Set(const std::string &key, const std::string &value){
 	std::cout << "Redis SET succeeded for key " << key << std::endl;
 	_con_pool->returnConnection(connect);
 	return true;
+}
+
+bool RedisMgr::SetEx(const std::string& key, const std::string& value, int ttl_seconds)
+{
+	auto* connection = _con_pool->getConnection();
+	if (connection == nullptr) {
+		return false;
+	}
+	const std::string ttl = std::to_string(ttl_seconds);
+	const char* argv[] = {"SET", key.c_str(), value.c_str(), "EX", ttl.c_str(), "NX"};
+	const size_t argvlen[] = {3, key.size(), value.size(), 2, ttl.size(), 2};
+	auto* reply = static_cast<redisReply*>(redisCommandArgv(connection, 6, argv, argvlen));
+	_con_pool->returnConnection(connection);
+	if (reply == nullptr) {
+		return false;
+	}
+	const bool success = reply->type == REDIS_REPLY_STATUS && reply->str != nullptr
+		&& std::strcmp(reply->str, "OK") == 0;
+	freeReplyObject(reply);
+	return success;
 }
 
 bool RedisMgr::LPush(const std::string &key, const std::string &value)

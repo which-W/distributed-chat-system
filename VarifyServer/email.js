@@ -283,7 +283,7 @@ function generateVerifyCodeTemplate(verifyCode, email) {
             </div>
 
             <div class="expiry-notice">
-                <strong>⏰ 重要提醒：</strong> 此验证码将在 <strong>10分钟</strong> 后失效，请尽快使用。
+                <strong>⏰ 重要提醒：</strong> 此验证码将在 <strong>5分钟</strong> 后失效，请尽快使用。
             </div>
 
             <div class="security-tips">

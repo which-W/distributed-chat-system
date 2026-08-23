@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-server:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build pkg-config autoconf automake libtool
+      - name: Bootstrap vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
+          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+      - name: Configure
+        run: cmake --fresh --preset linux-server-release
+      - name: Build
+        run: cmake --build --preset linux-server-release
+      - name: Test
+        run: ctest --test-dir build/linux-server-release --output-on-failure
+
+  windows-client:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check aqtinstall
+          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O C:\Qt
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build/ci-windows-client -G Ninja -DCHAT_BUILD_SERVERS=OFF -DCHAT_BUILD_CLIENT=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/msvc2022_64
+      - name: Build
+        shell: pwsh
+        run: cmake --build build/ci-windows-client
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build/ci-windows-client --output-on-failure
+
+  node:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: VarifyServer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: VarifyServer/package-lock.json
+      - run: npm ci
+      - run: npm run deps:check
+      - run: npm run check
+      - run: npm test
+
+  formatting:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check C++ formatting
+        run: clang-format --dry-run --Werror common/PasswordHasher.cpp common/PasswordHasher.h tests/password_hasher_test.cpp

@@ -1,5 +1,7 @@
 #include "MysqlDao.h"
 #include "ConfigMgr.h"
+#include "PasswordHasher.h"
+#include <sodium.h>
 
 MysqlDao::MysqlDao()
 {
@@ -23,12 +25,13 @@ int MysqlDao::RegUser(const std::string& name, const std::string& email, const s
 		if (con == nullptr) {
 			return false;
 		}
+		const auto password_hash = chat::security::PasswordHasher::hash(pwd);
 		// 准备调用存储过程
 		std::unique_ptr < sql::PreparedStatement > stmt(con->_con->prepareStatement("CALL reg_user(?,?,?,@result)"));
 		// 设置输入参数
 		stmt->setString(1, name);
 		stmt->setString(2, email);
-		stmt->setString(3, pwd);
+		stmt->setString(3, password_hash);
 
 		// 由于PreparedStatement不直接支持注册输出参数，我们需要使用会话变量或其他方法来获取输出参数的值
 
@@ -62,7 +65,6 @@ bool MysqlDao::CheckEmail(const std::string& name, const std::string& email) {
 		if (con == nullptr) {
 			return false;
 		}
-
 		// 准备查询语句
 		std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement("SELECT email FROM user WHERE name = ?"));
 
@@ -99,13 +101,14 @@ bool MysqlDao::UpdatePwd(const std::string& name, const std::string& newpwd) {
 		if (con == nullptr) {
 			return false;
 		}
+		const auto password_hash = chat::security::PasswordHasher::hash(newpwd);
 
 		// 准备查询语句
 		std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement("UPDATE user SET pwd = ? WHERE name = ?"));
 
 		// 绑定参数
 		pstmt->setString(2, name);
-		pstmt->setString(1, newpwd);
+		pstmt->setString(1, password_hash);
 
 		// 执行更新
 		int updateCount = pstmt->executeUpdate();
@@ -140,20 +143,29 @@ bool MysqlDao::CheckPwd(const std::string& name, const std::string& pwd, UserInf
 
 		// 执行查询
 		std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
-		std::string origin_pwd = "";
-		// 遍历结果集
-		while (res->next()) {
-			origin_pwd = res->getString("pwd");
-			break;
-		}
-
-		if (pwd != origin_pwd) {
+		if (!res->next()) {
 			return false;
+		}
+		const std::string stored_password = res->getString("pwd");
+		bool valid = chat::security::PasswordHasher::verify(pwd, stored_password);
+		const bool legacy = !chat::security::PasswordHasher::isEncodedHash(stored_password);
+		if (legacy) {
+			valid = pwd.size() == stored_password.size()
+				&& sodium_memcmp(pwd.data(), stored_password.data(), pwd.size()) == 0;
+		}
+		if (!valid) return false;
+		if (legacy || chat::security::PasswordHasher::needsRehash(stored_password)) {
+			const auto upgraded = chat::security::PasswordHasher::hash(pwd);
+			std::unique_ptr<sql::PreparedStatement> update(
+				con->_con->prepareStatement("UPDATE user SET pwd = ? WHERE uid = ?"));
+			update->setString(1, upgraded);
+			update->setInt(2, res->getInt("uid"));
+			update->executeUpdate();
 		}
 		userInfo.name = name;
 		userInfo.email = res->getString("email");
 		userInfo.uid = res->getInt("uid");
-		userInfo.pwd = origin_pwd;
+		userInfo.pwd.clear();
 		return true;
 	}
 	catch (sql::SQLException& e) {
@@ -212,16 +224,13 @@ bool MysqlDao::AuthFriendApply(const int& from, const int& to) {
 	try {
 		// 准备SQL语句
 		std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement("UPDATE friend_apply SET status = 1 "
-			"WHERE from_uid = ? AND to_uid = ?"));
+			"WHERE from_uid = ? AND to_uid = ? AND status = 0"));
 		//反过来的申请时from，验证时to
 		pstmt->setInt(1, to); // from id
 		pstmt->setInt(2, from);
 		// 执行更新
 		int rowAffected = pstmt->executeUpdate();
-		if (rowAffected < 0) {
-			return false;
-		}
-		return true;
+		return rowAffected == 1;
 	}
 	catch (sql::SQLException& e) {
 		std::cerr << "SQLException: " << e.what();
@@ -322,7 +331,6 @@ std::shared_ptr<UserInfo> MysqlDao::GetUser(int uid)
 		// 遍历结果集
 		while (res->next()) {
 			user_ptr.reset(new UserInfo);
-			user_ptr->pwd = res->getString("pwd");
 			user_ptr->email = res->getString("email");
 			user_ptr->name= res->getString("name");
 			user_ptr->nick = res->getString("nick");
@@ -364,7 +372,6 @@ std::shared_ptr<UserInfo> MysqlDao::GetUser(std::string name)
 		// 遍历结果集
 		while (res->next()) {
 			user_ptr.reset(new UserInfo);
-			user_ptr->pwd = res->getString("pwd");
 			user_ptr->email = res->getString("email");
 			user_ptr->name = res->getString("name");
 			user_ptr->nick = res->getString("nick");

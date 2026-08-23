@@ -64,7 +64,7 @@ private:
 	bool _b_head_parse;
 	//收到的头部结构
 	std::shared_ptr<MsgNode> _recv_head_node;
-	int _user_uid;
+	std::atomic<int> _user_uid;
 	//记录上次接受数据的时间
 	std::atomic<time_t> _last_heartbeat;
 	//session 锁

@@ -1,5 +1,6 @@
 const config_module = require("./config")
 const redis = require("ioredis")
+const { verificationKeys } = require('./security')
 //建立对象
 console.log('Redis host:', config_module.redis_host);
 console.log('Redis port:', config_module.redis_port);
@@ -82,6 +83,50 @@ async function SetRedisExpire(key, value, exptime) {
     }
 }
 
+const ISSUE_CODE_SCRIPT = `
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  return 2
+end
+local hourly = redis.call('INCR', KEYS[3])
+if hourly == 1 then
+  redis.call('EXPIRE', KEYS[3], ARGV[3])
+end
+if hourly > tonumber(ARGV[4]) then
+  return 3
+end
+redis.call('SET', KEYS[2], '1', 'EX', ARGV[2])
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[5])
+redis.call('DEL', KEYS[4])
+return 1
+`
+
+async function IssueVerificationCode(email, code, options = {}) {
+    const cooldownSeconds = options.cooldownSeconds ?? 60
+    const hourlyWindowSeconds = options.hourlyWindowSeconds ?? 3600
+    const hourlyLimit = options.hourlyLimit ?? 10
+    const codeTtlSeconds = options.codeTtlSeconds ?? 300
+    const keys = verificationKeys(email)
+    try {
+        const result = await RedisCli.eval(
+            ISSUE_CODE_SCRIPT,
+            4,
+            keys.code,
+            keys.cooldown,
+            keys.hourly,
+            keys.attempts,
+            code,
+            cooldownSeconds,
+            hourlyWindowSeconds,
+            hourlyLimit,
+            codeTtlSeconds,
+        )
+        return Number(result)
+    } catch (error) {
+        console.log('IssueVerificationCode error:', error.message)
+        return 0
+    }
+}
+
 /**
  * 退出函数
  */
@@ -89,4 +134,4 @@ function Quit() {
     RedisCli.quit();
 }
 
-module.exports = { GetRedis, QueryRedis, Quit, SetRedisExpire, }
+module.exports = { GetRedis, QueryRedis, Quit, SetRedisExpire, IssueVerificationCode }
