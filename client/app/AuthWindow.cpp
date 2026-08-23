@@ -22,15 +22,24 @@ class HeroPanel final : public QWidget
 public:
     using QWidget::QWidget;
 
+    void setDarkMode(bool dark)
+    {
+        if (darkMode_ == dark) {
+            return;
+        }
+        darkMode_ = dark;
+        update();
+    }
+
 protected:
     void paintEvent(QPaintEvent*) override
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         QLinearGradient gradient(rect().topLeft(), rect().bottomRight());
-        gradient.setColorAt(0.0, QColor(64, 47, 150));
-        gradient.setColorAt(0.48, QColor(75, 70, 190));
-        gradient.setColorAt(1.0, QColor(21, 167, 189));
+        gradient.setColorAt(0.0, darkMode_ ? QColor(39, 30, 104) : QColor(91, 72, 225));
+        gradient.setColorAt(0.48, darkMode_ ? QColor(62, 52, 148) : QColor(105, 95, 225));
+        gradient.setColorAt(1.0, darkMode_ ? QColor(12, 91, 112) : QColor(35, 181, 201));
         painter.setBrush(gradient);
         painter.setPen(Qt::NoPen);
         painter.drawRoundedRect(rect().adjusted(8, 8, -4, -8), 24, 24);
@@ -39,6 +48,9 @@ protected:
         painter.drawEllipse(QPointF(width() * 0.75, height() * 0.22), 130, 130);
         painter.drawEllipse(QPointF(width() * 0.18, height() * 0.82), 190, 190);
     }
+
+private:
+    bool darkMode_{true};
 };
 
 void prepareEmbeddedDialog(QDialog* dialog)
@@ -66,6 +78,8 @@ void refreshWidgetTree(QWidget* root)
 AuthWindow::AuthWindow(QWidget* parent)
     : ElaWidget(parent)
 {
+    setObjectName("authWindow");
+    setAttribute(Qt::WA_StyledBackground, true);
     setWindowTitle(tr("Nebula Chat · Sign in"));
     setWindowIcon(QIcon(":/new/prefix1/res/R-C.png"));
     resize(960, 640);
@@ -77,19 +91,20 @@ AuthWindow::AuthWindow(QWidget* parent)
     rootLayout->setContentsMargins(18, 46, 18, 18);
     rootLayout->setSpacing(18);
 
-    auto* hero = new HeroPanel(this);
-    hero->setMinimumWidth(350);
-    auto* heroLayout = new QVBoxLayout(hero);
+    heroPanel_ = new HeroPanel(this);
+    heroPanel_->setObjectName("heroPanel");
+    heroPanel_->setMinimumWidth(350);
+    auto* heroLayout = new QVBoxLayout(heroPanel_);
     heroLayout->setContentsMargins(44, 56, 44, 42);
     heroLayout->addStretch();
-    auto* brand = new ElaText(tr("NEBULA"), hero);
+    auto* brand = new ElaText(tr("NEBULA"), heroPanel_);
     brand->setTextPixelSize(38);
     brand->setStyleSheet("color: white; font-weight: 700; background: transparent;");
-    auto* title = new ElaText(tr("Connect without boundaries."), hero);
+    auto* title = new ElaText(tr("Connect without boundaries."), heroPanel_);
     title->setTextPixelSize(24);
     title->setWordWrap(true);
     title->setStyleSheet("color: white; font-weight: 600; background: transparent;");
-    auto* subtitle = new ElaText(tr("Secure distributed messaging, wrapped in a calm Fluent workspace."), hero);
+    auto* subtitle = new ElaText(tr("Secure distributed messaging, wrapped in a calm Fluent workspace."), heroPanel_);
     subtitle->setTextPixelSize(14);
     subtitle->setWordWrap(true);
     subtitle->setStyleSheet("color: rgba(255,255,255,205); background: transparent;");
@@ -113,6 +128,7 @@ AuthWindow::AuthWindow(QWidget* parent)
     formLayout->addLayout(tools);
 
     pages_ = new QStackedWidget(formCard);
+    pages_->setObjectName("authPages");
     login_ = new LoginDialog(pages_);
     register_ = new RegisterDialog(pages_);
     reset_ = new ResetDialog(pages_);
@@ -124,7 +140,7 @@ AuthWindow::AuthWindow(QWidget* parent)
     pages_->addWidget(reset_);
     formLayout->addWidget(pages_, 1);
 
-    rootLayout->addWidget(hero, 5);
+    rootLayout->addWidget(heroPanel_, 5);
     rootLayout->addWidget(formCard, 6);
 
     connect(themeButton_, &QPushButton::clicked, &ThemeManager::instance(), &ThemeManager::toggleTheme);
@@ -149,32 +165,25 @@ void AuthWindow::showReset() { pages_->setCurrentWidget(reset_); }
 void AuthWindow::applyTheme(ElaThemeType::ThemeMode mode)
 {
     const bool dark = mode == ElaThemeType::Dark;
+    static_cast<HeroPanel*>(heroPanel_)->setDarkMode(dark);
     themeButton_->setAwesome(dark ? ElaIconType::SunBright : ElaIconType::MoonStars);
     themeButton_->setToolTip(dark ? tr("Switch to light theme") : tr("Switch to dark theme"));
     setStyleSheet(QString(
+        "#authWindow { background: %5; }"
         "#authCard { background: %1; border: 1px solid %2; border-radius: 20px; }"
+        "#authPages { background: transparent; border: none; }"
         "#authCard QDialog { background: transparent; }"
         "#authCard ElaLineEdit, #authCard ElaPushButton { min-height: 34px; }"
         "#authCard TimerBtn { min-height: 34px; padding: 0 10px; border-radius: 8px; "
         "border: 1px solid %2; background: %3; color: %4; }"
-        "#authCard QLabel { color: %4; background: transparent; }"
-        "#authCard #err_tip { min-height: 32px; padding: 5px 12px; border-radius: 9px; "
-        "font-weight: 600; }"
-        "#authCard #err_tip[feedback='success'] { color: %5; background: %6; border: 1px solid %7; }"
-        "#authCard #err_tip[feedback='error'] { color: %8; background: %9; border: 1px solid %10; }"
-        "#authCard #err_tip[feedback='none'] { min-height: 0; padding: 0; border: none; background: transparent; }")
+        "#authCard QLabel { color: %4; background: transparent; }")
         .arg(dark ? "rgba(27,29,40,232)" : "rgba(255,255,255,238)",
              dark ? "#414555" : "#D7DAE3",
              dark ? "#20222D" : "#F5F6FA",
-             dark ? "#F4F5F8" : "#20222A",
-             dark ? "#6EE7A7" : "#087A46",
-             dark ? "rgba(21,128,82,70)" : "rgba(16,185,129,35)",
-             dark ? "#267A55" : "#65C99A",
-             dark ? "#FF9B9B" : "#B4232D",
-             dark ? "rgba(190,45,55,68)" : "rgba(239,68,68,32)",
-             dark ? "#8F3941" : "#E69A9F"));
+             dark ? "#F4F5F8" : "#20222A")
+        .arg(dark
+                 ? "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #11131C, stop:1 #20243A)"
+                 : "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #F4F6FC, stop:1 #E8EDFA)"));
 
-    refreshWidgetTree(login_);
-    refreshWidgetTree(register_);
-    refreshWidgetTree(reset_);
+    refreshWidgetTree(this);
 }

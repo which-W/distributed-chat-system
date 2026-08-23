@@ -1,10 +1,12 @@
 #include "ResetDialog.h"
+#include "ElaMessageBar.h"
 
 ResetDialog::ResetDialog(QWidget *parent)
 	: QDialog(parent)
 	, ui(new Ui::ResetDialogClass()), _counter(5)
 {
 	ui->setupUi(this);
+	ui->err_tip->hide();
    connect(ui->user_edit , &QLineEdit::editingFinished, this, [this]() {
 	   checkUserValid();
 	   });
@@ -161,17 +163,13 @@ bool ResetDialog::checkPassValid()
 
 void ResetDialog::showTip(QString str, bool b_ok)
 {
-	if (b_ok) {
-		ui->err_tip->setProperty("state", "normal");
+	if (isVisible()) {
+		if (b_ok) {
+			ElaMessageBar::success(ElaMessageBarType::TopRight, tr("成功"), str, 2600, window());
+		} else {
+			ElaMessageBar::error(ElaMessageBarType::TopRight, tr("请检查输入"), str, 3200, window());
+		}
 	}
-	else {
-		ui->err_tip->setProperty("state", "err");
-	}
-
-	ui->err_tip->setText(str);
-
-	repolish(ui->err_tip);
-
 }
 
 bool ResetDialog::checkEmailValid()
@@ -212,12 +210,6 @@ void ResetDialog::AddTipErr(TipErr te, QString tips)
 void ResetDialog::DelTipErr(TipErr te)
 {
 	_tip_errs.remove(te);
-	if (_tip_errs.empty()) {
-		ui->err_tip->clear();
-		return;
-	}
-
-	showTip(_tip_errs.first(), false);
 }
 
 void ResetDialog::initHandlers()

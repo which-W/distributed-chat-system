@@ -5,6 +5,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QStackedWidget>
+#include <QStyle>
 #include <QVBoxLayout>
 
 #include "ChatDialog.h"
@@ -75,9 +76,9 @@ ChatWindow::ChatWindow(QWidget* parent)
     railLayout->addStretch();
     railLayout->addWidget(settingsButton_);
 
-    auto* themeButton = new ElaIconButton(ElaIconType::MoonStars, 18, 48, 48, rail);
-    themeButton->setToolTip(tr("Switch theme"));
-    railLayout->addWidget(themeButton);
+    themeButton_ = new ElaIconButton(ElaIconType::MoonStars, 18, 48, 48, rail);
+    themeButton_->setToolTip(tr("Switch theme"));
+    railLayout->addWidget(themeButton_);
 
     auto* logoutButton = new ElaIconButton(ElaIconType::RightFromBracket, 18, 48, 48, rail);
     logoutButton->setToolTip(tr("Sign out"));
@@ -115,7 +116,7 @@ ChatWindow::ChatWindow(QWidget* parent)
     connect(messagesButton_, &QPushButton::clicked, this, &ChatWindow::showMessages);
     connect(contactsButton_, &QPushButton::clicked, this, &ChatWindow::showContacts);
     connect(settingsButton_, &QPushButton::clicked, this, &ChatWindow::showSettings);
-    connect(themeButton, &QPushButton::clicked, &ThemeManager::instance(), &ThemeManager::toggleTheme);
+    connect(themeButton_, &QPushButton::clicked, &ThemeManager::instance(), &ThemeManager::toggleTheme);
     connect(logoutButton, &QPushButton::clicked, this, &ChatWindow::logoutRequested);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, &ChatWindow::applyTheme);
 
@@ -153,11 +154,19 @@ void ChatWindow::selectRailButton(ElaIconButton* selected)
 void ChatWindow::applyTheme(ElaThemeType::ThemeMode mode)
 {
     const bool dark = mode == ElaThemeType::Dark;
+    themeButton_->setAwesome(dark ? ElaIconType::SunBright : ElaIconType::MoonStars);
+    themeButton_->setToolTip(dark ? tr("Switch to light theme") : tr("Switch to dark theme"));
     setStyleSheet(QString(
         "#navigationRail { background: %1; border: 1px solid %2; border-radius: 16px; }"
         "#contentStack, #settingsPage { background: %3; border: 1px solid %2; border-radius: 16px; }")
         .arg(dark ? "rgba(25,27,38,225)" : "rgba(252,252,255,235)",
              dark ? "#3B3F50" : "#D8DAE4",
              dark ? "rgba(30,32,43,220)" : "rgba(255,255,255,235)"));
+    const auto widgets = findChildren<QWidget*>();
+    for (QWidget* widget : widgets) {
+        widget->style()->unpolish(widget);
+        widget->style()->polish(widget);
+        widget->update();
+    }
     emit themeChanged(mode);
 }

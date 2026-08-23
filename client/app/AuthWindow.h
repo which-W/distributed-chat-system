@@ -7,6 +7,7 @@ class RegisterDialog;
 class ResetDialog;
 class ElaIconButton;
 class QStackedWidget;
+class QWidget;
 
 class AuthWindow final : public ElaWidget
 {
@@ -26,6 +27,7 @@ private:
     void applyTheme(ElaThemeType::ThemeMode mode);
 
     QStackedWidget* pages_{nullptr};
+    QWidget* heroPanel_{nullptr};
     ElaIconButton* themeButton_{nullptr};
     LoginDialog* login_{nullptr};
     RegisterDialog* register_{nullptr};

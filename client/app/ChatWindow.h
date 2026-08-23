@@ -29,4 +29,5 @@ private:
     ElaIconButton* messagesButton_{nullptr};
     ElaIconButton* contactsButton_{nullptr};
     ElaIconButton* settingsButton_{nullptr};
+    ElaIconButton* themeButton_{nullptr};
 };
