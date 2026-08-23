@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QDialog>
+#include <QWidget>
 #include "ui_ChatDialog.h"
 #include <QAction>
 #include "global.h"
@@ -20,7 +20,7 @@ QT_BEGIN_NAMESPACE
 namespace Ui { class ChatDialogClass; };
 QT_END_NAMESPACE
 
-class ChatDialog : public QDialog
+class ChatDialog : public QWidget
 {
 	Q_OBJECT
 
@@ -37,6 +37,7 @@ public:
 	void LoadMoreChatWid();
 	void LoadMoreConWid();
 	void UpdateChatMsg(std::vector<std::shared_ptr<TextChatData> >);
+	void setExternalNavigationEnabled(bool enabled);
 protected:
 	bool eventFilter(QObject* watch, QEvent* event) override;
 private:

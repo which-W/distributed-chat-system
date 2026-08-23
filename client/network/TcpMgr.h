@@ -31,6 +31,7 @@ private:
 public slots:
     void slot_tcp_connect(ServerInfo);
     void slot_send_data(Req reqId, QByteArray data);
+    void slot_disconnect();
 signals:
     void sig_con_success(bool bsuccess);
     void sig_send_data(Req reqId, QByteArray data);

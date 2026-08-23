@@ -1,10 +1,10 @@
 #pragma once
-#include <QPushButton>
+#include "ElaPushButton.h"
 #include <QTimer>
 #include <memory>
 #include <QMouseEvent>
 #include <QDebug>
-class TimerBtn:public QPushButton
+class TimerBtn : public ElaPushButton
 {
 public:
 	TimerBtn(QWidget* parent = nullptr);

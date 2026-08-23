@@ -61,7 +61,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QLineEdit" name="user_edit">
+               <widget class="ElaLineEdit" name="user_edit">
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
@@ -88,7 +88,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QLineEdit" name="email_edit">
+               <widget class="ElaLineEdit" name="email_edit">
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
@@ -115,7 +115,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QLineEdit" name="psw_edit">
+               <widget class="ElaLineEdit" name="psw_edit">
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
@@ -142,7 +142,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QLineEdit" name="psw_edit_2">
+               <widget class="ElaLineEdit" name="psw_edit_2">
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
@@ -182,7 +182,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QLineEdit" name="code_edit">
+               <widget class="ElaLineEdit" name="code_edit">
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
@@ -248,7 +248,7 @@
             </spacer>
            </item>
            <item>
-            <widget class="QPushButton" name="sure_btn">
+            <widget class="ElaPushButton" name="sure_btn">
              <property name="minimumSize">
               <size>
                <width>0</width>
@@ -274,7 +274,7 @@
             </spacer>
            </item>
            <item>
-            <widget class="QPushButton" name="cansel_btn">
+            <widget class="ElaPushButton" name="cansel_btn">
              <property name="minimumSize">
               <size>
                <width>0</width>
@@ -387,7 +387,7 @@
              </spacer>
             </item>
             <item>
-             <widget class="QPushButton" name="return_log">
+             <widget class="ElaPushButton" name="return_log">
               <property name="text">
                <string>返回</string>
               </property>
@@ -435,6 +435,16 @@
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <customwidgets>
+  <customwidget>
+   <class>ElaLineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>ElaLineEdit.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ElaPushButton</class>
+   <extends>QPushButton</extends>
+   <header>ElaPushButton.h</header>
+  </customwidget>
   <customwidget>
    <class>TimerBtn</class>
    <extends>QPushButton</extends>

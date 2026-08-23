@@ -1,6 +1,6 @@
 #include "TimerBtn.h"
 
-TimerBtn::TimerBtn(QWidget* parent):QPushButton(parent),_count(10)
+TimerBtn::TimerBtn(QWidget* parent) : ElaPushButton(parent), _count(10)
 {
 	_timer = new QTimer(this);
 	connect(_timer, &QTimer::timeout, [this]() {
@@ -33,6 +33,6 @@ void TimerBtn::mouseReleaseEvent(QMouseEvent* e)
 		emit clicked();
 	}
 	// 调用基类的mouseReleaseEvent以确保正常的事件处理（如点击效果）
-	QPushButton::mouseReleaseEvent(e);
+	ElaPushButton::mouseReleaseEvent(e);
 
 }

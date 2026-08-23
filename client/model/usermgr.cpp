@@ -5,6 +5,17 @@ UserMgr::~UserMgr()
 
 }
 
+void UserMgr::ResetSession()
+{
+	_apply_list.clear();
+	_friend_list.clear();
+	_friend_map.clear();
+	_token.clear();
+	_chat_loaded = 0;
+	_contact_loaded = 0;
+	_user_info.reset();
+}
+
 void UserMgr::SetToken(QString token)
 {
     _token = token;
