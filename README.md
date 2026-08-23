@@ -97,20 +97,25 @@ MySQL Connector/C++ 的 JDBC 兼容接口要求静态 vcpkg triplet，因此 Win
 
 ## Qt 客户端构建
 
-把 Qt 的 CMake 目录加入 `CMAKE_PREFIX_PATH` 后执行：
+初始化 ElaWidgetTools 子模块，并把 Qt 6.6.3 的 CMake 目录加入
+`CMAKE_PREFIX_PATH` 后执行：
 
 ```bash
-cmake --preset desktop-release -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/gcc_64
+git submodule update --init --recursive
+cmake --preset desktop-release -DCMAKE_PREFIX_PATH=/path/to/Qt/6.6.3/gcc_64
 cmake --build --preset desktop-release -j
 ```
 
-本机已安装 `G:\QT\6.10.3\msvc2022_64`，可在不打开 Visual Studio/Qt Creator 的情况下构建。`CMakeUserPresets.json` 保存本机的 Qt/Ninja 路径并已被 Git 忽略。在 **MSVC Developer PowerShell/Command Prompt** 中执行：
+Client 的 Fluent 窗口依赖 ElaWidgetTools 及其 Qt Widgets 私有接口，因此必须使用
+Ela 官方验证的 Qt 6.6.3，不能把不同 Qt 版本构建的 Ela DLL 混用。
+`CMakeUserPresets.json` 保存本机 Qt/Ninja 路径并已被 Git 忽略。在
+**MSVC Developer PowerShell/Command Prompt** 中执行：
 
 ```powershell
 $env:VCPKG_ROOT = 'F:\DevTools\vcpkg'
 cmake --preset desktop-local
 cmake --build --preset desktop-local
-& '.\build\desktop-qt6-local\bin\chat_tls_probe.exe'
+& '.\build\desktop-qt663-local\bin\chat_tls_probe.exe'
 ```
 
 本机预设显式复制 `config/client.local.ini` 以保留单机明文联调；普通 `desktop-release` 使用安全的生产默认配置 `config/client.ini`。这里只使用 MSVC 的命令行编译环境，不使用 Visual Studio 工程或 IDE。Windows 构建完成后 CMake 会自动运行 `windeployqt`，把 Qt DLL 和 Schannel TLS 插件复制到客户端输出目录；探针必须显示 `TLS 可用: 是`。

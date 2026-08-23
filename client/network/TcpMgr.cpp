@@ -535,3 +535,16 @@ void TcpMgr::slot_send_data(Req reqId, QByteArray data)
 	_socket.write(block);
 	qDebug() << "tcp mgr send byte data is " << block;
 }
+
+void TcpMgr::slot_disconnect()
+{
+	_socket.abort();
+	_buffer.clear();
+	_host.clear();
+	_tls_server_name.clear();
+	_port = 0;
+	_b_recv_pending = false;
+	_message_id = 0;
+	_message_len = 0;
+	_connect_result_emitted = false;
+}

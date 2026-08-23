@@ -35,6 +35,7 @@ public:
     void AppendFriendChatMsg(int friend_id, std::vector<std::shared_ptr<TextChatData>>);
     void UpdateContactLoadedCount();
     bool IsLoadConFin();
+    void ResetSession();
 private:
     UserMgr();
     std::vector<std::shared_ptr<ApplyInfo>> _apply_list;

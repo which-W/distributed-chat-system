@@ -1,4 +1,5 @@
 #include "BubbleFrame.h"
+#include "ElaTheme.h"
 
 const int WIDTH_SANJIAO = 8;  //三角宽
 
@@ -34,7 +35,7 @@ void BubbleFrame::paintEvent(QPaintEvent* e)
     if (m_role == ChatRole::Other)
     {
         //画气泡
-        QColor bk_color(Qt::white);
+        QColor bk_color = ElaThemeColor(eTheme->getThemeMode(), BasicBaseDeep);
         painter.setBrush(QBrush(bk_color));
         QRect bk_rect = QRect(WIDTH_SANJIAO, 0, this->width() - WIDTH_SANJIAO, this->height());
         painter.drawRoundedRect(bk_rect, 5, 5);
@@ -48,7 +49,7 @@ void BubbleFrame::paintEvent(QPaintEvent* e)
     }
     else
     {
-        QColor bk_color(158, 234, 106);
+        QColor bk_color = ElaThemeColor(eTheme->getThemeMode(), PrimaryNormal);
         painter.setBrush(QBrush(bk_color));
         //画气泡
         QRect bk_rect = QRect(0, 0, this->width() - WIDTH_SANJIAO, this->height());

@@ -1,7 +1,7 @@
 #include "ChatDialog.h"
 
 ChatDialog::ChatDialog(QWidget *parent)
-	: QDialog(parent)
+	: QWidget(parent)
 	, ui(new Ui::ChatDialogClass()),_mode(ChatUIMode::ChatMode),
 	_state(ChatUIMode::ChatMode), _b_loading(false)
 {
@@ -365,7 +365,7 @@ bool ChatDialog::eventFilter(QObject* watch, QEvent* event)
 		QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
 		handleglobeQmousePress(mouseEvent);
 	}
-	return QDialog::eventFilter(watch, event);
+	return QWidget::eventFilter(watch, event);
 }
 
 void ChatDialog::slot_loading_chat_user()
@@ -729,4 +729,9 @@ void ChatDialog::UpdateChatMsg(std::vector<std::shared_ptr<TextChatData> > msgda
 
 		ui->Chat_Page->AppendChatMsg(msg);
 	}
+}
+
+void ChatDialog::setExternalNavigationEnabled(bool enabled)
+{
+	ui->bar_list->setVisible(!enabled);
 }

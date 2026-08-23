@@ -1,22 +1,16 @@
-#include "MainWindow.h"
+#include "ClientCoordinator.h"
+#include "ThemeManager.h"
 #include <QtWidgets/QApplication>
-#include <qfile.h>
 #include <qdebug.h>
 #include <QUrl>
 #include "global.h"
+
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
-    QFile qss("./style/this_style.qss");
-    if (qss.open(QFile::ReadOnly)) {
-        QString style = QLatin1String(qss.readAll());
-        a.setStyleSheet(style);
-        qss.close();
-
-    }
-    else {
-        qDebug("open qss failed");
-    }
+    QCoreApplication::setOrganizationName("NebulaChat");
+    QCoreApplication::setApplicationName("NebulaChatClient");
+    ThemeManager::instance().initialize();
 
     QString fileName = "config.ini";
     QString app_path = QCoreApplication::applicationDirPath();
@@ -40,7 +34,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    MainWindow w;
-    w.show();
+    ClientCoordinator coordinator;
+    coordinator.start();
     return a.exec();
 }

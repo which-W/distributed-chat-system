@@ -2,8 +2,19 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(QT NAMES Qt5 Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 6.6.3 EXACT REQUIRED
+    COMPONENTS Core Gui Widgets Network)
+set(QT_VERSION_MAJOR 6)
+
+set(ELA_WIDGET_TOOLS_SOURCE_DIR
+    "${PROJECT_SOURCE_DIR}/third_party/ElaWidgetTools/ElaWidgetTools")
+if(NOT EXISTS "${ELA_WIDGET_TOOLS_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR
+        "ElaWidgetTools is missing. Run: git submodule update --init --recursive")
+endif()
+set(ELAWIDGETTOOLS_BUILD_STATIC_LIB OFF CACHE BOOL "Build ElaWidgetTools shared" FORCE)
+add_subdirectory("${ELA_WIDGET_TOOLS_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}/third_party/ElaWidgetTools")
 
 set(CHAT_CLIENT_CONFIG_FILE "${PROJECT_SOURCE_DIR}/config/client.ini" CACHE FILEPATH
     "复制到桌面客户端可执行文件旁的 INI 配置")
@@ -34,6 +45,7 @@ file(GLOB_RECURSE CLIENT_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/*.qrc")
 
 add_executable(chat_client WIN32 ${CLIENT_FILES})
+set_property(TARGET chat_client PROPERTY AUTOGEN_ORIGIN_DEPENDS OFF)
 add_executable(chat_tls_probe tools/TlsProbe.cpp)
 target_link_libraries(chat_tls_probe PRIVATE
     Qt${QT_VERSION_MAJOR}::Core
@@ -42,12 +54,16 @@ target_include_directories(chat_client PRIVATE
     app core model network
     ui/auth ui/chat ui/common ui/contacts)
 target_link_libraries(chat_client PRIVATE
+    Ela::WidgetTools
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Network)
 
 add_custom_command(TARGET chat_client POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:ElaWidgetTools>"
+        "$<TARGET_FILE_DIR:chat_client>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CHAT_CLIENT_CONFIG_FILE}"
         "$<TARGET_FILE_DIR:chat_client>/config.ini"
@@ -76,3 +92,19 @@ endif()
 install(TARGETS chat_client RUNTIME DESTINATION bin BUNDLE DESTINATION bin)
 install(TARGETS chat_tls_probe RUNTIME DESTINATION bin)
 install(FILES "${CHAT_CLIENT_CONFIG_FILE}" DESTINATION bin RENAME config.ini)
+install(FILES "${PROJECT_SOURCE_DIR}/third_party/ElaWidgetTools/LICENSE"
+    DESTINATION licenses/ElaWidgetTools)
+
+if(BUILD_TESTING)
+    add_executable(client_ui_smoke tools/UiSmoke.cpp)
+    target_link_libraries(client_ui_smoke PRIVATE
+        Ela::WidgetTools
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Gui
+        Qt${QT_VERSION_MAJOR}::Widgets)
+    add_test(NAME client_ui_smoke COMMAND client_ui_smoke)
+    set_tests_properties(client_ui_smoke PROPERTIES
+        ENVIRONMENT
+            "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>"
+        TIMEOUT 15)
+endif()
