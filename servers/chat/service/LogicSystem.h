@@ -38,6 +38,7 @@ private:
 	void AddFriendCallback(std::shared_ptr<CSession> session, short msg_id, string msg_data);
 	void AuthFriendCallback(std::shared_ptr<CSession> session, short msg_id, string msg_data);
 	void TextChatMsgCallback(std::shared_ptr<CSession> session, short msg_id, string msg_data);
+	void HeartbeatCallback(std::shared_ptr<CSession> session, short msg_id, string msg_data);
 	bool GetBaseInfo(std::string base_key, int uid, std::shared_ptr<UserInfo>& userinfo);
 	bool isPureDigit(const std::string& str);
 	void GetUserByName(std::string name, Json::Value& rtvalue);

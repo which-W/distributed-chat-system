@@ -1,5 +1,11 @@
 # distributed-chat-system
 
+## Xray 备用入口
+
+保留现有 Nginx 主入口并增加 `VLESS + XHTTP + REALITY` 备用入口的服务端配置、
+Windows Xray/v2rayN/Mihomo 客户端配置、Qt Client 切换方式和完整验收流程见
+[Xray 备用入口部署与使用文档](docs/xray-backup-entry.md)。
+
 ## 公网 HTTPS 与 Chat TLS
 
 Gate HTTPS、Chat TCP TLS、证书、防火墙规则和生产环境模板详见

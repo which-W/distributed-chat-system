@@ -23,8 +23,11 @@ public slots:
 	void slot_login_mod_finish(Req id, QString res, ErrorCode err);
 	void slot_tcp_con_finish(bool bsuccess);
 	void slot_login_failed(int err);
+protected:
+	bool eventFilter(QObject* watched, QEvent* event) override;
 private:
 	void initHead();
+	void updateHeadPixmap();
 	void initHttpHandlers();
 	bool checkEmailValid();
 	bool checkPassValid();

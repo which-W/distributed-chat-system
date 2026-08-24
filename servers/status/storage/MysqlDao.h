@@ -1,5 +1,7 @@
 #pragma once
 #include "const.h"
+#include <atomic>
+#include <chrono>
 #include <thread>
 
 class SqlConnection {

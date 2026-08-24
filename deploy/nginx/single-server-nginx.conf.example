@@ -1,0 +1,192 @@
+# Complete Nginx configuration for one Ubuntu server.
+# Replace every occurrence of chat.example.com before installation.
+#
+# Public endpoints:
+#   https://api.chat.example.com        -> GateServer 127.0.0.1:8080
+#   chat1.chat.example.com:8443 (TLS)   -> ChatServer 127.0.0.1:8989
+#   chat2.chat.example.com:8444 (TLS)   -> ChatServer 127.0.0.1:8990
+#
+# This file is intended to replace /etc/nginx/nginx.conf on Ubuntu/Debian.
+
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+worker_rlimit_nofile 65535;
+
+# Ubuntu's libnginx-mod-stream package registers ngx_stream_module here.
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+    worker_connections 4096;
+    multi_accept on;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    charset utf-8;
+    server_tokens off;
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 30s;
+    keepalive_requests 1000;
+    types_hash_max_size 2048;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" forwarded="$http_x_forwarded_for" '
+                    'request_time=$request_time upstream_time=$upstream_response_time';
+
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log warn;
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_min_length 1024;
+    gzip_types application/json text/plain text/css application/javascript;
+
+    limit_req_zone $binary_remote_addr zone=gate_api_limit:10m rate=10r/s;
+    limit_conn_zone $binary_remote_addr zone=gate_connection_limit:10m;
+
+    upstream gate_backend {
+        server 127.0.0.1:8080;
+        keepalive 32;
+    }
+
+    # ACME challenge and HTTPS redirect for the Gate domain.
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name api.chat.example.com;
+
+        location ^~ /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+            default_type text/plain;
+        }
+
+        location / {
+            return 301 https://api.chat.example.com$request_uri;
+        }
+    }
+
+    # The Chat domains only use TLS/TCP on 8443 and 8444. Port 80 is retained
+    # solely so Certbot can issue and renew their certificates with webroot.
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name chat1.chat.example.com chat2.chat.example.com;
+
+        location ^~ /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+            default_type text/plain;
+        }
+
+        location / {
+            return 404;
+        }
+    }
+
+    server {
+        listen 443 ssl http2;
+        listen [::]:443 ssl http2;
+        server_name api.chat.example.com;
+
+        # One SAN certificate contains api/chat1/chat2 domain names.
+        ssl_certificate /etc/letsencrypt/live/api.chat.example.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/api.chat.example.com/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_session_cache shared:GATE_TLS:10m;
+        ssl_session_timeout 1d;
+        ssl_session_tickets off;
+
+        client_max_body_size 2m;
+        client_body_timeout 15s;
+
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+
+        location = /nginx-health {
+            access_log off;
+            default_type text/plain;
+            return 200 "ok\n";
+        }
+
+        location / {
+            limit_req zone=gate_api_limit burst=20 nodelay;
+            limit_conn gate_connection_limit 30;
+
+            proxy_pass http://gate_backend;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header Connection "";
+
+            proxy_connect_timeout 3s;
+            proxy_send_timeout 15s;
+            proxy_read_timeout 15s;
+            proxy_buffering off;
+        }
+    }
+}
+
+# Raw TCP/TLS forwarding for the custom Qt Chat protocol.
+# This block must remain at the top level, not inside http {}.
+stream {
+    log_format chat '$remote_addr [$time_local] $protocol $status '
+                    '$bytes_sent $bytes_received $session_time '
+                    'upstream=$upstream_addr connect_time=$upstream_connect_time';
+
+    access_log /var/log/nginx/chat-access.log chat;
+    error_log /var/log/nginx/chat-error.log warn;
+
+    upstream chat1_backend {
+        server 127.0.0.1:8989;
+    }
+
+    upstream chat2_backend {
+        server 127.0.0.1:8990;
+    }
+
+    server {
+        listen 8443 ssl;
+        listen [::]:8443 ssl;
+        proxy_pass chat1_backend;
+
+        ssl_certificate /etc/letsencrypt/live/api.chat.example.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/api.chat.example.com/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_session_cache shared:CHAT1_TLS:10m;
+        ssl_session_timeout 1h;
+        ssl_session_tickets off;
+        ssl_handshake_timeout 10s;
+
+        proxy_connect_timeout 3s;
+        proxy_timeout 1h;
+        proxy_socket_keepalive on;
+    }
+
+    server {
+        listen 8444 ssl;
+        listen [::]:8444 ssl;
+        proxy_pass chat2_backend;
+
+        ssl_certificate /etc/letsencrypt/live/api.chat.example.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/api.chat.example.com/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_session_cache shared:CHAT2_TLS:10m;
+        ssl_session_timeout 1h;
+        ssl_session_tickets off;
+        ssl_handshake_timeout 10s;
+
+        proxy_connect_timeout 3s;
+        proxy_timeout 1h;
+        proxy_socket_keepalive on;
+    }
+}

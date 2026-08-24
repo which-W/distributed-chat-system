@@ -10,7 +10,9 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <chrono>
 #include <memory>
+#include <thread>
 #include "ConfigMgr.h"
 //使用xdevapi时必须为relese版本所以在测试代码阶段可以先用jdbc
 class SqlConnection {

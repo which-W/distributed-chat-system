@@ -1,5 +1,8 @@
 #include "LoginDialog.h"
+#include <QEvent>
 #include <QPainterPath>
+#include <QTimer>
+#include "ElaMessageBar.h"
 #include "ClickLabel.h"
 #include "TcpMgr.h"
 LoginDialog::LoginDialog(QWidget *parent)
@@ -7,6 +10,7 @@ LoginDialog::LoginDialog(QWidget *parent)
 	, ui(new Ui::LoginDialogClass())
 {
 	ui->setupUi(this);
+	ui->err_tip->hide();
 	ui->psw_line_edit->setEchoMode(QLineEdit::Password);
 
 	toggleAction = ui->psw_line_edit->addAction(QIcon(":/res/close.png"), QLineEdit::TrailingPosition);
@@ -169,12 +173,23 @@ void LoginDialog::initHttpHandlers()
 
 void LoginDialog::initHead()
 {
-	// 加载图片
+	ui->label->setAlignment(Qt::AlignCenter);
+	ui->label->setMinimumSize(120, 120);
+	ui->label->setMaximumSize(168, 168);
+	ui->label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+	ui->label->installEventFilter(this);
+	QTimer::singleShot(0, this, &LoginDialog::updateHeadPixmap);
+}
+
+void LoginDialog::updateHeadPixmap()
+{
 	QPixmap originalPixmap(":/res/R-C.png");
-	// 设置图片自动缩放
-	qDebug() << originalPixmap.size() << ui->label->size();
-	originalPixmap = originalPixmap.scaled(ui->label->size(),
-		Qt::KeepAspectRatio, Qt::SmoothTransformation);
+	const QSize available = ui->label->contentsRect().size();
+	if (originalPixmap.isNull() || available.isEmpty()) {
+		return;
+	}
+	originalPixmap = originalPixmap.scaled(available, Qt::KeepAspectRatio,
+		Qt::SmoothTransformation);
 
 	// 创建一个和原始图片相同大小的QPixmap，用于绘制圆角图片
 	QPixmap roundedPixmap(originalPixmap.size());
@@ -186,7 +201,7 @@ void LoginDialog::initHead()
 
 	// 使用QPainterPath设置圆角
 	QPainterPath path;
-	path.addRoundedRect(0, 0, originalPixmap.width(), originalPixmap.height(), 10, 10);// 最后两个参数分别是x和y方向的圆角半径
+	path.addRoundedRect(0, 0, originalPixmap.width(), originalPixmap.height(), 16, 16);
 	painter.setClipPath(path);
 
 	// 将原始图片绘制到roundedPixmap上
@@ -194,6 +209,14 @@ void LoginDialog::initHead()
 
 	// 设置绘制好的圆角图片到QLabel上
 	ui->label->setPixmap(roundedPixmap);
+}
+
+bool LoginDialog::eventFilter(QObject* watched, QEvent* event)
+{
+	if (watched == ui->label && event->type() == QEvent::Resize) {
+		updateHeadPixmap();
+	}
+	return QDialog::eventFilter(watched, event);
 }
 
 bool LoginDialog::checkEmailValid()
@@ -248,24 +271,17 @@ void LoginDialog::AddTipErr(TipErr te, QString tips)
 void LoginDialog::DelTipErr(TipErr te)
 {
 	_tip_errs.remove(te);
-	if (_tip_errs.empty()) {
-		ui->err_tip->clear();
-		return;
-	}
-	showTip(_tip_errs.first(), false);
 }
 
 void LoginDialog::showTip(QString  str, bool b_ok)
 {
-	if (b_ok) {
-		ui->err_tip->setProperty("state", "normal");
+	if (isVisible()) {
+		if (b_ok) {
+			ElaMessageBar::success(ElaMessageBarType::TopRight, tr("成功"), str, 2600, window());
+		} else {
+			ElaMessageBar::error(ElaMessageBarType::TopRight, tr("请检查输入"), str, 3200, window());
+		}
 	}
-	else
-	{
-		ui->err_tip->setProperty("state", "err");
-	}
-	ui->err_tip->setText(str);
-	repolish(ui->err_tip);
 }
 
 void LoginDialog::Enablebtn(bool enabled)

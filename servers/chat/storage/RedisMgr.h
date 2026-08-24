@@ -3,7 +3,10 @@
 #include <hiredis/hiredis.h>
 #include <queue>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <mutex>
+#include <thread>
 #include "Singleton.h"
 class RedisConPool {
 public:

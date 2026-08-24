@@ -1,5 +1,7 @@
 #pragma once
 #include "const.h"
+#include <atomic>
+#include <chrono>
 #include <thread>
 #include <jdbc/mysql_driver.h>
 #include <jdbc/mysql_connection.h>

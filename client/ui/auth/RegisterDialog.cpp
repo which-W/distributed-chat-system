@@ -4,6 +4,7 @@
 #include <QUrl>
 #include <QAction>
 #include <QPixmap>
+#include "ElaMessageBar.h"
 RegisterDialog::RegisterDialog(QWidget* parent)
 	: QDialog(parent)
 	, ui(new Ui::RegisterDialogClass()),_counter(5)
@@ -17,8 +18,7 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 	toggleAction2 = ui->psw_edit_2->addAction(QIcon(":/res/close.png"), QLineEdit::TrailingPosition);
 	connect(toggleAction, &QAction::triggered, this, &RegisterDialog::togglePasswordVisibility);
 	connect(toggleAction2, &QAction::triggered, this, &RegisterDialog::togglePasswordconfirmVisibility);
-	ui->err_tip->setProperty("state", "normal");
-	repolish(ui->err_tip);
+	ui->err_tip->hide();
 	//消息发送逻辑
 	connect(ui->get_code, &QPushButton::clicked, this, &RegisterDialog::get_code_func);
 	connect(Httpmgr::Getinstance().get(), &Httpmgr::sig_reg_mod_finish, this, &RegisterDialog::slot_req_mod_finished);
@@ -26,7 +26,6 @@ RegisterDialog::RegisterDialog(QWidget* parent)
 	connect(ui->return_log, &QPushButton::clicked, this, &RegisterDialog::on_return_btn_clicked);
 	connect(ui->cansel_btn, &QPushButton::clicked, this, &RegisterDialog::on_return_cansel_btn_clicked);
 	//输入框检测逻辑
-	ui->err_tip->clear();
 	connect(ui->user_edit, &QLineEdit::editingFinished, this, [this]() {
 		checkUserValid();
 		});
@@ -81,15 +80,13 @@ RegisterDialog::~RegisterDialog()
 
 void RegisterDialog::showTip(QString  str ,bool b_ok)
 {
-	if (b_ok) {
-		ui->err_tip->setProperty("state", "normal");
+	if (isVisible()) {
+		if (b_ok) {
+			ElaMessageBar::success(ElaMessageBarType::TopRight, tr("成功"), str, 2600, window());
+		} else {
+			ElaMessageBar::error(ElaMessageBarType::TopRight, tr("请检查输入"), str, 3200, window());
+		}
 	}
-	else
-	{
-		ui->err_tip->setProperty("state", "err");
-	}
-	ui->err_tip->setText(str);
-	repolish(ui->err_tip);
 }
 
 void RegisterDialog::initHandlers()
@@ -233,11 +230,6 @@ void RegisterDialog::AddTipErr(TipErr te, QString tips)
 void RegisterDialog::DelTipErr(TipErr te)
 {
 	_tip_errs.remove(te);
-	if (_tip_errs.empty()) {
-		ui->err_tip->clear();
-		return;
-	}
-	showTip(_tip_errs.first(), false);
 }
 
 bool RegisterDialog::checkUserValid()
