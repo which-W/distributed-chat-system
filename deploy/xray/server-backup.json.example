@@ -1,33 +1,44 @@
 {
+  // 本模板固定使用 Xray 26.6.27；不要与旧版 network/clients 字段混用。
   "version": { "min": "26.6.27", "max": "26.6.27" },
   "log": { "loglevel": "warning" },
   "inbounds": [
     {
       "tag": "chat-backup-xhttp-reality",
       "listen": "0.0.0.0",
-      "port": 9443,
+      "port": 9443, // Xray 对外监听端口，必须与客户端 outbounds.settings.port 一致。
       "protocol": "vless",
       "settings": {
         "users": [
-          { "id": "REPLACE_WITH_UUID", "level": 0, "email": "chat-backup" }
+          {
+            // 执行 `xray uuid` 生成；必须与客户端 outbounds.settings.id 完全一致。
+            "id": "REPLACE_WITH_UUID",
+            "level": 0,
+            "email": "chat-backup"
+          }
         ],
         "decryption": "none"
       },
       "streamSettings": {
-        "method": "xhttp",
+        "method": "xhttp", // 26.6.27 使用 method；对应旧模板的 network: "xhttp"。
         "security": "reality",
         "realitySettings": {
           "show": false,
+          // 伪装目标应是服务端可直连、支持 TLS 1.3/H2 且不跳转的境外站点。
           "target": "REPLACE_WITH_SAME_ASN_TARGET:443",
           "xver": 0,
+          // 客户端 serverName 必须从此列表中选择。
           "serverNames": ["REPLACE_WITH_SAME_ASN_TARGET"],
+          // 执行 `xray x25519` 生成；此处只填 Private key，不要把私钥发给客户端。
           "privateKey": "REPLACE_WITH_REALITY_PRIVATE_KEY",
           "minClientVer": "26.3.27",
           "maxClientVer": "26.6.27",
           "maxTimeDiff": 60000,
+          // 0-f 十六进制字符，偶数长度且最长 16；客户端 shortId 必须取列表中的一项。
           "shortIds": ["REPLACE_WITH_16_HEX_SHORT_ID"]
         },
         "xhttpSettings": {
+          // 自行生成不易猜测的路径；必须与客户端 xhttpSettings.path 完全一致。
           "path": "/REPLACE_WITH_RANDOM_PATH",
           "mode": "auto"
         }

@@ -161,7 +161,10 @@ sudo ss -lntp | grep ':9443'
 1. 下载与服务端相同的 Xray `26.6.27` Windows 包并校验 `.dgst`。
 2. 复制 `deploy/xray/client-xray.json.example` 为本机 `config.json`。
 3. 替换 server、UUID、target、REALITY Password、short ID 和 path。
-4. 执行：
+4. 模板已按 `client-bypass-cn.jsonc` 设置分流：私网地址、`geoip:cn` 和
+   `geosite:cn` 走 `direct`，其它流量默认走 `chat-backup`。客户端目录必须保留
+   与 Xray 版本配套的 `geoip.dat` 和 `geosite.dat`。
+5. 执行：
 
    ```powershell
    .\xray.exe run -test -c .\config.json
