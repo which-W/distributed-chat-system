@@ -1,9 +1,11 @@
 #pragma once
 #include <atomic>
-#include <thread>
+#include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <queue>
-#include <condition_variable>
+#include <string>
+#include <thread>
 
 class CSession;
 struct FileTask {
