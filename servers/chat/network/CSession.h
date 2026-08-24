@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <boost/asio.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
