@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include "const.h"
 #include "LogicSystem.h"
 class HttpConnection : public std::enable_shared_from_this<HttpConnection>

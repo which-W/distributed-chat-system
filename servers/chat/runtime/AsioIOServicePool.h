@@ -1,4 +1,5 @@
 #pragma once
+#include <thread>
 #include "Singleton.h"
 #include<boost/asio.hpp>
 #include<vector>

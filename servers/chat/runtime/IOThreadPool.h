@@ -1,5 +1,6 @@
 #pragma once
 #include <boost/asio.hpp>
+#include <thread>
 #include "Singleton.h"
 class AsioIOThreadPool :public Singleton<AsioIOThreadPool>
 {

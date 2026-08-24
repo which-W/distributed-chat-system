@@ -2,7 +2,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 6.6.3 EXACT REQUIRED
+find_package(Qt6 6.6.3 REQUIRED
     COMPONENTS Core Gui Widgets Network)
 set(QT_VERSION_MAJOR 6)
 
