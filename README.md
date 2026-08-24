@@ -1,19 +1,17 @@
 # distributed-chat-system
 
-## Xray 备用入口
 
-保留现有 Nginx 主入口并增加 `VLESS + XHTTP + REALITY` 备用入口的服务端配置、
-Windows Xray/v2rayN/Mihomo 客户端配置、Qt Client 切换方式和完整验收流程见
-[Xray 备用入口部署与使用文档](docs/xray-backup-entry.md)。
+## 前置条件
 
-## 公网 HTTPS 与 Chat TLS
+- CMake 3.24+
+- Ninja
+- C++17 编译器（Linux 推荐 GCC 11+ 或 Clang 14+）
+- vcpkg
+- Node.js 18+
+- Redis 6+
+- MySQL 8+
+- 构建桌面客户端时额外安装受维护的 Qt 6；Windows 公网 TLS 不再推荐 Qt 5.12
 
-Gate HTTPS、Chat TCP TLS、证书、防火墙规则和生产环境模板详见
-[公网 TLS 部署文档](docs/public-edge-tls.md)。可直接修改使用的示例位于
-`deploy/nginx/` 和 `deploy/config/`。生产客户端必须设置
-`AllowInsecure=false`，明文模式只能用于明确的本地联调。
-
-基于 Qt、Boost.Asio、gRPC、Redis 和 MySQL 的分布式即时通信系统。
 
 ## 组件
 
@@ -265,3 +263,18 @@ node VarifyServer/server.js
 | 50055 / 50056 | gRPC | 两个 ChatServer 节点间入口 |
 
 多主机部署时，修改 `config/status.ini` 中提供给客户端的聊天节点地址，以及两份 `config/chatserver*.ini` 中的 peer 地址。
+
+## Xray 备用入口
+
+保留现有 Nginx 主入口并增加 `VLESS + XHTTP + REALITY` 备用入口的服务端配置、
+Windows Xray/v2rayN/Mihomo 客户端配置、Qt Client 切换方式和完整验收流程见
+[Xray 备用入口部署与使用文档](docs/xray-backup-entry.md)。
+
+## 公网 HTTPS 与 Chat TLS
+
+Gate HTTPS、Chat TCP TLS、证书、防火墙规则和生产环境模板详见
+[公网 TLS 部署文档](docs/public-edge-tls.md)。可直接修改使用的示例位于
+`deploy/nginx/` 和 `deploy/config/`。生产客户端必须设置
+`AllowInsecure=false`，明文模式只能用于明确的本地联调。
+
+基于 Qt、Boost.Asio、gRPC、Redis 和 MySQL 的分布式即时通信系统。
