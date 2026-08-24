@@ -669,6 +669,15 @@ void LogicSystem::RegisterCallBacks() {
 		, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 	_func_callback[ID_TEXT_CHAT_MSG_REQ] = std::bind(&LogicSystem::TextChatMsgCallback, this
 		, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+	_func_callback[ID_HEART_BEAT_REQ] = std::bind(&LogicSystem::HeartbeatCallback, this
+		, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+}
+
+void LogicSystem::HeartbeatCallback(std::shared_ptr<CSession> session, short, string msg_data) {
+	if (msg_data.empty()) {
+		msg_data = "{}";
+	}
+	session->Send(msg_data, ID_HEARTBEAT_RSP);
 }
 
 LogicSystem::~LogicSystem() {

@@ -4,42 +4,22 @@
 #include <QFile>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QIntValidator>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QVBoxLayout>
 
 #include "ChatDialog.h"
 #include "ElaIconButton.h"
+#include "ElaComboBox.h"
+#include "ElaLineEdit.h"
+#include "ElaMessageBar.h"
 #include "ElaPushButton.h"
 #include "ElaText.h"
 #include "ThemeManager.h"
+#include "ProxyManager.h"
+#include "TcpMgr.h"
 #include "usermgr.h"
-
-namespace {
-QWidget* createSettingsPage(QWidget* parent)
-{
-    auto* page = new QWidget(parent);
-    page->setObjectName("settingsPage");
-    auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(48, 42, 48, 42);
-    layout->setSpacing(16);
-    auto* title = new ElaText(QObject::tr("Appearance"), page);
-    title->setTextPixelSize(28);
-    auto* description = new ElaText(QObject::tr("Choose the theme used across authentication, conversations and contacts."), page);
-    description->setTextPixelSize(14);
-    description->setWordWrap(true);
-    auto* themeButton = new ElaPushButton(QObject::tr("Switch light / dark theme"), page);
-    themeButton->setMaximumWidth(260);
-    QObject::connect(themeButton, &QPushButton::clicked,
-                     &ThemeManager::instance(), &ThemeManager::toggleTheme);
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addSpacing(10);
-    layout->addWidget(themeButton);
-    layout->addStretch();
-    return page;
-}
-}
 
 ChatWindow::ChatWindow(QWidget* parent)
     : ElaWindow(parent)
@@ -119,9 +99,106 @@ ChatWindow::ChatWindow(QWidget* parent)
     connect(themeButton_, &QPushButton::clicked, &ThemeManager::instance(), &ThemeManager::toggleTheme);
     connect(logoutButton, &QPushButton::clicked, this, &ChatWindow::logoutRequested);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, &ChatWindow::applyTheme);
+    connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_connection_state,
+            this, [this](const QString& message, bool connected) {
+        if (connected) {
+            ElaMessageBar::success(ElaMessageBarType::TopRight, tr("Connection restored"), message, 2800, this);
+        } else {
+            ElaMessageBar::warning(ElaMessageBarType::TopRight, tr("Connection status"), message, 3200, this);
+        }
+    });
 
     showMessages();
     applyTheme(ThemeManager::instance().themeMode());
+}
+
+QWidget* ChatWindow::createSettingsPage(QWidget* parent)
+{
+    auto* page = new QWidget(parent);
+    page->setObjectName("settingsPage");
+    auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(48, 42, 48, 42);
+    layout->setSpacing(14);
+
+    auto* appearanceTitle = new ElaText(tr("Appearance"), page);
+    appearanceTitle->setTextPixelSize(28);
+    auto* appearanceDescription = new ElaText(
+        tr("Choose the theme used across authentication, conversations and contacts."), page);
+    appearanceDescription->setTextPixelSize(14);
+    appearanceDescription->setWordWrap(true);
+    auto* themeButton = new ElaPushButton(tr("Switch light / dark theme"), page);
+    themeButton->setMaximumWidth(280);
+    connect(themeButton, &QPushButton::clicked,
+            &ThemeManager::instance(), &ThemeManager::toggleTheme);
+
+    auto* networkTitle = new ElaText(tr("Network route"), page);
+    networkTitle->setTextPixelSize(24);
+    auto* networkDescription = new ElaText(
+        tr("Keep Direct for the normal entry. Select SOCKS5 backup when v2rayN or Mihomo is running locally."), page);
+    networkDescription->setTextPixelSize(14);
+    networkDescription->setWordWrap(true);
+
+    proxyMode_ = new ElaComboBox(page);
+    proxyMode_->addItem(tr("Direct (normal entry)"), static_cast<int>(ProxyManager::Mode::Direct));
+    proxyMode_->addItem(tr("System proxy"), static_cast<int>(ProxyManager::Mode::System));
+    proxyMode_->addItem(tr("SOCKS5 (Xray backup)"), static_cast<int>(ProxyManager::Mode::Socks5));
+    proxyMode_->setMaximumWidth(360);
+
+    proxyHost_ = new ElaLineEdit(page);
+    proxyHost_->setPlaceholderText(tr("SOCKS5 host, for example 127.0.0.1"));
+    proxyHost_->setMaximumWidth(360);
+    proxyPort_ = new ElaLineEdit(page);
+    proxyPort_->setPlaceholderText(tr("SOCKS5 port, for example 10808"));
+    proxyPort_->setValidator(new QIntValidator(1, 65535, proxyPort_));
+    proxyPort_->setMaximumWidth(360);
+
+    auto* applyButton = new ElaPushButton(tr("Apply network route"), page);
+    applyButton->setMaximumWidth(280);
+    connect(proxyMode_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) { updateProxyInputs(); });
+    connect(applyButton, &QPushButton::clicked, this, &ChatWindow::applyProxySettings);
+
+    const auto& proxy = ProxyManager::instance();
+    const int modeIndex = proxyMode_->findData(static_cast<int>(proxy.mode()));
+    proxyMode_->setCurrentIndex(modeIndex < 0 ? 0 : modeIndex);
+    proxyHost_->setText(proxy.host());
+    proxyPort_->setText(QString::number(proxy.port()));
+    updateProxyInputs();
+
+    layout->addWidget(appearanceTitle);
+    layout->addWidget(appearanceDescription);
+    layout->addWidget(themeButton);
+    layout->addSpacing(24);
+    layout->addWidget(networkTitle);
+    layout->addWidget(networkDescription);
+    layout->addWidget(proxyMode_);
+    layout->addWidget(proxyHost_);
+    layout->addWidget(proxyPort_);
+    layout->addWidget(applyButton);
+    layout->addStretch();
+    return page;
+}
+
+void ChatWindow::applyProxySettings()
+{
+    const auto mode = static_cast<ProxyManager::Mode>(proxyMode_->currentData().toInt());
+    QString error;
+    if (!ProxyManager::instance().apply(mode, proxyHost_->text(),
+                                        static_cast<quint16>(proxyPort_->text().toUInt()), &error)) {
+        ElaMessageBar::error(ElaMessageBarType::TopRight, tr("Invalid proxy"), error, 3200, this);
+        return;
+    }
+    TcpMgr::Getinstance()->slot_reconnect_for_proxy();
+    ElaMessageBar::success(ElaMessageBarType::TopRight, tr("Network route applied"),
+                           tr("Current mode: %1").arg(ProxyManager::instance().modeName()), 2800, this);
+}
+
+void ChatWindow::updateProxyInputs()
+{
+    const auto mode = static_cast<ProxyManager::Mode>(proxyMode_->currentData().toInt());
+    const bool socks = mode == ProxyManager::Mode::Socks5;
+    proxyHost_->setEnabled(socks);
+    proxyPort_->setEnabled(socks);
 }
 
 void ChatWindow::showMessages()

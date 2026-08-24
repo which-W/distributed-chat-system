@@ -1,6 +1,7 @@
 #pragma once
 #include <QSslSocket>
 #include <QSslCipher>
+#include <QTimer>
 #include "Singleton.h"
 #include "global.h"
 #include "usermgr.h"
@@ -21,17 +22,30 @@ private:
     uint16_t _port;
     bool _use_tls;
     bool _connect_result_emitted;
+    bool _authenticated;
+    bool _reconnecting;
+    bool _manual_disconnect;
+    int _retry_attempt;
+    int _missed_heartbeats;
+    QByteArray _login_payload;
+    QTimer _retry_timer;
+    QTimer _heartbeat_timer;
     QByteArray _buffer;
     bool _b_recv_pending;
     quint16 _message_id;
     quint16 _message_len;
     void initHandlers();
     void handleMsg(Req id, int len, QByteArray data);
+    void beginConnection();
+    void handleTransportReady();
+    void scheduleReconnect();
+    void resetParser();
 	QMap<Req, std::function<void(Req id, int len, QByteArray data)>> _handlers;
 public slots:
     void slot_tcp_connect(ServerInfo);
     void slot_send_data(Req reqId, QByteArray data);
     void slot_disconnect();
+    void slot_reconnect_for_proxy();
 signals:
     void sig_con_success(bool bsuccess);
     void sig_send_data(Req reqId, QByteArray data);
@@ -42,4 +56,5 @@ signals:
     void sig_add_auth_friend(std::shared_ptr<AuthInfo>);
     void sig_auth_rsp(std::shared_ptr<AuthRsp>);
     void sig_text_chat_msg(std::shared_ptr<TextChatMsg>);
+    void sig_connection_state(const QString& message, bool connected);
 };

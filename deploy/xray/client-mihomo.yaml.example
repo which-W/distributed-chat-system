@@ -1,0 +1,29 @@
+socks-port: 10808
+allow-lan: false
+mode: global
+log-level: warning
+
+proxies:
+  - name: chat-backup
+    type: vless
+    server: REPLACE_WITH_BACKUP_SERVER_IP_OR_DOMAIN
+    port: 9443
+    uuid: REPLACE_WITH_UUID
+    udp: false
+    tls: true
+    servername: REPLACE_WITH_SAME_ASN_TARGET
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: REPLACE_WITH_REALITY_PASSWORD
+      short-id: REPLACE_WITH_16_HEX_SHORT_ID
+    network: xhttp
+    xhttp-opts:
+      path: /REPLACE_WITH_RANDOM_PATH
+      host: REPLACE_WITH_SAME_ASN_TARGET
+      mode: auto
+
+proxy-groups:
+  - name: GLOBAL
+    type: select
+    proxies:
+      - chat-backup

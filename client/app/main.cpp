@@ -1,5 +1,6 @@
 #include "ClientCoordinator.h"
 #include "ThemeManager.h"
+#include "ProxyManager.h"
 #include <QtWidgets/QApplication>
 #include <qdebug.h>
 #include <QUrl>
@@ -16,6 +17,7 @@ int main(int argc, char *argv[])
     QString app_path = QCoreApplication::applicationDirPath();
     QString config_path = QDir::toNativeSeparators(app_path + QDir::separator() + fileName);
     QSettings settings(config_path, QSettings::IniFormat);
+    ProxyManager::instance().initialize(config_path);
     allow_insecure_transport = settings.value("Security/AllowInsecure", false).toBool();
     gate_url_prefix = settings.value("GateServer/BaseUrl").toString().trimmed();
     if (gate_url_prefix.isEmpty()) {

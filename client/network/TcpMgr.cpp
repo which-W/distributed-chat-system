@@ -1,12 +1,17 @@
 #include "TcpMgr.h"
+#include <QNetworkProxy>
 
 TcpMgr::TcpMgr():_socket(nullptr),_host(""),_transport("tls"),_tls_server_name(""),_port(0),
-	_use_tls(true),_connect_result_emitted(false),_b_recv_pending(false), _message_id(0), _message_len(0) {
+	_use_tls(true),_connect_result_emitted(false),_authenticated(false),_reconnecting(false),
+	_manual_disconnect(false),_retry_attempt(0),_missed_heartbeats(0),
+	_b_recv_pending(false), _message_id(0), _message_len(0) {
+	_retry_timer.setSingleShot(true);
+	_heartbeat_timer.setInterval(30000);
 	// 初始化QTcpSocket并建立连接
 	connect(&_socket, &QTcpSocket::connected, this, [this]() {
 		if (!_use_tls && !_connect_result_emitted) {
 			_connect_result_emitted = true;
-			emit sig_con_success(true);
+			handleTransportReady();
 		}
 		});
 	connect(&_socket, &QSslSocket::encrypted, this, [this]() {
@@ -14,7 +19,7 @@ TcpMgr::TcpMgr():_socket(nullptr),_host(""),_transport("tls"),_tls_server_name("
 			_connect_result_emitted = true;
 			qDebug() << "TLS established with" << _host
 				<< "using" << _socket.sessionCipher().name();
-			emit sig_con_success(true);
+			handleTransportReady();
 		}
 		});
 	connect(&_socket, QOverload<const QList<QSslError>&>::of(&QSslSocket::sslErrors),
@@ -23,7 +28,9 @@ TcpMgr::TcpMgr():_socket(nullptr),_host(""),_transport("tls"),_tls_server_name("
 				qWarning() << "Chat TLS verification failed:" << error.errorString();
 			}
 			_socket.abort();
-			if (!_connect_result_emitted) {
+			if (_reconnecting) {
+				scheduleReconnect();
+			} else if (!_connect_result_emitted) {
 				_connect_result_emitted = true;
 				emit sig_con_success(false);
 			}
@@ -71,7 +78,9 @@ TcpMgr::TcpMgr():_socket(nullptr),_host(""),_transport("tls"),_tls_server_name("
 	connect(&_socket, &QAbstractSocket::errorOccurred, this,
 		[this](QAbstractSocket::SocketError socketError) {
 			qWarning() << "Chat socket error:" << socketError << _socket.errorString();
-			if (!_connect_result_emitted) {
+			if (_reconnecting) {
+				scheduleReconnect();
+			} else if (!_connect_result_emitted) {
 				_connect_result_emitted = true;
 				emit sig_con_success(false);
 			}
@@ -118,9 +127,32 @@ TcpMgr::TcpMgr():_socket(nullptr),_host(""),_transport("tls"),_tls_server_name("
 
 
 	// 处理连接断开
-	connect(&_socket, &QTcpSocket::disconnected, [&]() {
+	connect(&_socket, &QTcpSocket::disconnected, this, [this]() {
 		qDebug() << "Disconnected from server.";
+		_heartbeat_timer.stop();
+		_authenticated = false;
+		if (!_manual_disconnect && !_login_payload.isEmpty()) {
+			_reconnecting = true;
+			emit sig_connection_state(tr("Chat connection lost. Reconnecting through the selected route..."), false);
+			scheduleReconnect();
+		}
 		});
+	connect(&_retry_timer, &QTimer::timeout, this, [this]() {
+		if (!_manual_disconnect && _reconnecting) {
+			beginConnection();
+		}
+	});
+	connect(&_heartbeat_timer, &QTimer::timeout, this, [this]() {
+		if (!_authenticated) {
+			return;
+		}
+		if (++_missed_heartbeats >= 3) {
+			emit sig_connection_state(tr("Heartbeat timed out. Reconnecting..."), false);
+			_socket.abort();
+			return;
+		}
+		slot_send_data(Req::ID_HEART_BEAT_REQ, QByteArrayLiteral("{}"));
+	});
 
 	connect(this, &TcpMgr::sig_send_data, this, &TcpMgr::slot_send_data);
 	//注册消息
@@ -157,6 +189,11 @@ void TcpMgr::initHandlers()
 		int err = jsonObj["error"].toInt();
 		if (err != ErrorCode::ERR_OK) {
 			qDebug() << "Login Failed, err is " << err;
+			if (_reconnecting) {
+				_reconnecting = false;
+				_manual_disconnect = true;
+				emit sig_connection_state(tr("Session re-authentication failed. Please sign in again."), false);
+			}
 			emit sig_login_failed(err);
 			return;
 		}
@@ -182,7 +219,17 @@ void TcpMgr::initHandlers()
 
 
 
-		emit sig_swich_chatdlg();
+		const bool restored = _reconnecting;
+		_authenticated = true;
+		_reconnecting = false;
+		_retry_attempt = 0;
+		_missed_heartbeats = 0;
+		_heartbeat_timer.start();
+		if (restored) {
+			emit sig_connection_state(tr("Chat connection is healthy again."), true);
+		} else {
+			emit sig_swich_chatdlg();
+		}
 
 		});
 	//搜索用户回包
@@ -438,6 +485,10 @@ void TcpMgr::initHandlers()
 			jsonObj["touid"].toInt(), jsonObj["text_array"].toArray());
 		emit sig_text_chat_msg(msg_ptr);
 		});
+
+	_handlers.insert(Req::ID_HEARTBEAT_RSP, [this](Req, int, QByteArray) {
+		_missed_heartbeats = 0;
+	});
 }
 
 void TcpMgr::handleMsg(Req id, int len, QByteArray data)
@@ -452,10 +503,13 @@ void TcpMgr::handleMsg(Req id, int len, QByteArray data)
 
 void TcpMgr::slot_tcp_connect(ServerInfo info)
 {
+	_manual_disconnect = false;
+	_reconnecting = false;
+	_authenticated = false;
+	_retry_attempt = 0;
+	_login_payload.clear();
 	_socket.abort();
-	_buffer.clear();
-	_b_recv_pending = false;
-	_connect_result_emitted = false;
+	resetParser();
 	_host = info.Host;
 	_port = static_cast<uint16_t>(info.Port.toUShort());
 	_transport = info.Transport.trimmed().toLower();
@@ -479,6 +533,15 @@ void TcpMgr::slot_tcp_connect(ServerInfo info)
 		return;
 	}
 
+	beginConnection();
+}
+
+void TcpMgr::beginConnection()
+{
+	_retry_timer.stop();
+	resetParser();
+	_connect_result_emitted = false;
+	_socket.setProxy(QNetworkProxy::applicationProxy());
 	qDebug() << "Connecting to chat server" << _host << _port << "via" << _transport;
 	if (_use_tls) {
 		if (!QSslSocket::supportsSsl()) {
@@ -498,8 +561,41 @@ void TcpMgr::slot_tcp_connect(ServerInfo info)
 	_socket.connectToHost(_host, _port);
 }
 
+void TcpMgr::handleTransportReady()
+{
+	if (_reconnecting && !_login_payload.isEmpty()) {
+		emit sig_connection_state(tr("Transport restored. Re-authenticating the session..."), false);
+		slot_send_data(Req::ID_CHAT_LOGIN, _login_payload);
+		return;
+	}
+	emit sig_con_success(true);
+}
+
+void TcpMgr::scheduleReconnect()
+{
+	if (_manual_disconnect || !_reconnecting || _retry_timer.isActive()) {
+		return;
+	}
+	static const int delays[] = {1000, 2000, 4000, 8000, 15000, 30000};
+	constexpr int delayCount = static_cast<int>(sizeof(delays) / sizeof(delays[0]));
+	const int index = qMin(_retry_attempt, delayCount - 1);
+	_retry_timer.start(delays[index]);
+	++_retry_attempt;
+}
+
+void TcpMgr::resetParser()
+{
+	_buffer.clear();
+	_b_recv_pending = false;
+	_message_id = 0;
+	_message_len = 0;
+}
+
 void TcpMgr::slot_send_data(Req reqId, QByteArray data)
 {
+	if (reqId == Req::ID_CHAT_LOGIN && !_reconnecting) {
+		_login_payload = data;
+	}
 	if (_socket.state() != QAbstractSocket::ConnectedState) {
 		qDebug() << "Socket is not connected!";
 		return;
@@ -538,13 +634,33 @@ void TcpMgr::slot_send_data(Req reqId, QByteArray data)
 
 void TcpMgr::slot_disconnect()
 {
+	_manual_disconnect = true;
+	_retry_timer.stop();
+	_heartbeat_timer.stop();
 	_socket.abort();
-	_buffer.clear();
+	resetParser();
 	_host.clear();
 	_tls_server_name.clear();
 	_port = 0;
-	_b_recv_pending = false;
-	_message_id = 0;
-	_message_len = 0;
+	_authenticated = false;
+	_reconnecting = false;
+	_retry_attempt = 0;
+	_missed_heartbeats = 0;
+	_login_payload.clear();
 	_connect_result_emitted = false;
+}
+
+void TcpMgr::slot_reconnect_for_proxy()
+{
+	if (_login_payload.isEmpty() || _host.isEmpty() || _port == 0) {
+		return;
+	}
+	_manual_disconnect = false;
+	_reconnecting = true;
+	_authenticated = false;
+	_retry_attempt = 0;
+	_heartbeat_timer.stop();
+	emit sig_connection_state(tr("Network route changed. Reconnecting..."), false);
+	_socket.abort();
+	scheduleReconnect();
 }

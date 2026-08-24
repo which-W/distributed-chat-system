@@ -1,0 +1,82 @@
+{
+  "version": { "min": "26.6.27", "max": "26.6.27" },
+  "log": { "loglevel": "warning" },
+  "inbounds": [
+    {
+      "tag": "chat-backup-xhttp-reality",
+      "listen": "0.0.0.0",
+      "port": 9443,
+      "protocol": "vless",
+      "settings": {
+        "users": [
+          { "id": "REPLACE_WITH_UUID", "level": 0, "email": "chat-backup" }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "method": "xhttp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "target": "REPLACE_WITH_SAME_ASN_TARGET:443",
+          "xver": 0,
+          "serverNames": ["REPLACE_WITH_SAME_ASN_TARGET"],
+          "privateKey": "REPLACE_WITH_REALITY_PRIVATE_KEY",
+          "minClientVer": "26.3.27",
+          "maxClientVer": "26.6.27",
+          "maxTimeDiff": 60000,
+          "shortIds": ["REPLACE_WITH_16_HEX_SHORT_ID"]
+        },
+        "xhttpSettings": {
+          "path": "/REPLACE_WITH_RANDOM_PATH",
+          "mode": "auto"
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "gate-local",
+      "protocol": "freedom",
+      "settings": {
+        "redirect": "127.0.0.1:443",
+        "finalRules": [
+          { "action": "allow", "network": "tcp", "port": 443, "ip": ["127.0.0.1/32"] },
+          { "action": "block" }
+        ]
+      }
+    },
+    {
+      "tag": "chat-one-local",
+      "protocol": "freedom",
+      "settings": {
+        "redirect": "127.0.0.1:8443",
+        "finalRules": [
+          { "action": "allow", "network": "tcp", "port": 8443, "ip": ["127.0.0.1/32"] },
+          { "action": "block" }
+        ]
+      }
+    },
+    {
+      "tag": "chat-two-local",
+      "protocol": "freedom",
+      "settings": {
+        "redirect": "127.0.0.1:8444",
+        "finalRules": [
+          { "action": "allow", "network": "tcp", "port": 8444, "ip": ["127.0.0.1/32"] },
+          { "action": "block" }
+        ]
+      }
+    },
+    { "tag": "blocked", "protocol": "blackhole", "settings": { "response": { "type": "none" } } }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      { "type": "field", "inboundTag": ["chat-backup-xhttp-reality"], "network": "tcp", "port": 443, "outboundTag": "gate-local" },
+      { "type": "field", "inboundTag": ["chat-backup-xhttp-reality"], "network": "tcp", "port": 8443, "outboundTag": "chat-one-local" },
+      { "type": "field", "inboundTag": ["chat-backup-xhttp-reality"], "network": "tcp", "port": 8444, "outboundTag": "chat-two-local" },
+      { "type": "field", "inboundTag": ["chat-backup-xhttp-reality"], "outboundTag": "blocked" }
+    ]
+  }
+}

@@ -50,6 +50,9 @@ VarifyServer/config.json
 *.key
 *.pem
 *.crt
+deploy/xray/server-backup.json
+deploy/xray/client-xray.json
+deploy/xray/client-mihomo.yaml
 
 # OS/editor noise
 .DS_Store

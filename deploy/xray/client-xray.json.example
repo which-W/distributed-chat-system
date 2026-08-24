@@ -1,0 +1,40 @@
+{
+  "version": { "min": "26.6.27", "max": "26.6.27" },
+  "log": { "loglevel": "warning" },
+  "inbounds": [
+    {
+      "tag": "local-socks",
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "settings": { "udp": false }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "chat-backup",
+      "protocol": "vless",
+      "settings": {
+        "address": "REPLACE_WITH_BACKUP_SERVER_IP_OR_DOMAIN",
+        "port": 9443,
+        "id": "REPLACE_WITH_UUID",
+        "encryption": "none"
+      },
+      "streamSettings": {
+        "method": "xhttp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "REPLACE_WITH_SAME_ASN_TARGET",
+          "fingerprint": "chrome",
+          "password": "REPLACE_WITH_REALITY_PASSWORD",
+          "shortId": "REPLACE_WITH_16_HEX_SHORT_ID",
+          "spiderX": "/"
+        },
+        "xhttpSettings": {
+          "path": "/REPLACE_WITH_RANDOM_PATH",
+          "mode": "auto"
+        }
+      }
+    }
+  ]
+}
