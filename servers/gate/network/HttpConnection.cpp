@@ -8,6 +8,9 @@ HttpConnection::HttpConnection(boost::asio::io_context & ioc) :_socket(ioc)
 void HttpConnection::start()
 {
 	auto self = shared_from_this();
+	// 截止时间必须覆盖请求读取阶段，防止慢速请求长期占用 socket。
+	_deadline.expires_after(std::chrono::seconds(30));
+	CheckDeadline();
 	http::async_read(
 		_socket,
 		_buffer,
@@ -15,14 +18,15 @@ void HttpConnection::start()
 		[self](beast::error_code ec, ::std::size_t bytes_transferred) {
 		try{
 			if (ec) {
+				self->_deadline.cancel();
 				std::cout << "Error reading request: " << ec.what() << std::endl;
 				return; // 读取失败，直接返回
 			}
 			boost::ignore_unused(bytes_transferred);
 			self->HandleReq();
-			self->CheckDeadline();
 		}
 		catch (std::exception& ec) {
+			self->_deadline.cancel();
 			std::cout << "Exception in HttpConnection::start: " << ec.what() << std::endl;
 		}
 
@@ -65,7 +69,13 @@ void HttpConnection::HandleReq()
 
 	if (_req.method() == http::verb::get) {
 		// 处理 GET 请求
-		PreParseGetParam();
+		if (!PreParseGetParam()) {
+			_res.result(http::status::bad_request);
+			_res.set(http::field::content_type, "text/plain");
+			beast::ostream(_res.body()) << "invalid URL encoding";
+			WriteResponse();
+			return;
+		}
 		bool success = LogicSystem::GetInstance()->HandleGet(_get_url, shared_from_this());
 		if (!success) {
 			// 如果处理失败，返回 404 Not Found
@@ -96,16 +106,22 @@ void HttpConnection::HandleReq()
 		WriteResponse();
 		return;
 	}
+	// 未支持的方法立即结束请求，避免连接只能等待截止时间被动回收。
+	_res.result(http::status::method_not_allowed);
+	_res.set(http::field::allow, "GET, POST");
+	_res.set(http::field::content_type, "text/plain");
+	beast::ostream(_res.body()) << "method not allowed";
+	WriteResponse();
 }
 
-void HttpConnection::PreParseGetParam() {
+bool HttpConnection::PreParseGetParam() {
 	// 提取 URI
 	auto uri = _req.target();
 	// 查找查询字符串的开始位置（即 '?' 的位置）
 	auto query_pos = uri.find('?');
 	if (query_pos == std::string::npos) {
 		_get_url = uri;
-		return;
+		return true;
 	}
 
 	_get_url = uri.substr(0, query_pos);
@@ -117,8 +133,8 @@ void HttpConnection::PreParseGetParam() {
 		auto pair = query_string.substr(0, pos);
 		size_t eq_pos = pair.find('=');
 		if (eq_pos != std::string::npos) {
-			key = UrlDecode(pair.substr(0, eq_pos)); // 假设有 url_decode 函数来处理URL解码
-			value = UrlDecode(pair.substr(eq_pos + 1));
+			if (!UrlDecode(pair.substr(0, eq_pos), key)
+				|| !UrlDecode(pair.substr(eq_pos + 1), value)) return false;
 			_get_params[key] = value;
 		}
 		query_string.erase(0, pos + 1);
@@ -127,9 +143,10 @@ void HttpConnection::PreParseGetParam() {
 	if (!query_string.empty()) {
 		size_t eq_pos = query_string.find('=');
 		if (eq_pos != std::string::npos) {
-			key = UrlDecode(query_string.substr(0, eq_pos));
-			value = UrlDecode(query_string.substr(eq_pos + 1));
+			if (!UrlDecode(query_string.substr(0, eq_pos), key)
+				|| !UrlDecode(query_string.substr(eq_pos + 1), value)) return false;
 			_get_params[key] = value;
 		}
 	}
+	return true;
 }

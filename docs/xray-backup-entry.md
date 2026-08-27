@@ -57,18 +57,19 @@ Qt Client ── SOCKS5 127.0.0.1:10808 ──> Xray/Mihomo Client
 
 服务端和原生 Xray 客户端固定为 `26.6.27`。模板的 `version.min/max` 会阻止误用其它版本。Mihomo 官方文档明确说明其 REALITY 实现不兼容 Xray `26.7.11+`，所以使用 Mihomo 时尤其不要擅自升级服务端。
 
-下载官方发布包及对应 `.dgst` 文件并校验 SHA-256：
+下载发布包，并从独立审阅的上游签名、发布清单或变更审批记录取得可信 SHA-256。
+不要把与压缩包从同一位置下载的 `.dgst` 当作唯一信任来源：
 
 ```bash
 mkdir -p /tmp/xray-26.6.27
 cd /tmp/xray-26.6.27
 curl -fLO https://github.com/XTLS/Xray-core/releases/download/v26.6.27/Xray-linux-64.zip
-curl -fLO https://github.com/XTLS/Xray-core/releases/download/v26.6.27/Xray-linux-64.zip.dgst
-grep -A1 'SHA2-256' Xray-linux-64.zip.dgst
-sha256sum Xray-linux-64.zip
+export TRUSTED_XRAY_SHA256='<independently-verified-64-hex-digest>'
+printf '%s  %s\n' "$TRUSTED_XRAY_SHA256" Xray-linux-64.zip | sha256sum -c -
 unzip Xray-linux-64.zip xray
 chmod 0755 xray
-./xray version
+# 解压后的二进制摘要也要独立记录，供 root 安装脚本在首次执行前验证。
+export TRUSTED_XRAY_BINARY_SHA256="$(sha256sum xray | awk '{print $1}')"
 ```
 
 如果服务器不是 `linux-amd64`，从同一 release 选择对应架构文件，不要用上面的文件名硬装。
@@ -132,10 +133,12 @@ REPLACE_WITH_RANDOM_PATH
 ```bash
 sudo bash deploy/xray/install-xray-backup.sh \
   /tmp/xray-26.6.27/xray \
-  deploy/xray/server-backup.json
+  deploy/xray/server-backup.json \
+  "$TRUSTED_XRAY_BINARY_SHA256"
 ```
 
-脚本会验证二进制版本、创建不可登录的 `xray` 系统用户、安装只读配置、执行 `xray run -test`，然后启用 `xray-backup.service`。
+脚本先验证传入的可信摘要，校验成功前不会执行候选文件；随后创建不可登录的 `xray`
+系统用户、安装只读配置、验证版本、执行 `xray run -test`，最后启用服务。
 
 防火墙示例：
 

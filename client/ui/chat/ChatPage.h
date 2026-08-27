@@ -14,6 +14,9 @@
 #include "usermgr.h"
 #include "TcpMgr.h"
 #include <QUuid>
+#include "FileBubble.h"
+#include "FileTransferManager.h"
+#include <QHash>
 QT_BEGIN_NAMESPACE
 namespace Ui { class ChatPageClass; };
 QT_END_NAMESPACE
@@ -31,9 +34,12 @@ public:
 private slots:
 	void sendMessage();
 	void on_send_btn_clicked();
+	void chooseFile(QString, ClickLbState);
 signals:
 	void sig_append_send_chat_msg(std::shared_ptr<TextChatData>);
 private:
 	Ui::ChatPageClass *ui;
 	std::shared_ptr<UserInfo> _user_info;
+	QHash<QString, FileBubble*> _file_bubbles;
+	void appendFileBubble(const QJsonObject& metadata, ChatRole role, bool incoming);
 };

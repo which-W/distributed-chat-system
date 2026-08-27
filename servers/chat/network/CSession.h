@@ -33,7 +33,7 @@ public:
 	void SetUserId(int uid);
 	int GetUserId();
 	void Start();
-	void Send(char* msg,  short max_length, short msgid);
+	void Send(char* msg, std::size_t max_length, short msgid);
 	void Send(std::string msg, short msgid);
 	void Close();
 	std::shared_ptr<CSession> SharedSelf();
@@ -55,7 +55,8 @@ private:
 	void HandleWrite(const boost::system::error_code& error, std::shared_ptr<CSession> shared_self);
 	tcp::socket _socket;
 	std::string _session_id;
-	char _data[MAX_LENGTH];
+	// 文件分片允许较大帧；普通聊天消息仍在解析头时维持 2 KB 上限。
+	char _data[MAX_FILE_FRAME_LENGTH];
 	CServer* _server;
 	bool _b_close;
 	std::queue<shared_ptr<SendNode> > _send_que;
@@ -70,6 +71,8 @@ private:
 	std::atomic<time_t> _last_heartbeat;
 	//session 锁
 	std::mutex _session_mtx;
+	// 登录前连接必须在限定时间内完成票据认证，避免空闲连接长期占用会话表。
+	boost::asio::steady_timer _auth_timer;
 };
 
 class LogicNode {

@@ -43,6 +43,14 @@ ChatView::ChatView(QWidget* parent) : QWidget(parent)
 void ChatView::appendChatItem(QWidget* item)
 {
     QVBoxLayout* vl = qobject_cast<QVBoxLayout*>(m_pScrollArea->widget()->layout());
+	// UI 控件也必须与模型使用同一数量预算，否则仅限制 vector 仍会耗尽内存。
+	if (vl->count() - 1 >= static_cast<int>(MAX_CHAT_HISTORY_MESSAGES)) {
+		QLayoutItem* oldest = vl->takeAt(0);
+		if (oldest) {
+			delete oldest->widget();
+			delete oldest;
+		}
+	}
     vl->insertWidget(vl->count() - 1, item);
     isAppended = true;
 }
@@ -50,6 +58,13 @@ void ChatView::appendChatItem(QWidget* item)
 void ChatView::prependChatItem(QWidget* item)
 {
 	QVBoxLayout* vl = qobject_cast<QVBoxLayout*>(m_pScrollArea->widget()->layout());
+	if (vl->count() - 1 >= static_cast<int>(MAX_CHAT_HISTORY_MESSAGES)) {
+		QLayoutItem* newest = vl->takeAt(vl->count() - 2);
+		if (newest) {
+			delete newest->widget();
+			delete newest;
+		}
+	}
 	vl->insertWidget(0, item);
 	isAppended = true;
 }

@@ -4,6 +4,8 @@
 #include "StatusGrpcClient.h"
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <initializer_list>
 
 namespace {
 
@@ -36,7 +38,45 @@ bool consumeVerificationCode(
 
 bool validNewPassword(const std::string& password)
 {
-    return password.size() >= 10 && password.size() <= 128;
+    // 按 Unicode 码点计数并拒绝 Unicode 空白，与 Qt 客户端规则保持一致。
+    if (password.empty() || password.size() > 128 * 4) return false;
+    std::size_t code_points = 0;
+    for (std::size_t offset = 0; offset < password.size();) {
+        const auto lead = static_cast<unsigned char>(password[offset]);
+        std::uint32_t value = 0;
+        std::size_t width = 0;
+        if (lead <= 0x7f) { value = lead; width = 1; }
+        else if (lead >= 0xc2 && lead <= 0xdf) { value = lead & 0x1f; width = 2; }
+        else if (lead >= 0xe0 && lead <= 0xef) { value = lead & 0x0f; width = 3; }
+        else if (lead >= 0xf0 && lead <= 0xf4) { value = lead & 0x07; width = 4; }
+        else return false;
+        if (offset + width > password.size()) return false;
+        for (std::size_t index = 1; index < width; ++index) {
+            const auto byte = static_cast<unsigned char>(password[offset + index]);
+            if ((byte & 0xc0) != 0x80) return false;
+            value = (value << 6) | (byte & 0x3f);
+        }
+        if ((width == 2 && value < 0x80) || (width == 3 && value < 0x800)
+            || (width == 4 && value < 0x10000) || value > 0x10ffff
+            || (value >= 0xd800 && value <= 0xdfff)) return false;
+        const bool whitespace = (value >= 0x09 && value <= 0x0d) || value == 0x20
+            || value == 0x85 || value == 0xa0 || value == 0x1680
+            || (value >= 0x2000 && value <= 0x200a) || value == 0x2028
+            || value == 0x2029 || value == 0x202f || value == 0x205f || value == 0x3000;
+        if (whitespace || ++code_points > 128) return false;
+        offset += width;
+    }
+    return code_points >= 10;
+}
+
+bool hasStringFields(const Json::Value& object,
+    std::initializer_list<const char*> field_names)
+{
+    if (!object.isObject()) return false;
+    for (const char* field_name : field_names) {
+        if (!object[field_name].isString()) return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -55,22 +95,15 @@ LogicSystem::LogicSystem() {
 		Json::Reader reader;
 		Json::Value src_root;
 		bool prase_success = reader.parse(body_str, src_root);
-		if (!prase_success) {
+		// 在访问字段前完成结构和类型验证，畸形 JSON 只能得到错误响应，不能抛出到网络线程。
+		if (!prase_success || !hasStringFields(src_root, {"email"})) {
 			std::cout << "JSON parse error" << std::endl;
 			root["error"] = ERROR_CODE::JSON_ERROR;
 			std::string jsonstr = root.toStyledString();
 			beast::ostream(conn->_res.body()) << jsonstr;
 			return true;
 		}
-		if (!src_root.isMember("email")) {
-			std::cout << "JSON parse error" << std::endl;
-			root["error"] = ERROR_CODE::JSON_ERROR;
-			std::string jsonstr = root.toStyledString();
-			beast::ostream(conn->_res.body()) << jsonstr;
-			return true;
-		}
-
-            auto email = normalizeEmail(src_root["email"].asString());
+		auto email = normalizeEmail(src_root["email"].asString());
 		GetVarifyRsp _rsp = VerifyGrpcClient::GetInstance()->GetVarifyCode(email);
 		root["error"] = _rsp.error();
 		root["email"] = email;
@@ -87,7 +120,8 @@ LogicSystem::LogicSystem() {
         Json::Reader reader;
         Json::Value src_root;
         bool parse_success = reader.parse(body_str, src_root);
-        if (!parse_success) {
+        if (!parse_success || !hasStringFields(
+                src_root, {"email", "user", "passwd", "icon", "varifycode"})) {
             std::cout << "Failed to parse JSON data!" << std::endl;
             root["error"] = ERROR_CODE::JSON_ERROR;
             std::string jsonstr = root.toStyledString();
@@ -136,7 +170,8 @@ LogicSystem::LogicSystem() {
         Json::Reader reader;
         Json::Value src_root;
         bool parse_success = reader.parse(body_str, src_root);
-        if (!parse_success) {
+        if (!parse_success || !hasStringFields(
+                src_root, {"email", "user", "passwd", "varifycode"})) {
             std::cout << "Failed to parse JSON data!" << std::endl;
             root["error"] = ERROR_CODE::JSON_ERROR;
             std::string jsonstr = root.toStyledString();
@@ -191,7 +226,7 @@ LogicSystem::LogicSystem() {
         Json::Reader reader;
         Json::Value src_root;
         bool parse_success = reader.parse(body_str, src_root);
-        if (!parse_success) {
+        if (!parse_success || !hasStringFields(src_root, {"email", "passwd"})) {
             std::cout << "Failed to parse JSON data!" << std::endl;
             root["error"] = ERROR_CODE::JSON_ERROR;
             std::string jsonstr = root.toStyledString();

@@ -23,9 +23,17 @@ CServer::~CServer() {
 
 void CServer::HandleAccept(shared_ptr<CSession> new_session, const boost::system::error_code& error) {
 	if (!error) {
-		new_session->Start();
-		lock_guard<mutex> lock(_mutex);
-		_sessions.insert(make_pair(new_session->GetSessionId(), new_session));
+		bool accepted = false;
+		{
+			lock_guard<mutex> lock(_mutex);
+			// 在创建更多异步读取前执行全局连接预算，防止连接洪泛耗尽内存和句柄。
+			if (_sessions.size() < MAX_CHAT_SESSIONS) {
+				_sessions.insert(make_pair(new_session->GetSessionId(), new_session));
+				accepted = true;
+			}
+		}
+		if (accepted) new_session->Start();
+		else new_session->Close();
 	}
 	else {
 		cout << "session accept failed, error is " << error.what() << endl;
@@ -48,7 +56,7 @@ void CServer::ClearSession(std::string session_id) {
 		auto uid = _sessions[session_id]->GetUserId();
 
 		//移除用户和session的关联
-		UserMgr::GetInstance()->RmvUserSession(uid);
+		if (uid > 0) UserMgr::GetInstance()->RmvUserSession(uid);
 	}
 
 	_sessions.erase(session_id);

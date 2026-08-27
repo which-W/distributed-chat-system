@@ -85,4 +85,5 @@ public:
 private:
     StatusGrpcClient();
     std::unique_ptr<StatusConPool> pool_;
+	std::string auth_token_;
 };

@@ -6,6 +6,8 @@ ResetDialog::ResetDialog(QWidget *parent)
 	, ui(new Ui::ResetDialogClass()), _counter(5)
 {
 	ui->setupUi(this);
+	// 重置页与登录、注册页保持一致，默认隐藏新密码，防止肩窥和录屏泄露。
+	ui->pwd_edit->setEchoMode(QLineEdit::Password);
 	ui->err_tip->hide();
    connect(ui->user_edit , &QLineEdit::editingFinished, this, [this]() {
 	   checkUserValid();
@@ -117,7 +119,7 @@ void ResetDialog::on_sure_btn_clicked()
 	QJsonObject json_obj;
 	json_obj["user"] = ui->user_edit->text();
 	json_obj["email"] = ui->email_edit->text();
-	json_obj["passwd"] = xosString(ui->pwd_edit->text());
+	json_obj["passwd"] = ui->pwd_edit->text();
 	json_obj["varifycode"] = ui->varify_edit->text();
 	Httpmgr::Getinstance()->PostHttpRequest(gate_url_prefix + "/reset_pwd",
 		json_obj, Req::ID_RESET_PWD, Modules::RESETMOD);
@@ -139,16 +141,18 @@ bool ResetDialog::checkPassValid()
 {
 	auto pass = ui->pwd_edit->text();
 
-	if (pass.length() < 6 || pass.length() > 15) {
+	// QString::length 按 UTF-16 单元计数；使用 Unicode 码点数与服务端策略保持一致。
+	const auto passwordCodePoints = pass.toUcs4().size();
+	if (passwordCodePoints < 10 || passwordCodePoints > 128) {
 		//提示长度不准确
-		AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为6~15"));
+		AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为10~128"));
 		return false;
 	}
 
 	// 创建一个正则表达式对象，按照上述密码要求
 	// 这个正则表达式解释：
 	// ^[a-zA-Z0-9!@#$%^&*]{6,15}$ 密码长度至少6，可以是字母、数字和特定的特殊字符
-	QRegularExpression regExp("^[a-zA-Z0-9!@#$%^&*.]{6,15}$");
+	QRegularExpression regExp("^[^\\s]{10,128}$");
 	bool match = regExp.match(pass).hasMatch();
 	if (!match) {
 		//提示字符非法
@@ -223,7 +227,6 @@ void ResetDialog::initHandlers()
 		}
 		auto email = jsonObj["email"].toString();
 		showTip(tr("验证码已发送到邮箱，注意查收"), true);
-		qDebug() << "email is " << email;
 		});
 
 	//注册注册用户回包逻辑
@@ -235,7 +238,5 @@ void ResetDialog::initHandlers()
 		}
 		auto email = jsonObj["email"].toString();
 		showTip(tr("重置成功,点击返回登录"), true);
-		qDebug() << "email is " << email;
-		qDebug() << "user uuid is " << jsonObj["uuid"].toString();
 		});
 }

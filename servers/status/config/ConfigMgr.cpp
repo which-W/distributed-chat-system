@@ -41,6 +41,7 @@ ConfigMgr::ConfigMgr(){
 	override_value("Mysql", "Passwd", "CHAT_MYSQL_PASSWORD");
 	override_value("Mysql", "User", "CHAT_MYSQL_USER");
 	override_value("Mysql", "Schema", "CHAT_MYSQL_SCHEMA");
+	override_value("InternalRpc", "GateToken", "CHAT_GATE_STATUS_TOKEN");
 
 }
 

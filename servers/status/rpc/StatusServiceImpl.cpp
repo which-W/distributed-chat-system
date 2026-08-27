@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cctype>
 #include <stdexcept>
+#include "InternalRpcAuth.h"
 
 std::string generate_unique_string() {
 	// 创建UUID对象
@@ -20,6 +21,12 @@ std::string generate_unique_string() {
 
 Status StatusServiceImpl::GetChatServer(ServerContext* context, const GetChatServerReq* request, GetChatServerRsp* reply)
 {
+	const auto auth = chat::internal_rpc::authorize(
+		*context, ConfigMgr::Inst()["InternalRpc"]["GateToken"]);
+	if (!auth.ok()) return auth;
+	if (request->uid() <= 0) {
+		return Status(grpc::StatusCode::INVALID_ARGUMENT, "uid must be positive");
+	}
 	std::string prefix("StatusServer has received :  ");
 	const auto server = getChatServer();
 	if (!server.has_value()) {
@@ -32,7 +39,6 @@ Status StatusServiceImpl::GetChatServer(ServerContext* context, const GetChatSer
 	reply->set_tls_server_name(server->tls_server_name);
 	reply->set_error(ErrorCodes::Success);
 	reply->set_token(generate_unique_string());
-	std::cout << request->uid() << std::endl;
 	if (!insertToken(request->uid(), reply->token(), server->name)) {
 		reply->set_error(ErrorCodes::RPCFailed);
 		reply->clear_token();

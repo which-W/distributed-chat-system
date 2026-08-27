@@ -51,7 +51,7 @@ void ChatUserWid::updateLastMsg(std::vector<std::shared_ptr<TextChatData>> msgs)
       QString last_msg = "";
     for (auto& msg : msgs) {
         last_msg = msg->_msg_content;
-        _user_info->_chat_msgs.push_back(msg);
+		AppendBoundedChatMessage(_user_info->_chat_msgs, msg);
     }
 
     _user_info->_last_msg = last_msg;

@@ -37,6 +37,8 @@ public:
 
     Status NotifyTextChatMsg(::grpc::ServerContext* context,
         const TextChatMsgReq* request, TextChatMsgRsp* response) override;
+	Status NotifyFileAvailable(::grpc::ServerContext* context,
+		const message::FileAvailableReq* request, message::FileAvailableRsp* response) override;
 
     bool GetBaseInfo(std::string base_key, int uid, std::shared_ptr<UserInfo>& userinfo);
 

@@ -26,8 +26,8 @@ class LogicSystem : public Singleton<LogicSystem>
 	friend class Singleton<LogicSystem>;
 public:
 	~LogicSystem();
-	void PostMsgToQueue(std::shared_ptr<LogicNode> msg);
-	void PostMsgToFileQue(std::shared_ptr <LogicNode> msg, int index);
+	bool PostMsgToQueue(std::shared_ptr<LogicNode> msg);
+	bool PostMsgToFileQue(std::shared_ptr <LogicNode> msg, int index);
 	void SetServer(std::shared_ptr<CServer> pserver);
 private:
 	LogicSystem();

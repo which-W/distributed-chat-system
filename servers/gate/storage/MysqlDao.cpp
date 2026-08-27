@@ -1,5 +1,6 @@
 #include "MysqlDao.h"
 #include "PasswordHasher.h"
+#include "PasswordUpgradeGuard.h"
 #include <sodium.h>
 #include <vector>
 
@@ -12,11 +13,39 @@ MysqlDao::MysqlDao()
     const auto& schema = cfg["Mysql"]["Schema"];
     const auto& user = cfg["Mysql"]["User"];
     pool_.reset(new MySqlPool(host + ":" + port, user, pwd, schema, 5));
+    EnsurePasswordSchemeColumn();
     MigrateLegacyPasswords();
 }
 
 MysqlDao::~MysqlDao() {
     pool_->Close();
+}
+
+void MysqlDao::EnsurePasswordSchemeColumn()
+{
+    auto con = pool_->getConnection();
+    if (con == nullptr) {
+        throw std::runtime_error("password scheme migration failed: database unavailable");
+    }
+    Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+    try {
+        try {
+            // 首次升级时，已有账户都来自旧客户端预哈希协议，因此默认标记为 legacy。
+            std::unique_ptr<sql::Statement> add(con->_con->createStatement());
+            add->executeUpdate("ALTER TABLE user ADD COLUMN password_scheme VARCHAR(32) "
+                "NOT NULL DEFAULT 'legacy_client_sha256'");
+        }
+        catch (const sql::SQLException& error) {
+            if (error.getErrorCode() != 1060) throw;
+        }
+        // 新注册账户保存原始口令的 Argon2id；显式默认值避免再次误走兼容分支。
+        std::unique_ptr<sql::Statement> set_default(con->_con->createStatement());
+        set_default->executeUpdate(
+            "ALTER TABLE user ALTER password_scheme SET DEFAULT 'argon2id_raw'");
+    }
+    catch (const sql::SQLException& error) {
+        throw std::runtime_error(std::string("password scheme migration failed: ") + error.what());
+    }
 }
 
 void MysqlDao::MigrateLegacyPasswords()
@@ -246,7 +275,8 @@ bool MysqlDao::UpdatePwd(const std::string& name, const std::string& newpwd)
         }
         const auto password_hash = chat::security::PasswordHasher::hash(newpwd);
         // 准备查询语句
-        std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement("UPDATE user SET pwd = ? WHERE name = ?"));
+        std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement(
+            "UPDATE user SET pwd = ?, password_scheme = 'argon2id_raw' WHERE name = ?"));
         // 绑定参数
         pstmt->setString(2, name);
         pstmt->setString(1, password_hash);
@@ -275,35 +305,45 @@ bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserIn
             return false;
         }
         // 准备SQL语句
-        std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement("SELECT name,uid,pwd FROM user WHERE email = ?"));
+        std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement(
+            "SELECT name,uid,pwd,password_scheme FROM user WHERE email = ?"));
         pstmt->setString(1, email); // 将email替换掉
         // 执行查询
         std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
         if (!res->next()) {
             return false;
         }
-        const std::string stored_password = res->getString("pwd");
-        bool password_valid = chat::security::PasswordHasher::verify(pwd, stored_password);
-        const bool legacy_plaintext = !chat::security::PasswordHasher::isEncodedHash(stored_password);
-        if (legacy_plaintext) {
-            password_valid = pwd.size() == stored_password.size()
-                && sodium_memcmp(pwd.data(), stored_password.data(), pwd.size()) == 0;
-        }
-        if (!password_valid) {
+        const std::string stored_hash = res->getString("pwd");
+        const std::string stored_scheme = res->getString("password_scheme");
+        const auto verification = chat::security::PasswordHasher::verifyCredential(
+            pwd, stored_hash, stored_scheme);
+        if (!verification.valid) {
             return false;
         }
 
-        if (legacy_plaintext || chat::security::PasswordHasher::needsRehash(stored_password)) {
-            const auto upgraded_hash = chat::security::PasswordHasher::hash(pwd);
-            std::unique_ptr<sql::PreparedStatement> upgrade(
-                con->_con->prepareStatement("UPDATE user SET pwd = ? WHERE uid = ?"));
-            upgrade->setString(1, upgraded_hash);
-            upgrade->setInt(2, res->getInt("uid"));
-            upgrade->executeUpdate();
+        const int uid = res->getInt("uid");
+        const bool upgrade_applied = chat::security::ApplyPasswordUpgradeIfCurrent(
+            verification, stored_hash, stored_scheme,
+            [&con, uid](const std::string& upgraded_hash,
+                const std::string& expected_hash, const std::string& expected_scheme) {
+                // 使用二进制比较绕过数据库默认的不区分大小写排序规则，确保 CAS 精确匹配。
+                std::unique_ptr<sql::PreparedStatement> upgrade(
+                    con->_con->prepareStatement("UPDATE user SET pwd = ?, "
+                        "password_scheme = 'argon2id_raw' WHERE uid = ? "
+                        "AND BINARY pwd = BINARY ? AND password_scheme = ?"));
+                upgrade->setString(1, upgraded_hash);
+                upgrade->setInt(2, uid);
+                upgrade->setString(3, expected_hash);
+                upgrade->setString(4, expected_scheme);
+                return upgrade->executeUpdate();
+            });
+        if (!upgrade_applied) {
+            // 读取后凭据已被重置或并发迁移，本次登录不能覆盖较新的口令。
+            return false;
         }
         userInfo.name = res->getString("name");
         userInfo.email = email;
-        userInfo.uid = res->getInt("uid");
+        userInfo.uid = uid;
         userInfo.pwd.clear();
         return true;
     }

@@ -7,6 +7,7 @@
 #include "ConfigMgr.h"
 #include "ChatServiceImp.h"
 #include "GrpcTlsSupport.h"
+#include "InternalRpcAuth.h"
 bool bstop = false;
 std::condition_variable cond_quit;
 std::mutex mutex_quit;
@@ -39,6 +40,9 @@ int main()
 		pointer_server->StartTimer();
 
 		//定义一个GrpcServer
+		chat::internal_rpc::validate_server_configuration(
+			cfg["SelfServer"]["Host"], cfg["InternalRpc"]["PeerToken"],
+			cfg["GrpcTLS"]["Mode"]);
 		std::string server_address(cfg["SelfServer"]["Host"] + ":" + cfg["SelfServer"]["RPCPort"]);
 		ChatServiceImp service;
 		grpc::ServerBuilder builder;

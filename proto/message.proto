@@ -51,7 +51,20 @@ service ChatService {
   rpc SendChatMsg(SendChatMsgReq) returns (SendChatMsgRsp);
   rpc NotifyAuthFriend(AuthFriendReq) returns (AuthFriendRsp);
   rpc NotifyTextChatMsg(TextChatMsgReq) returns (TextChatMsgRsp);
+  rpc NotifyFileAvailable(FileAvailableReq) returns (FileAvailableRsp);
 }
+
+message FileAvailableReq {
+  string id = 1;
+  int32 fromuid = 2;
+  int32 touid = 3;
+  string name = 4;
+  string mime = 5;
+  uint64 total_size = 6;
+  string sha256 = 7;
+}
+
+message FileAvailableRsp { int32 error = 1; }
 
 message AddFriendReq {
   int32 applyuid = 1;

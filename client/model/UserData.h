@@ -4,6 +4,16 @@
 #include <QJsonArray>
 #include <vector>
 #include <QJsonObject>
+
+inline constexpr std::size_t MAX_CHAT_HISTORY_MESSAGES = 500;
+
+template <typename Message>
+void AppendBoundedChatMessage(std::vector<std::shared_ptr<Message>>& messages,
+    const std::shared_ptr<Message>& message) {
+	// 模型只保留最近消息，避免长会话持续增长；历史持久化应由独立分页存储负责。
+	if (messages.size() >= MAX_CHAT_HISTORY_MESSAGES) messages.erase(messages.begin());
+	messages.push_back(message);
+}
 #include <QString>
 #include <memory>
 #include <QJsonArray>
@@ -170,7 +180,7 @@ struct TextChatMsg {
             auto content = msg_obj["content"].toString();
             auto msgid = msg_obj["msgid"].toString();
             auto msg_ptr = std::make_shared<TextChatData>(msgid, content, fromuid, touid);
-            _chat_msgs.push_back(msg_ptr);
+			AppendBoundedChatMessage(_chat_msgs, msg_ptr);
         }
     }
     int _to_uid;

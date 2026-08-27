@@ -7,3 +7,18 @@ ListenHost = 127.0.0.1
 Port = 8989
 Host = 0.0.0.0
 RPCPort = 50055
+
+[GrpcTLS]
+Mode = mtls
+CACert = /etc/chat/certs/internal-ca.crt
+Cert = /etc/chat/certs/chatserver1.crt
+Key = /etc/chat/certs/chatserver1.key
+
+# 必须通过 CHAT_PEER_RPC_TOKEN 提供高熵、部署独有的节点间凭据。
+[InternalRpc]
+PeerToken =
+
+[FileStorage]
+# 所有 ChatServer 必须挂载同一个受限共享目录；主密钥仅通过环境变量提供。
+Root = /var/lib/distributed-chat/files
+MasterKey =

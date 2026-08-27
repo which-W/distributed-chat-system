@@ -47,4 +47,5 @@ public:
 private:
 	VerifyGrpcClient();
     std::unique_ptr<RPConPool> _pool;
+	std::string auth_token_;
 };

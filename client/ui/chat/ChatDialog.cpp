@@ -643,7 +643,7 @@ void ChatDialog::slot_append_send_chat_msg(std::shared_ptr<TextChatData> msgdata
 
 		//设置信息
 		auto user_info = con_item->GetUserInfo();
-		user_info->_chat_msgs.push_back(msgdata);
+		AppendBoundedChatMessage(user_info->_chat_msgs, msgdata);
 		std::vector<std::shared_ptr<TextChatData>> msg_vec;
 		msg_vec.push_back(msgdata);
 		UserMgr::Getinstance()->AppendFriendChatMsg(_cur_chat_uid, msg_vec);
@@ -709,6 +709,12 @@ void ChatDialog::slot_chat_msg_changed(std::shared_ptr<TextChatMsg> msg)
 	auto* chat_user_wid = new ChatUserWid();
 	//查询好友信息
 	auto fi_ptr = UserMgr::Getinstance()->GetFriendById(msg->_from_uid);
+	// 服务端会执行好友授权；客户端仍需对异常或陈旧通知安全失败，避免空指针崩溃。
+	if (!fi_ptr) {
+		qWarning() << "Ignored message from an unknown sender";
+		delete chat_user_wid;
+		return;
+	}
 	chat_user_wid->SetInfo(fi_ptr);
 	QListWidgetItem* item = new QListWidgetItem;
 	item->setSizeHint(chat_user_wid->sizeHint());

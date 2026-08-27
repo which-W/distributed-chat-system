@@ -1,4 +1,6 @@
 #include "ChatPage.h"
+#include <QFileDialog>
+#include <QFileInfo>
 
 ChatPage::ChatPage(QWidget *parent)
 	: QWidget(parent)
@@ -11,7 +13,15 @@ ChatPage::ChatPage(QWidget *parent)
 	//设置图标样式
 	ui->emo_lb->SetState("normal", "hover", "press", "normal", "hover", "press");
 	ui->file_lb->SetState("normal", "hover", "press", "normal", "hover", "press");
-	connect(ui->send_btn, &QPushButton::clicked, this, &ChatPage::sendMessage);
+	connect(ui->chatEdit, &MessageTextEdit::send, this, &ChatPage::on_send_btn_clicked);
+	connect(ui->file_lb, &ClickLabel::clicked, this, &ChatPage::chooseFile);
+	auto manager=FileTransferManager::Getinstance();
+	connect(manager.get(),&FileTransferManager::transferRegistered,this,[this](const QString& local,const QString& id){
+		auto bubble=_file_bubbles.take(local);if(bubble){bubble->setTransferId(id);_file_bubbles[id]=bubble;}});
+	connect(manager.get(),&FileTransferManager::progressChanged,this,[this](const QString& id,qint64 cur,qint64 total){if(_file_bubbles.contains(id))_file_bubbles[id]->setProgress(cur,total);});
+	connect(manager.get(),&FileTransferManager::transferFinished,this,[this](const QString& id,const QString& path){if(_file_bubbles.contains(id))_file_bubbles[id]->setFinished(path);});
+	connect(manager.get(),&FileTransferManager::transferFailed,this,[this](const QString& id,const QString& reason){if(_file_bubbles.contains(id))_file_bubbles[id]->setFailed(reason);});
+	connect(manager.get(),&FileTransferManager::transferAvailable,this,[this](const QJsonObject& item){if(_user_info&&item["fromuid"].toInt()==_user_info->_uid)appendFileBubble(item,ChatRole::Other,true);});
 }
 
 ChatPage::~ChatPage()
@@ -32,10 +42,39 @@ void ChatPage::SetUserInfo(std::shared_ptr<UserInfo> user_info)
     _user_info = user_info;
     //设置ui界面
     ui->title_lb->setText(_user_info->_name);
+	_file_bubbles.clear();
     ui->chat_data_list->removeAllItem();
     for (auto& msg : user_info->_chat_msgs) {
         AppendChatMsg(msg);
     }
+	for(const auto& file:FileTransferManager::Getinstance()->availableForPeer(user_info->_uid)) {
+		const bool incoming=file["fromuid"].toInt()==user_info->_uid;
+		appendFileBubble(file,incoming?ChatRole::Other:ChatRole::Self,incoming);
+	}
+}
+
+void ChatPage::appendFileBubble(const QJsonObject& metadata,ChatRole role,bool incoming)
+{
+	const auto id=metadata["id"].toString();if(_file_bubbles.contains(id))return;
+	auto* item=new ChatItemBase(role);auto self=UserMgr::Getinstance()->GetUserInfo();
+	if(role==ChatRole::Self){item->setUserName(self->_name);item->setUserIcon(QPixmap(self->_icon));}
+	else{item->setUserName(_user_info?_user_info->_name:QString());item->setUserIcon(QPixmap(_user_info?_user_info->_icon:QString()));}
+	auto* bubble=new FileBubble(metadata,role,incoming,this);item->setWidget(bubble);ui->chat_data_list->appendChatItem(item);_file_bubbles[id]=bubble;
+	connect(bubble,&FileBubble::cancelRequested,FileTransferManager::Getinstance().get(),&FileTransferManager::cancel);
+	connect(bubble,&FileBubble::downloadRequested,this,[this,bubble](const QJsonObject& value){
+		const auto path=QFileDialog::getSaveFileName(this,tr("保存文件"),value["name"].toString());
+		if(!path.isEmpty())FileTransferManager::Getinstance()->startDownload(value,path);
+	});
+}
+
+void ChatPage::chooseFile(QString,ClickLbState)
+{
+	ui->file_lb->ResetNormalState();if(!_user_info)return;
+	const auto path=QFileDialog::getOpenFileName(this,tr("选择要发送的文件"));if(path.isEmpty())return;
+	QFileInfo info(path);QJsonObject metadata{{"id",QUuid::createUuid().toString(QUuid::WithoutBraces)},
+		{"name",info.fileName()},{"total_size",info.size()}};
+	const auto local=FileTransferManager::Getinstance()->startUpload(path,_user_info->_uid);if(local.isEmpty())return;
+	metadata["id"]=local;appendFileBubble(metadata,ChatRole::Self,false);
 }
 
 void ChatPage::AppendChatMsg(std::shared_ptr<TextChatData> msg)

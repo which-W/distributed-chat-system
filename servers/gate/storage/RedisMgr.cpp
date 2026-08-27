@@ -6,8 +6,10 @@ RedisMgr::RedisMgr() {
     auto& gCfgMgr = ConfigMgr::ins();
     auto host = gCfgMgr["Redis"]["Host"];
     auto port = gCfgMgr["Redis"]["Port"];
+    auto user = gCfgMgr["Redis"]["User"];
     auto pwd = gCfgMgr["Redis"]["Passwd"];
-    _con_pool.reset(new RedisConPool(5, host.c_str(), atoi(port.c_str()), pwd.c_str()));
+    // Redis ACL 用户名必须与口令一起传入，不能静默退化为 default 用户认证。
+    _con_pool.reset(new RedisConPool(5, host, atoi(port.c_str()), user, pwd));
 }
 
 RedisMgr::~RedisMgr()
@@ -293,82 +295,6 @@ void RedisMgr::Close()
 {
     _con_pool->Close();
 };
-
-RedisConPool::RedisConPool(size_t pool_size, const char* host, int port, const char* pwd) :
-    _pool_size(pool_size), _host(host), _port(port), _b_stop_(false)
-{
-    for (size_t i = 0; i < _pool_size; i++) {
-        auto* context = redisConnect(host, port);
-        if (context == nullptr || context->err != 0) {
-            if (context != nullptr) {
-                redisFree(context);
-            }
-            continue;
-        }
-        if (pwd != nullptr && pwd[0] != '\0') {
-        auto reply = (redisReply*)redisCommand(context, "AUTH %s", pwd);
-        if (reply->type == REDIS_REPLY_ERROR) {
-            std::cout << "认证失败" << std::endl;
-            //执行成功 释放redisCommand执行后返回的redisReply所占用的内存
-            freeReplyObject(reply);
-            continue;
-        }
-        //执行成功 释放redisCommand执行后返回的redisReply所占用的内存
-        freeReplyObject(reply);
-        std::cout << "认证成功" << std::endl;
-        }
-        //将已经建立好的连接压入队列中
-        _redis_connections.emplace(context);
-
-    }
-
-}
-
-RedisConPool::~RedisConPool()
-{
-    std::lock_guard<std::mutex> lock(_mutex);
-    auto* conn = _redis_connections.front();
-    if (conn) {
-        redisFree(conn);
-    }
-    _redis_connections.pop();
-}
-
-redisContext* RedisConPool::getContext()
-{
-    std::unique_lock<std::mutex> lock(_mutex);
-    // 设置最大等待时间（例如 10 秒）
-    auto timeout = std::chrono::seconds(30);
-    bool ready = _cond.wait_for(lock, timeout, [this]() {
-        return _b_stop_ || !_redis_connections.empty();
-        });
-    //如果停止则直接返回空指针
-    if (!ready) {
-        std::cerr << "获取 Redis 连接超时！" << std::endl;
-        return nullptr;
-    }
-    if (_b_stop_) {
-        return  nullptr;
-    }
-    auto* context = _redis_connections.front();
-    _redis_connections.pop();
-    return context;
-}
-
-void RedisConPool::returnContext(redisContext* context)
-{
-    if (_b_stop_) {
-        return;
-    }
-    _redis_connections.emplace(context);
-    _cond.notify_one();
-}
-
-void RedisConPool::Close()
-{
-    _b_stop_ = true;
-    _cond.notify_all();
-}
 
 RedisMgr::VerificationResult RedisMgr::ConsumeVerificationCode(
     const std::string& email, const std::string& submitted_code, int max_attempts)

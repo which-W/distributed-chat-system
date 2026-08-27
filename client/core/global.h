@@ -17,8 +17,6 @@
 //用来刷新Qss的
 extern std::function<void(QWidget*)> repolish;
 
-extern std::function<QString(QString)> xosString;
-
 extern QString gate_url_prefix;
 extern bool allow_insecure_transport;
 
@@ -44,6 +42,17 @@ enum Req
 	ID_NOTIFY_OFF_LINE_REQ = 1021, //通知用户下线
 	ID_HEART_BEAT_REQ = 1023,      //心跳请求
 	ID_HEARTBEAT_RSP = 1024,       //心跳回复
+	ID_UPLOAD_FILE_REQ = 1025,
+	ID_UPLOAD_FILE_RSP = 1026,
+	ID_UPLOAD_FILE_CHUNK_REQ = 1027,
+	ID_UPLOAD_FILE_CHUNK_RSP = 1028,
+	ID_UPLOAD_FILE_FINISH_REQ = 1029,
+	ID_UPLOAD_FILE_FINISH_RSP = 1030,
+	ID_NOTIFY_FILE_REQ = 1031,
+	ID_DOWNLOAD_FILE_REQ = 1032,
+	ID_DOWNLOAD_FILE_CHUNK = 1033,
+	ID_DOWNLOAD_FILE_DONE = 1034,
+	ID_FILE_TRANSFER_CANCEL = 1035,
 };
 
 enum Modules

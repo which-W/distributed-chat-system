@@ -117,7 +117,10 @@ public:
 	AuthFriendRsp NotifyAuthFriend(std::string server_ip, const AuthFriendReq& req);
 	bool GetBaseInfo(std::string base_key, int uid, std::shared_ptr<UserInfo>& userinfo);
 	TextChatMsgRsp NotifyTextChatMsg(std::string server_ip, const TextChatMsgReq& req, const Json::Value& rtvalue);
+	message::FileAvailableRsp NotifyFileAvailable(
+		std::string server_ip, const message::FileAvailableReq& req);
 private:
 	ChatGrpcClient();
 	std::unordered_map<std::string, std::unique_ptr<ChatConPool>> _pools;
+	std::string _auth_token;
 };

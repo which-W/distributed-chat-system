@@ -7,6 +7,7 @@
 #include <QPainter>
 #include <QStyleOption>
 #include <QTimer>
+#include "UserData.h"
 class ChatView : public QWidget
 {
 	Q_OBJECT

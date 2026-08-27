@@ -35,7 +35,8 @@ bool MysqlMgr::AuthFriendApply(const int& from, const int& to)
 	return _dao.AuthFriendApply(from , to);
 }
 
-bool MysqlMgr::AddFriend(const int& from, const int& to, std::string back_name)
+chat::storage::FriendAcceptanceResult MysqlMgr::AddFriend(
+	const int& from, const int& to, std::string back_name)
 {
 	return _dao.AddFriend(from ,to ,back_name);
 }
@@ -59,3 +60,23 @@ bool MysqlMgr::GetFriendList(int self_id, std::vector<std::shared_ptr<UserInfo>>
 {
 	return _dao.GetFriendList(self_id , user_info);
 }
+
+bool MysqlMgr::AreFriends(int first_uid, int second_uid)
+{
+	return _dao.AreFriends(first_uid, second_uid);
+}
+
+bool MysqlMgr::HasPendingFriendApply(int from_uid, int to_uid)
+{
+	return _dao.HasPendingFriendApply(from_uid, to_uid);
+}
+
+bool MysqlMgr::CreateFileTransfer(const chat::files::TransferRecord& value){return _dao.CreateFileTransfer(value);}
+std::optional<chat::files::TransferRecord> MysqlMgr::GetFileTransfer(const std::string& id){return _dao.GetFileTransfer(id);}
+std::vector<chat::files::TransferRecord> MysqlMgr::GetPendingFileTransfers(int uid){return _dao.GetPendingFileTransfers(uid);}
+bool MysqlMgr::AdvanceFileUpload(const std::string& id,int uid,std::uint64_t from,std::uint64_t to){return _dao.AdvanceFileUpload(id,uid,from,to);}
+bool MysqlMgr::CompleteFileTransfer(const std::string& id,int uid){return _dao.CompleteFileTransfer(id,uid);}
+bool MysqlMgr::MarkFileDownloaded(const std::string& id,int uid){return _dao.MarkFileDownloaded(id,uid);}
+bool MysqlMgr::CancelFileTransfer(const std::string& id,int uid){return _dao.CancelFileTransfer(id,uid);}
+std::vector<std::string> MysqlMgr::GetExpiredFileTransferIds(){return _dao.GetExpiredFileTransferIds();}
+bool MysqlMgr::DeleteFileTransfer(const std::string& id){return _dao.DeleteFileTransfer(id);}
