@@ -1,8 +1,10 @@
 #include "StatusGrpcClient.h"
+#include "InternalRpcAuth.h"
 
 GetChatServerRsp StatusGrpcClient::GetChatServer(int uid)
 {
-    ClientContext context;
+	    ClientContext context;
+	    chat::internal_rpc::authenticate(context, auth_token_);
     GetChatServerRsp reply;
     GetChatServerReq request;
     request.set_uid(uid);
@@ -22,7 +24,8 @@ GetChatServerRsp StatusGrpcClient::GetChatServer(int uid)
 
 LoginRsp StatusGrpcClient::Login(int uid, std::string token)
 {
-    ClientContext context;
+	    ClientContext context;
+	    chat::internal_rpc::authenticate(context, auth_token_);
     LoginRsp reply;
     LoginReq request;
     request.set_uid(uid);
@@ -46,7 +49,9 @@ StatusGrpcClient::StatusGrpcClient()
 {
     auto& gCfgMgr = ConfigMgr::ins();
     std::string host = gCfgMgr["StatusServer"]["Host"];
-    std::string port = gCfgMgr["StatusServer"]["Port"];
+	    std::string port = gCfgMgr["StatusServer"]["Port"];
+	    auth_token_ = gCfgMgr["InternalRpc"]["StatusToken"];
+	    if (auth_token_.empty()) throw std::runtime_error("InternalRpc.StatusToken is required");
     pool_.reset(new StatusConPool(5, host, port, chat::grpc_tls::from_config(gCfgMgr),
         gCfgMgr["StatusServer"]["TLSName"]));
 }

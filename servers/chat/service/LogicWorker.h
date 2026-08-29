@@ -14,7 +14,7 @@ class LogicWorker
 public:
 	LogicWorker();
 	~LogicWorker();
-	void PostTask(std::shared_ptr<LogicNode> task);
+	bool PostTask(std::shared_ptr<LogicNode> task);
 	void RegisterCallBacks();
 private:
 	void task_callback(std::shared_ptr<LogicNode>);

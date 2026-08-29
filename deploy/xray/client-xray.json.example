@@ -1,11 +1,12 @@
 {
+  // 本模板固定使用 Xray 26.6.27；不要与旧版 network/publicKey 字段混用。
   "version": { "min": "26.6.27", "max": "26.6.27" },
   "log": { "loglevel": "warning" },
   "inbounds": [
     {
       "tag": "local-socks",
       "listen": "127.0.0.1",
-      "port": 10808,
+      "port": 10808, // 本机 SOCKS5 端口，Qt Client 的代理端口也应填 10808。
       "protocol": "socks",
       "settings": { "udp": false }
     }
@@ -15,26 +16,56 @@
       "tag": "chat-backup",
       "protocol": "vless",
       "settings": {
-        "address": "REPLACE_WITH_BACKUP_SERVER_IP_OR_DOMAIN",
-        "port": 9443,
-        "id": "REPLACE_WITH_UUID",
+        "address": "REPLACE_WITH_BACKUP_SERVER_IP_OR_DOMAIN", // 服务端公网 IP 或域名。
+        "port": 9443, // 必须与服务端 inbounds.port 一致。
+        "id": "REPLACE_WITH_UUID", // 必须与服务端 users[].id 完全一致。
         "encryption": "none"
       },
       "streamSettings": {
-        "method": "xhttp",
+        "method": "xhttp", // 26.6.27 使用 method；对应旧模板的 network: "xhttp"。
         "security": "reality",
         "realitySettings": {
+          // 必须是服务端 realitySettings.serverNames 中的一项，不是代理服务器域名。
           "serverName": "REPLACE_WITH_SAME_ASN_TARGET",
-          "fingerprint": "chrome",
+          "fingerprint": "chrome", // 使用 uTLS 模拟 Chrome TLS 指纹。
+          // 填 `xray x25519` 与服务端 privateKey 对应输出的 Password（旧版称 Public key）。
           "password": "REPLACE_WITH_REALITY_PASSWORD",
-          "shortId": "REPLACE_WITH_16_HEX_SHORT_ID",
-          "spiderX": "/"
+          "shortId": "REPLACE_WITH_16_HEX_SHORT_ID", // 必须是服务端 shortIds 中的一项。
+          "spiderX": "/" // 爬虫初始路径，可按客户端分别设置。
         },
         "xhttpSettings": {
-          "path": "/REPLACE_WITH_RANDOM_PATH",
+          "path": "/REPLACE_WITH_RANDOM_PATH", // 必须与服务端 xhttpSettings.path 完全一致。
           "mode": "auto"
         }
       }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "blocked",
+      "protocol": "blackhole"
     }
-  ]
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "ip": ["geoip:private"], // 局域网和保留地址不经过代理。
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "ip": ["geoip:cn"], // 中国大陆 IP 直连。
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": ["geosite:cn"], // 中国大陆站点直连。
+        "outboundTag": "direct"
+      }
+    ]
+  }
 }

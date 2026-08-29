@@ -65,7 +65,7 @@ TcpMgr::TcpMgr():_socket(nullptr),_host(""),_transport("tls"),_tls_server_name("
 		}
 		// 读取完整消息体
 		QByteArray messageData = _buffer.left(_message_len);
-		qDebug() << "recive data is :" << messageData;
+		// 网络层只记录消息元数据，严禁把票据、邮箱或聊天正文写入日志。
 		_buffer.remove(0, _message_len); // 移除已处理正文
 		_b_recv_pending = false;// 重置接收状态
 		handleMsg(Req(_message_id), _message_len, messageData); // 处理消息
@@ -172,12 +172,10 @@ void TcpMgr::initHandlers()
 		// 检查转换是否成功
 		if (jsonDoc.isNull()) {
 			qDebug() << "Failed to create QJsonDocument.";
-			qDebug() << "data is " << data;
 			return;
 		}
 
 		QJsonObject jsonObj = jsonDoc.object();
-		qDebug() << "data jsonobj is " << jsonObj;
 
 		if (!jsonObj.contains("error")) {
 			int err = ErrorCode::ERR_JSON;
@@ -230,6 +228,9 @@ void TcpMgr::initHandlers()
 		} else {
 			emit sig_swich_chatdlg();
 		}
+		for (const auto& value : jsonObj["pending_files"].toArray()) {
+			emit sig_file_available(value.toObject());
+		}
 
 		});
 	//搜索用户回包
@@ -241,12 +242,10 @@ void TcpMgr::initHandlers()
 		// 检查转换是否成功
 		if (jsonDoc.isNull()) {
 			qDebug() << "Failed to create QJsonDocument.";
-			qDebug() << "data is " << data;
 			return;
 		}
 
 		QJsonObject jsonObj = jsonDoc.object();
-		qDebug() << "data jsonobj is " << jsonObj;
 
 		if (!jsonObj.contains("error")) {
 			int err = ErrorCode::ERR_JSON;
@@ -277,12 +276,10 @@ void TcpMgr::initHandlers()
 		// 检查转换是否成功
 		if (jsonDoc.isNull()) {
 			qDebug() << "Failed to create QJsonDocument.";
-			qDebug() << "data is " << data;
 			return;
 		}
 
 		QJsonObject jsonObj = jsonDoc.object();
-		qDebug() << "data jsonobj is " << jsonObj;
 
 		if (!jsonObj.contains("error")) {
 			int err = ErrorCode::ERR_JSON;
@@ -307,12 +304,10 @@ void TcpMgr::initHandlers()
 		// 检查转换是否成功
 		if (jsonDoc.isNull()) {
 			qDebug() << "Failed to create QJsonDocument.";
-			qDebug() << "data is " << data;
 			return;
 		}
 
 		QJsonObject jsonObj = jsonDoc.object();
-		qDebug() << "data jsonobj is " << jsonObj;
 
 		if (!jsonObj.contains("error")) {
 			int err = ErrorCode::ERR_JSON;
@@ -352,12 +347,10 @@ void TcpMgr::initHandlers()
 		// 检查转换是否成功
 		if (jsonDoc.isNull()) {
 			qDebug() << "Failed to create QJsonDocument.";
-			qDebug() << "data is " << data;
 			return;
 		}
 
 		QJsonObject jsonObj = jsonDoc.object();
-		qDebug() << "data jsonobj is " << jsonObj;
 
 		if (!jsonObj.contains("error")) {
 			int err = ErrorCode::ERR_JSON;
@@ -388,7 +381,7 @@ void TcpMgr::initHandlers()
 	//收到认证响应数据包
 	_handlers.insert(Req::ID_AUTH_FRIEND_RSP, [this](Req id, int len, QByteArray data) {
 		Q_UNUSED(len);
-		qDebug() << "handle id is " << id << " data is " << data;
+		qDebug() << "handle id is " << id;
 		// 将QByteArray转换为QJsonDocument
 		QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
 
@@ -425,7 +418,7 @@ void TcpMgr::initHandlers()
 
 	_handlers.insert(Req::ID_TEXT_CHAT_MSG_RSP, [this](Req id, int len, QByteArray data) {
 		Q_UNUSED(len);
-		qDebug() << "handle id is " << id << " data is " << data;
+		qDebug() << "handle id is " << id;
 		// 将QByteArray转换为QJsonDocument
 		QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
 
@@ -456,7 +449,7 @@ void TcpMgr::initHandlers()
 
 	_handlers.insert(Req::ID_NOTIFY_TEXT_CHAT_MSG_REQ, [this](Req id, int len, QByteArray data) {
 		Q_UNUSED(len);
-		qDebug() << "handle id is " << id << " data is " << data;
+		qDebug() << "handle id is " << id;
 		// 将QByteArray转换为QJsonDocument
 		QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
 
@@ -488,6 +481,18 @@ void TcpMgr::initHandlers()
 
 	_handlers.insert(Req::ID_HEARTBEAT_RSP, [this](Req, int, QByteArray) {
 		_missed_heartbeats = 0;
+	});
+	const Req fileResponses[] = {Req::ID_UPLOAD_FILE_RSP, Req::ID_UPLOAD_FILE_CHUNK_RSP,
+		Req::ID_UPLOAD_FILE_FINISH_RSP, Req::ID_DOWNLOAD_FILE_CHUNK};
+	for (const auto responseId : fileResponses) {
+		_handlers.insert(responseId, [this](Req id, int, QByteArray data) {
+			const auto document=QJsonDocument::fromJson(data);
+			if(document.isObject()) emit sig_file_frame(id,document.object());
+		});
+	}
+	_handlers.insert(Req::ID_NOTIFY_FILE_REQ,[this](Req,int,QByteArray data){
+		const auto document=QJsonDocument::fromJson(data);
+		if(document.isObject()&&document.object()["error"].toInt()==0)emit sig_file_available(document.object());
 	});
 }
 
@@ -604,7 +609,8 @@ void TcpMgr::slot_send_data(Req reqId, QByteArray data)
 		qWarning() << "Refusing to send chat data before TLS is established";
 		return;
 	}
-	constexpr int maxMessageLength = 2048;
+	const int maxMessageLength = reqId >= Req::ID_UPLOAD_FILE_REQ
+		&& reqId <= Req::ID_FILE_TRANSFER_CANCEL ? 60 * 1024 : 2048;
 	if (data.isEmpty() || data.size() > maxMessageLength) {
 		qWarning() << "Refusing invalid chat payload length:" << data.size();
 		return;
@@ -629,7 +635,7 @@ void TcpMgr::slot_send_data(Req reqId, QByteArray data)
 
 	// 发送数据
 	_socket.write(block);
-	qDebug() << "tcp mgr send byte data is " << block;
+	qDebug() << "tcp send frame id" << reqId << "length" << data.size();
 }
 
 void TcpMgr::slot_disconnect()

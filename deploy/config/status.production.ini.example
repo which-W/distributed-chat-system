@@ -2,6 +2,20 @@
 # Host/Port 保留为本地开发的后备配置；PublicHost/PublicPort
 # 是返回给桌面客户端的公网地址。
 
+[StatusServer]
+Host = 0.0.0.0
+Port = 50051
+
+[GrpcTLS]
+Mode = mtls
+CACert = /etc/chat/certs/internal-ca.crt
+Cert = /etc/chat/certs/status.crt
+Key = /etc/chat/certs/status.key
+
+[InternalRpc]
+# 实际值使用 CHAT_GATE_STATUS_TOKEN 环境变量。
+GateToken =
+
 [chatservers]
 Name = chatserver1,chatserver2
 

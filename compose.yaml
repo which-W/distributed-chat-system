@@ -6,10 +6,10 @@ services:
     environment:
       MYSQL_DATABASE: ${CHAT_MYSQL_SCHEMA:-wgt}
       MYSQL_USER: ${CHAT_MYSQL_USER:-chat}
-      MYSQL_PASSWORD: ${CHAT_MYSQL_PASSWORD:-chat_dev_password}
-      MYSQL_ROOT_PASSWORD: ${CHAT_MYSQL_ROOT_PASSWORD:-root_dev_password}
+      MYSQL_PASSWORD: ${CHAT_MYSQL_PASSWORD:?set CHAT_MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${CHAT_MYSQL_ROOT_PASSWORD:?set CHAT_MYSQL_ROOT_PASSWORD in .env}
     ports:
-      - "${CHAT_MYSQL_PORT:-3306}:3306"
+      - "127.0.0.1:${CHAT_MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
@@ -26,13 +26,13 @@ services:
       - --appendonly
       - "yes"
       - --requirepass
-      - ${CHAT_REDIS_PASSWORD:-chat_dev_password}
+      - ${CHAT_REDIS_PASSWORD:?set CHAT_REDIS_PASSWORD in .env}
     ports:
-      - "${CHAT_REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${CHAT_REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${CHAT_REDIS_PASSWORD:-chat_dev_password}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${CHAT_REDIS_PASSWORD:?set CHAT_REDIS_PASSWORD in .env}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20

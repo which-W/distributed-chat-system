@@ -41,6 +41,9 @@ ConfigMgr::ConfigMgr(){
 	override_value("Mysql", "Passwd", "CHAT_MYSQL_PASSWORD");
 	override_value("Mysql", "User", "CHAT_MYSQL_USER");
 	override_value("Mysql", "Schema", "CHAT_MYSQL_SCHEMA");
+	override_value("InternalRpc", "PeerToken", "CHAT_PEER_RPC_TOKEN");
+	override_value("FileStorage", "Root", "CHAT_FILE_STORAGE_ROOT");
+	override_value("FileStorage", "MasterKey", "CHAT_FILE_STORAGE_KEY");
 
 }
 

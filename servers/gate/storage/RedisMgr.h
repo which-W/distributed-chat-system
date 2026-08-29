@@ -1,28 +1,12 @@
 #pragma once
-#include"const.h"
-#include"Singleton.h"
-#include<hiredis/hiredis.h>
-#include<queue>
-#include<atomic>
-#include"ConfigMgr.h"
-class RedisConPool {
-public:
-    RedisConPool(size_t pool_size, const char* host, int port, const char* pwd );
-    ~RedisConPool();
-    redisContext* getContext();
-    void returnContext(redisContext* context);
-    void Close();
+#include "const.h"
+#include "Singleton.h"
+#include "ConfigMgr.h"
+#include "RedisConnectionPool.h"
+#include <memory>
+#include <string>
 
-
-private:
-    std::atomic<bool>_b_stop_;
-    std::mutex _mutex;
-    std::condition_variable _cond;
-    std::queue<redisContext*> _redis_connections;
-    const char* _host;
-    size_t _pool_size;
-    int _port;
-};
+using RedisConPool = chat::storage::RedisConnectionPool;
 
 class RedisMgr :public Singleton<RedisMgr>,std::enable_shared_from_this<RedisMgr> {
     friend class Singleton<RedisMgr>;

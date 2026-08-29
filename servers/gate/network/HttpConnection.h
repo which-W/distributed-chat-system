@@ -13,7 +13,7 @@ private:
 	void CheckDeadline();
 	void WriteResponse();
 	void HandleReq();
-	void PreParseGetParam();
+	bool PreParseGetParam();
 	tcp::socket _socket;
 	beast::flat_buffer _buffer{ 8192 }; // 8KB buffer
 	http::request<http::dynamic_body> _req; // HTTP request
@@ -25,14 +25,13 @@ private:
 };
 
 // 将十六进制字符转换为数字
-static unsigned char FromHex(unsigned char x)
+static bool FromHex(unsigned char x, unsigned char& value)
 {
-	unsigned char y;
-	if (x >= 'A' && x <= 'Z') y = x - 'A' + 10;
-	else if (x >= 'a' && x <= 'z') y = x - 'a' + 10;
-	else if (x >= '0' && x <= '9') y = x - '0';
-	else assert(0);
-	return y;
+	if (x >= 'A' && x <= 'F') value = x - 'A' + 10;
+	else if (x >= 'a' && x <= 'f') value = x - 'a' + 10;
+	else if (x >= '0' && x <= '9') value = x - '0';
+	else return false;
+	return true;
 }
 
 //char 转为16进制
@@ -69,23 +68,28 @@ static std::string UrlEncode(const std::string& str)
 }
 
 //URLDecode
-static std::string UrlDecode(const std::string& str)
+static bool UrlDecode(const std::string& str, std::string& decoded)
 {
-	std::string strTemp = "";
+	decoded.clear();
+	decoded.reserve(str.size());
 	size_t length = str.length();
 	for (size_t i = 0; i < length; i++)
 	{
 		//还原+为空
-		if (str[i] == '+') strTemp += ' ';
+		if (str[i] == '+') decoded += ' ';
 		//遇到%将后面的两个字符从16进制转为char再拼接
 		else if (str[i] == '%')
 		{
-			assert(i + 2 < length);
-			unsigned char high = FromHex((unsigned char)str[++i]);
-			unsigned char low = FromHex((unsigned char)str[++i]);
-			strTemp += high * 16 + low;
+			// 网络输入不能依赖 assert；短转义或非十六进制字符必须显式失败。
+			if (i + 2 >= length) return false;
+			unsigned char high = 0;
+			unsigned char low = 0;
+			if (!FromHex(static_cast<unsigned char>(str[i + 1]), high)
+				|| !FromHex(static_cast<unsigned char>(str[i + 2]), low)) return false;
+			decoded += static_cast<char>(high * 16 + low);
+			i += 2;
 		}
-		else strTemp += str[i];
+		else decoded += str[i];
 	}
-	return strTemp;
+	return true;
 }

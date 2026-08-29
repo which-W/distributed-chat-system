@@ -15,8 +15,21 @@ public:
 	std::shared_ptr<UserInfo> GetUser(std::string name);
 	bool GetApplyList(int touid, std::vector<std::shared_ptr<ApplyInfo>>& applyList, int begin, int limit = 10);
 	bool GetFriendList(int self_id, std::vector<std::shared_ptr<UserInfo> >& user_info);
+	bool AreFriends(int first_uid, int second_uid);
+	bool HasPendingFriendApply(int from_uid, int to_uid);
 	bool AuthFriendApply(const int& from, const int& to);
-	bool AddFriend(const int& from, const int& to, std::string back_name);
+	chat::storage::FriendAcceptanceResult AddFriend(
+		const int& from, const int& to, std::string back_name);
+	bool CreateFileTransfer(const chat::files::TransferRecord& transfer);
+	std::optional<chat::files::TransferRecord> GetFileTransfer(const std::string& id);
+	std::vector<chat::files::TransferRecord> GetPendingFileTransfers(int receiver_uid);
+	bool AdvanceFileUpload(const std::string& id, int sender_uid,
+		std::uint64_t expected_offset, std::uint64_t new_offset);
+	bool CompleteFileTransfer(const std::string& id, int sender_uid);
+	bool MarkFileDownloaded(const std::string& id, int receiver_uid);
+	bool CancelFileTransfer(const std::string& id, int actor_uid);
+	std::vector<std::string> GetExpiredFileTransferIds();
+	bool DeleteFileTransfer(const std::string& id);
 private:
 	MysqlMgr();
 	MysqlDao  _dao;

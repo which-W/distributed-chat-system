@@ -74,7 +74,8 @@ void LoginDialog::slot_login_btn()
 
 	Enablebtn(false);
 	auto email = ui->user_line_edit->text();
-	auto psw = xosString(ui->psw_line_edit->text());
+	// 发送原始口令给 HTTPS 服务端；服务端会兼容并迁移旧预哈希账户。
+	auto psw = ui->psw_line_edit->text();
 
 	QJsonObject jsonobj;
 	jsonobj["email"] = email;

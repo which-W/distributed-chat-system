@@ -1,7 +1,10 @@
 #include "ChatGrpcClient.h"
+#include "InternalRpcAuth.h"
 
 ChatGrpcClient::ChatGrpcClient() {
     auto& cfg = ConfigMgr::Inst();
+	_auth_token = cfg["InternalRpc"]["PeerToken"];
+	if (_auth_token.empty()) throw std::runtime_error("InternalRpc.PeerToken is required");
     auto server_list = cfg["PeerServer"]["Servers"];
 
     std::vector<std::string> words;
@@ -40,6 +43,7 @@ AddFriendRsp ChatGrpcClient::NotifyAddFriend(std::string server_ip, const AddFri
 
 	auto& pool = find_iter->second;
 	ClientContext context;
+	chat::internal_rpc::authenticate(context, _auth_token);
 	auto stub = pool->Get_connection();
 	Status status = stub->NotifyAddFriend(&context, req, &rsp);
 	Defer defercon([&stub, this, &pool]() {
@@ -72,6 +76,7 @@ AuthFriendRsp ChatGrpcClient::NotifyAuthFriend(std::string server_ip, const Auth
 
 	auto& pool = find_iter->second;
 	ClientContext context;
+	chat::internal_rpc::authenticate(context, _auth_token);
 	auto stub = pool->Get_connection();
 	Status status = stub->NotifyAuthFriend(&context, req, &rsp);
 	Defer defercon([&stub, this, &pool]() {
@@ -152,6 +157,7 @@ TextChatMsgRsp ChatGrpcClient::NotifyTextChatMsg(std::string server_ip, const Te
 
 		auto& pool = find_iter->second;
 		ClientContext context;
+		chat::internal_rpc::authenticate(context, _auth_token);
 		auto stub = pool->Get_connection();
 		Status status = stub->NotifyTextChatMsg(&context, req, &rsp);
 		Defer defercon([&stub, this, &pool]() {
@@ -164,4 +170,20 @@ TextChatMsgRsp ChatGrpcClient::NotifyTextChatMsg(std::string server_ip, const Te
 		}
 
 		return rsp;
+}
+
+message::FileAvailableRsp ChatGrpcClient::NotifyFileAvailable(
+	std::string server_ip, const message::FileAvailableReq& req)
+{
+	message::FileAvailableRsp response;
+	auto found = _pools.find(server_ip);
+	if (found == _pools.end()) { response.set_error(ErrorCodes::RPC_ERROR); return response; }
+	auto& pool = found->second;
+	auto stub = pool->Get_connection();
+	if (!stub) { response.set_error(ErrorCodes::RPC_ERROR); return response; }
+	Defer defer([&stub, &pool]() { pool->Return_connection(std::move(stub)); });
+	ClientContext context;
+	chat::internal_rpc::authenticate(context, _auth_token);
+	if (!stub->NotifyFileAvailable(&context, req, &response).ok()) response.set_error(ErrorCodes::RPC_ERROR);
+	return response;
 }

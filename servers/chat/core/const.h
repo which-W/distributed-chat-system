@@ -25,6 +25,7 @@
 #include <string>
 
 #define MAX_LENGTH 1024*2
+#define MAX_FILE_FRAME_LENGTH 60*1024
 //头部总长度
 #define HEAD_TOTAL_LEN 4
 //头部id长度
@@ -34,6 +35,14 @@
 #define MAX_RECVQUE  1000
 #define MAX_SENDQUE 1000
 #define MAX_MSG_QUEUE_SIZE 3000
+// 聊天 RPC 与 16 位出站帧共享同一组数量/字节预算。
+#define MAX_TEXT_MESSAGES_PER_FRAME 50
+#define MAX_TEXT_CONTENT_BYTES 2048
+#define MAX_TEXT_MESSAGE_ID_BYTES 128
+#define MAX_OUTBOUND_FRAME_BYTES 65535
+// 进程级会话和预认证时间预算，避免未登录连接无限占用资源。
+#define MAX_CHAT_SESSIONS 10000
+#define CHAT_AUTH_TIMEOUT_SECONDS 10
 
 //file文件
 //头部总长度
@@ -99,7 +108,16 @@ enum Msg_ID {
 	ID_HEART_BEAT_REQ = 1023,      //心跳请求
 	ID_HEARTBEAT_RSP = 1024,       //心跳回复
 	ID_UPLOAD_FILE_REQ = 1025,
-	ID_UPLOAD_FILE_RSP = 1026
+	ID_UPLOAD_FILE_RSP = 1026,
+	ID_UPLOAD_FILE_CHUNK_REQ = 1027,
+	ID_UPLOAD_FILE_CHUNK_RSP = 1028,
+	ID_UPLOAD_FILE_FINISH_REQ = 1029,
+	ID_UPLOAD_FILE_FINISH_RSP = 1030,
+	ID_NOTIFY_FILE_REQ = 1031,
+	ID_DOWNLOAD_FILE_REQ = 1032,
+	ID_DOWNLOAD_FILE_CHUNK = 1033,
+	ID_DOWNLOAD_FILE_DONE = 1034,
+	ID_FILE_TRANSFER_CANCEL = 1035
 };
 
 #define USERIPPREFIX  "uip_"
@@ -123,3 +141,7 @@ enum Msg_ID {
 #define LOGIC_WORKER_COUNT 4
 //4个文件工作者
 #define FILE_WORKER_COUNT 4
+
+inline bool IsFileTransferMessage(std::uint16_t id) {
+	return id >= ID_UPLOAD_FILE_REQ && id <= ID_FILE_TRANSFER_CANCEL;
+}

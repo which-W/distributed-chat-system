@@ -3,6 +3,7 @@ add_executable(chat_server
     config/ConfigMgr.cpp
     files/FileSystem.cpp
     files/FileWorker.cpp
+    files/EncryptedFileStore.cpp
     network/CServer.cpp
     network/CSession.cpp
     network/MsgNode.cpp

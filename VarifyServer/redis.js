@@ -94,6 +94,13 @@ end
 if hourly > tonumber(ARGV[4]) then
   return 3
 end
+local global_hourly = redis.call('INCR', KEYS[5])
+if global_hourly == 1 then
+  redis.call('EXPIRE', KEYS[5], ARGV[3])
+end
+if global_hourly > tonumber(ARGV[6]) then
+  return 4
+end
 redis.call('SET', KEYS[2], '1', 'EX', ARGV[2])
 redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[5])
 redis.call('DEL', KEYS[4])
@@ -105,20 +112,25 @@ async function IssueVerificationCode(email, code, options = {}) {
     const hourlyWindowSeconds = options.hourlyWindowSeconds ?? 3600
     const hourlyLimit = options.hourlyLimit ?? 10
     const codeTtlSeconds = options.codeTtlSeconds ?? 300
+	// 单邮箱限制不能阻止轮换地址；全局预算保护 SMTP 配额和发件信誉。
+	const globalHourlyLimit = options.globalHourlyLimit
+		?? Number(process.env.VARIFY_GLOBAL_HOURLY_LIMIT || 500)
     const keys = verificationKeys(email)
     try {
         const result = await RedisCli.eval(
             ISSUE_CODE_SCRIPT,
-            4,
+			5,
             keys.code,
             keys.cooldown,
             keys.hourly,
             keys.attempts,
+			'verification_global_hourly',
             code,
             cooldownSeconds,
             hourlyWindowSeconds,
             hourlyLimit,
             codeTtlSeconds,
+			globalHourlyLimit,
         )
         return Number(result)
     } catch (error) {

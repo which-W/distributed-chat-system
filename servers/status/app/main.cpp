@@ -15,8 +15,12 @@
 #include <boost/asio.hpp>
 #include "StatusServiceImpl.h"
 #include "GrpcTlsSupport.h"
+#include "InternalRpcAuth.h"
 void RunServer() {
     auto& cfg = ConfigMgr::Inst();
+    chat::internal_rpc::validate_server_configuration(
+        cfg["StatusServer"]["Host"], cfg["InternalRpc"]["GateToken"],
+        cfg["GrpcTLS"]["Mode"]);
     std::string server_address(cfg["StatusServer"]["Host"] + ":" + cfg["StatusServer"]["Port"]);
     StatusServiceImpl service;
     grpc::ServerBuilder builder;

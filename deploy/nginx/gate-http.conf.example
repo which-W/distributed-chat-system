@@ -4,6 +4,13 @@
 limit_req_zone $binary_remote_addr zone=gate_api_limit:10m rate=10r/s;
 
 server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
     listen 80;
     listen [::]:80;
     server_name api.chat.example.com;
@@ -13,7 +20,8 @@ server {
     }
 
     location / {
-        return 301 https://$host$request_uri;
+        # 使用固定规范域名，不能把客户端 Host 反射到 Location。
+        return 301 https://api.chat.example.com$request_uri;
     }
 }
 

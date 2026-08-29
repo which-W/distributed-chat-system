@@ -4,3 +4,14 @@
 [GateServer]
 Host = 127.0.0.1
 Port = 8080
+
+[GrpcTLS]
+Mode = mtls
+CACert = /etc/chat/certs/internal-ca.crt
+Cert = /etc/chat/certs/gate.crt
+Key = /etc/chat/certs/gate.key
+
+# 实际值使用 CHAT_GATE_STATUS_TOKEN / CHAT_GATE_VARIFY_TOKEN 环境变量。
+[InternalRpc]
+StatusToken =
+VarifyToken =

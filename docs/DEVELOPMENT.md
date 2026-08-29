@@ -36,7 +36,8 @@ npm test
 
 ## 本地开发用 MySQL 和 Redis
 
-Compose 中的默认凭据只允许用于本地开发，不要在共享环境或生产环境中复用。
+Compose 只把数据库端口绑定到回环地址，并要求显式设置本地凭据。复制示例后，
+请把所有 `replace-with-...` 占位值替换为各自独立的随机值；不要在共享环境或生产环境复用。
 
 ```sh
 cp .env.compose.example .env

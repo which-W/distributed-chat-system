@@ -1,8 +1,10 @@
 #include "VerifyGrpcClient.h"
 #include "GrpcTlsSupport.h"
+#include "InternalRpcAuth.h"
 
 message::GetVarifyRsp VerifyGrpcClient::GetVarifyCode(std::string email) {
-    ClientContext context;
+	    ClientContext context;
+	    chat::internal_rpc::authenticate(context, auth_token_);
     message::GetVarifyRsp response;
     message::GetVarifyReq request;
     request.set_email(email);
@@ -24,7 +26,9 @@ message::GetVarifyRsp VerifyGrpcClient::GetVarifyCode(std::string email) {
 VerifyGrpcClient::VerifyGrpcClient() {
     auto& GCPCfgMgr = ConfigMgr::ins();
     std::string host = GCPCfgMgr["VarifyServer"]["Host"];
-    std::string port = GCPCfgMgr["VarifyServer"]["Port"];
+	    std::string port = GCPCfgMgr["VarifyServer"]["Port"];
+	    auth_token_ = GCPCfgMgr["InternalRpc"]["VarifyToken"];
+	    if (auth_token_.empty()) throw std::runtime_error("InternalRpc.VarifyToken is required");
     _pool.reset(new RPConPool(5, host, port));
 }
 

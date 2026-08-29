@@ -6,6 +6,31 @@
 #include <json/reader.h>
 #include "RedisMgr.h"
 #include "MysqlMgr.h"
+#include "ConfigMgr.h"
+#include "InternalRpcAuth.h"
+
+namespace {
+
+bool validProfileNotification(const AddFriendReq& request) {
+	return request.name().size() <= 128 && request.nick().size() <= 128
+		&& request.desc().size() <= 1024 && request.icon().size() <= 2048;
+}
+
+bool validTextNotification(const TextChatMsgReq& request) {
+	if (request.textmsgs_size() <= 0
+		|| request.textmsgs_size() > MAX_TEXT_MESSAGES_PER_FRAME) return false;
+	std::size_t aggregate_bytes = 0;
+	for (const auto& message : request.textmsgs()) {
+		if (message.msgcontent().size() > MAX_TEXT_CONTENT_BYTES
+			|| message.msgid().size() > MAX_TEXT_MESSAGE_ID_BYTES) return false;
+		aggregate_bytes += message.msgcontent().size() + message.msgid().size();
+		// JSON 转义可能扩大正文，因此原始字段预算显著小于最终 16 位帧上限。
+		if (aggregate_bytes > 8192) return false;
+	}
+	return true;
+}
+
+} // namespace
 
 ChatServiceImp::~ChatServiceImp()
 {
@@ -18,6 +43,14 @@ ChatServiceImp::ChatServiceImp()
 
 Status ChatServiceImp::NotifyAddFriend(ServerContext* context, const AddFriendReq* request, AddFriendRsp* reply)
 {
+	const auto auth = chat::internal_rpc::authorize(
+		*context, ConfigMgr::Inst()["InternalRpc"]["PeerToken"]);
+	if (!auth.ok()) return auth;
+	if (request->applyuid() <= 0 || request->touid() <= 0
+		|| !validProfileNotification(*request)
+		|| !MysqlMgr::GetInstance()->HasPendingFriendApply(request->applyuid(), request->touid())) {
+		return Status(grpc::StatusCode::PERMISSION_DENIED, "friend application is not pending");
+	}
 	//查找是否有相关的用户
 	auto touid = request->touid();
 	auto session = UserMgr::GetInstance()->GetSession(touid);
@@ -52,6 +85,13 @@ Status ChatServiceImp::NotifyAddFriend(ServerContext* context, const AddFriendRe
 
 Status ChatServiceImp::NotifyAuthFriend(ServerContext* context, const AuthFriendReq* request, AuthFriendRsp* reply)
 {
+	const auto auth = chat::internal_rpc::authorize(
+		*context, ConfigMgr::Inst()["InternalRpc"]["PeerToken"]);
+	if (!auth.ok()) return auth;
+	if (request->fromuid() <= 0 || request->touid() <= 0
+		|| !MysqlMgr::GetInstance()->AreFriends(request->fromuid(), request->touid())) {
+		return Status(grpc::StatusCode::PERMISSION_DENIED, "friend relation is not accepted");
+	}
 	//查找用户是否在本服务器
 	auto touid = request->touid();
 	auto fromuid = request->fromuid();
@@ -95,6 +135,14 @@ Status ChatServiceImp::NotifyAuthFriend(ServerContext* context, const AuthFriend
 
 Status ChatServiceImp::NotifyTextChatMsg(::grpc::ServerContext* context, const TextChatMsgReq* request, TextChatMsgRsp* reply)
 {
+		const auto auth = chat::internal_rpc::authorize(
+			*context, ConfigMgr::Inst()["InternalRpc"]["PeerToken"]);
+		if (!auth.ok()) return auth;
+		if (request->fromuid() <= 0 || request->touid() <= 0
+			|| !validTextNotification(*request)
+			|| !MysqlMgr::GetInstance()->AreFriends(request->fromuid(), request->touid())) {
+			return Status(grpc::StatusCode::PERMISSION_DENIED, "users are not accepted friends");
+		}
 		//查找用户是否在本服务器
 		auto touid = request->touid();
 		auto session = UserMgr::GetInstance()->GetSession(touid);
@@ -122,6 +170,9 @@ Status ChatServiceImp::NotifyTextChatMsg(::grpc::ServerContext* context, const T
 		rtvalue["text_array"] = text_array;
 
 		std::string return_str = rtvalue.toStyledString();
+		if (return_str.size() > MAX_OUTBOUND_FRAME_BYTES) {
+			return Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "chat frame is too large");
+		}
 
 		session->Send(return_str, ID_NOTIFY_TEXT_CHAT_MSG_REQ);
 		return Status::OK;
@@ -168,6 +219,30 @@ bool ChatServiceImp::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<
 		RedisMgr::GetInstance()->Set(base_key, redis_root.toStyledString());
 	}
 	return true;
+}
+
+Status ChatServiceImp::NotifyFileAvailable(::grpc::ServerContext* context,
+	const message::FileAvailableReq* request, message::FileAvailableRsp* response)
+{
+	const auto auth = chat::internal_rpc::authorize(*context,
+		ConfigMgr::Inst()["InternalRpc"]["PeerToken"]);
+	if (!auth.ok()) return auth;
+	const auto stored = MysqlMgr::GetInstance()->GetFileTransfer(request->id());
+	if (!stored || stored->sender_uid != request->fromuid() || stored->receiver_uid != request->touid()
+		|| stored->status != chat::files::TransferStatus::Available) {
+		return Status(grpc::StatusCode::PERMISSION_DENIED, "file notification is not available");
+	}
+	response->set_error(ErrorCodes::ERROR_CODE_OK);
+	if (auto session = UserMgr::GetInstance()->GetSession(request->touid())) {
+		// 跨节点请求只携带定位信息；展示字段必须以数据库中的可信元数据为准。
+		Json::Value value;
+		value["error"]=0;value["id"]=stored->id;value["fromuid"]=stored->sender_uid;
+		value["touid"]=stored->receiver_uid;value["name"]=stored->original_name;
+		value["mime"]=stored->mime_type;value["total_size"]=Json::UInt64(stored->total_size);
+		value["sha256"]=stored->sha256;
+		session->Send(value.toStyledString(), ID_NOTIFY_FILE_REQ);
+	}
+	return Status::OK;
 }
 
 void ChatServiceImp::RegisterServer(std::shared_ptr<CServer> pServer)

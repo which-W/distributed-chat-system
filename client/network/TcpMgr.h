@@ -57,4 +57,6 @@ signals:
     void sig_auth_rsp(std::shared_ptr<AuthRsp>);
     void sig_text_chat_msg(std::shared_ptr<TextChatMsg>);
     void sig_connection_state(const QString& message, bool connected);
+    void sig_file_frame(Req id, const QJsonObject& value);
+    void sig_file_available(const QJsonObject& metadata);
 };

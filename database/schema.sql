@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS user (
   name VARCHAR(64) NOT NULL,
   email VARCHAR(255) NOT NULL,
   pwd VARCHAR(255) NOT NULL,
+  password_scheme VARCHAR(32) NOT NULL DEFAULT 'argon2id_raw',
   nick VARCHAR(64) NOT NULL DEFAULT '',
   `desc` VARCHAR(255) NOT NULL DEFAULT '',
   sex TINYINT NOT NULL DEFAULT 0,
@@ -49,6 +50,27 @@ CREATE TABLE IF NOT EXISTS friend (
   CONSTRAINT fk_friend_target FOREIGN KEY (friend_id) REFERENCES user (uid)
 ) ENGINE = InnoDB;
 
+CREATE TABLE IF NOT EXISTS file_transfer (
+  id CHAR(36) NOT NULL,
+  sender_uid INT NOT NULL,
+  receiver_uid INT NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(128) NOT NULL,
+  total_size BIGINT UNSIGNED NOT NULL,
+  uploaded_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  sha256 CHAR(64) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'uploading',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMP NULL,
+  downloaded_at TIMESTAMP NULL,
+  expires_at TIMESTAMP NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_file_receiver (receiver_uid, status, expires_at),
+  KEY idx_file_expiry (expires_at),
+  CONSTRAINT fk_file_sender FOREIGN KEY (sender_uid) REFERENCES user(uid),
+  CONSTRAINT fk_file_receiver FOREIGN KEY (receiver_uid) REFERENCES user(uid)
+) ENGINE = InnoDB;
+
 DROP PROCEDURE IF EXISTS reg_user;
 DELIMITER //
 CREATE PROCEDURE reg_user(
@@ -65,8 +87,8 @@ BEGIN
   ELSE
     UPDATE user_id SET id = LAST_INSERT_ID(id + 1);
     SET next_uid = LAST_INSERT_ID();
-    INSERT INTO user (uid, name, email, pwd, nick)
-    VALUES (next_uid, p_name, p_email, p_pwd, p_name);
+    INSERT INTO user (uid, name, email, pwd, password_scheme, nick)
+    VALUES (next_uid, p_name, p_email, p_pwd, 'argon2id_raw', p_name);
     SET p_result = next_uid;
   END IF;
 END //

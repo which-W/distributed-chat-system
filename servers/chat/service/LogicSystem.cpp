@@ -1,4 +1,5 @@
 #include "LogicSystem.h"
+#include <charconv>
 
 LogicSystem::LogicSystem() :_b_stop(false) {
 	RegisterCallBacks();
@@ -12,72 +13,50 @@ LogicSystem::LogicSystem() :_b_stop(false) {
 void LogicSystem::DealMsg() {
     for (;;) {
         std::unique_lock<std::mutex> unique_lk(_mutex);
-        //判断队列为空则用条件变量阻塞等待，并释放锁
-        while (_msg_que.empty() && !_b_stop) {
-            _consume.wait(unique_lk);
-        }
-        //判断是否为关闭状态，把所有逻辑执行完后则退出循环
-        if (_b_stop) {
-            while (!_msg_que.empty()) {
-                auto msg_node = _msg_que.front();
-                cout << "recv_msg id  is " << msg_node->_recvnode->GetRecMsgNodeID() << endl;
-	    auto call_back_iter = _func_callback.find(msg_node->_recvnode->GetRecMsgNodeID());
-                if (call_back_iter == _func_callback.end()) {
-                    _msg_que.pop();
-			continue;
-		}
-		if (msg_node->_recvnode->GetRecMsgNodeID() != MSG_CHAT_LOGIN
-			&& msg_node->_session->GetUserId() <= 0) {
-			msg_node->_session->Close();
-			_msg_que.pop();
-			continue;
-		}
-                call_back_iter->second(msg_node->_session, msg_node->_recvnode->GetRecMsgNodeID(),
-                    std::string(msg_node->_recvnode->_data, msg_node->_recvnode->_cur_len));
-                _msg_que.pop();
-            }
-            break;
-        }
-        //如果没有停服，且说明队列中有数据
+		_consume.wait(unique_lk, [this] { return _b_stop || !_msg_que.empty(); });
+		if (_b_stop && _msg_que.empty()) break;
         auto msg_node = _msg_que.front();
+		_msg_que.pop();
+		unique_lk.unlock();
+
         auto call_back_iter = _func_callback.find(msg_node->_recvnode->GetRecMsgNodeID());
-        if (call_back_iter == _func_callback.end()) {
-            _msg_que.pop();
-            continue;
-        }
+		if (call_back_iter == _func_callback.end()) continue;
 		if (msg_node->_recvnode->GetRecMsgNodeID() != MSG_CHAT_LOGIN
 			&& msg_node->_session->GetUserId() <= 0) {
 			msg_node->_session->Close();
-			_msg_que.pop();
 			continue;
 		}
-		std::cout << "recv_msg id  is " << msg_node->_recvnode->GetRecMsgNodeID() << std::endl;
-		std::cout << "recv_msg data is " << std::string(msg_node->_recvnode->_data, msg_node->_recvnode->_cur_len) << std::endl;
-		//调用HandHead和HandleMsg的回调函数
-        call_back_iter->second(msg_node->_session, msg_node->_recvnode->GetRecMsgNodeID(),
-            std::string(msg_node->_recvnode->_data, msg_node->_recvnode->_cur_len));
-        _msg_que.pop();
+		try {
+			call_back_iter->second(msg_node->_session, msg_node->_recvnode->GetRecMsgNodeID(),
+				std::string(msg_node->_recvnode->_data, msg_node->_recvnode->_cur_len));
+		}
+		catch (const std::exception& error) {
+			std::cerr << "Rejected malformed chat message: " << error.what() << std::endl;
+			msg_node->_session->Close();
+		}
+		catch (...) {
+			std::cerr << "Rejected malformed chat message" << std::endl;
+			msg_node->_session->Close();
+		}
      }
 }
 
-void LogicSystem::PostMsgToQueue(shared_ptr<LogicNode> msg) {
+bool LogicSystem::PostMsgToQueue(shared_ptr<LogicNode> msg) {
     std::unique_lock<std::mutex> unique_lk(_mutex);
-    _msg_que.push(msg);
-    //由0变为1则发送通知信号
-    if (_msg_que.size() == 1) {
-        unique_lk.unlock();
-        _consume.notify_one();
-    }
-    //超过队列最大值通知并return
-	if (_msg_que.size() > MAX_MSG_QUEUE_SIZE) {
-		std::cout << "LogicSystem msg queue size is full, size is " << MAX_MSG_QUEUE_SIZE << std::endl;
-		return;
+	if (_b_stop || _msg_que.size() >= MAX_MSG_QUEUE_SIZE) {
+		std::cout << "LogicSystem msg queue is full" << std::endl;
+		return false;
 	}
+    _msg_que.push(msg);
+	unique_lk.unlock();
+	_consume.notify_one();
+	return true;
 }
 
-void LogicSystem::PostMsgToFileQue(shared_ptr<LogicNode>msg, int index)
+bool LogicSystem::PostMsgToFileQue(shared_ptr<LogicNode>msg, int index)
 {
-    _workers[index]->PostTask(msg);
+	if (index < 0 || static_cast<std::size_t>(index) >= _workers.size()) return false;
+    return _workers[index]->PostTask(msg);
 }
 
 void LogicSystem::SetServer(std::shared_ptr<CServer> pserver)
@@ -132,8 +111,11 @@ bool LogicSystem::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<Use
 void LogicSystem::LoginChatCallback(shared_ptr<CSession> session, short msg_id, string msg_data) {
     Json::Reader reader;
     Json::Value root;
-    reader.parse(msg_data, root);
-    std::cout << "user login uid is " << root["uid"].asInt() << endl;
+	if (!reader.parse(msg_data, root) || !root.isObject()
+		|| !root["uid"].isInt() || !root["token"].isString()) {
+		session->Close();
+		return;
+	}
 	auto uid = root["uid"].asInt();
     auto token = root["token"].asString();
     Json::Value rtvalue;
@@ -153,7 +135,8 @@ void LogicSystem::LoginChatCallback(shared_ptr<CSession> session, short msg_id, 
 			return;
 	    }
 	Json::Value ticket;
-	if (!reader.parse(ticket_value, ticket)
+	if (!reader.parse(ticket_value, ticket) || !ticket.isObject()
+		|| !ticket["uid"].isInt() || !ticket["server"].isString()
 		|| ticket["uid"].asInt() != uid
 		|| ticket["server"].asString() != ConfigMgr::Inst()["SelfServer"]["Name"]) {
 			rtvalue["error"] = ErrorCodes::TokenInvalid;
@@ -211,6 +194,19 @@ void LogicSystem::LoginChatCallback(shared_ptr<CSession> session, short msg_id, 
         rtvalue["friend_list"].append(obj);
     }
 
+    // 临时附件元数据随登录恢复，文件本体仍需接收方点击后按权限分片下载。
+    for (const auto& file : MysqlMgr::GetInstance()->GetPendingFileTransfers(uid)) {
+        Json::Value obj;
+        obj["id"] = file.id;
+        obj["fromuid"] = file.sender_uid;
+        obj["touid"] = file.receiver_uid;
+        obj["name"] = file.original_name;
+        obj["mime"] = file.mime_type;
+        obj["total_size"] = Json::UInt64(file.total_size);
+        obj["sha256"] = file.sha256;
+        rtvalue["pending_files"].append(obj);
+    }
+
 
     auto server_name = ConfigMgr::Inst().GetValue("SelfServer", "Name");
 
@@ -229,11 +225,15 @@ void LogicSystem::LoginChatCallback(shared_ptr<CSession> session, short msg_id, 
 
 void LogicSystem::SearchUserCallback(std::shared_ptr<CSession> session, short msg_id, string msg_data)
 {
-    Json::Reader reader;
-    Json::Value root;
-	reader.parse(msg_data, root);
+	Json::Reader reader;
+	Json::Value root;
+	if (!reader.parse(msg_data, root) || !root.isObject() || !root["uid"].isString()) {
+		Json::Value invalid;
+		invalid["error"] = ErrorCodes::JSON_ERROR;
+		session->Send(invalid.toStyledString(), ID_SEARCH_USER_RSP);
+		return;
+	}
     auto uid_str = root["uid"].asString();
-    std::cout << "user SearchInfo uid is  " << uid_str << endl;
 	Json::Value rtvalue;
 	Defer defer([this, &rtvalue, session]() {
 		std::string return_str = rtvalue.toStyledString();
@@ -260,7 +260,13 @@ void LogicSystem::AddFriendCallback(std::shared_ptr<CSession> session, short msg
 {
 	Json::Reader reader;
     Json::Value root;
-	reader.parse(msg_data, root);
+	if (!reader.parse(msg_data, root) || !root.isObject()
+		|| !root["touid"].isInt()
+		|| (root.isMember("applyname") && !root["applyname"].isString())
+		|| (root.isMember("bakname") && !root["bakname"].isString())) {
+		session->Close();
+		return;
+	}
 	    auto uid = session->GetUserId();
 	auto applyname = root["applyname"].asString();
     auto bakname = root["bakname"].asString();
@@ -348,7 +354,11 @@ void LogicSystem::AuthFriendCallback(std::shared_ptr<CSession> session, short ms
 {
     Json::Reader reader;
     Json::Value root;
-    reader.parse(msg_data, root);
+	if (!reader.parse(msg_data, root) || !root.isObject()
+		|| !root["touid"].isInt() || !root["back"].isString()) {
+		session->Close();
+		return;
+	}
 
 	    auto uid = session->GetUserId();
     auto touid = root["touid"].asInt();
@@ -382,14 +392,13 @@ void LogicSystem::AuthFriendCallback(std::shared_ptr<CSession> session, short ms
 		return;
 	}
 
-    //先更新数据库
-    if (!MysqlMgr::GetInstance()->AuthFriendApply(uid, touid)) {
+    // 申请状态与双向好友记录必须在同一事务内提交，同时保留原有业务错误码。
+    const auto acceptance = MysqlMgr::GetInstance()->AddFriend(uid, touid, back_name);
+    if (acceptance == chat::storage::FriendAcceptanceResult::PendingMissing) {
 		rtvalue["error"] = ErrorCodes::UidInvalid;
 		return;
 	}
-
-    //更新数据库添加好友
-    if (!MysqlMgr::GetInstance()->AddFriend(uid, touid, back_name)) {
+    if (acceptance == chat::storage::FriendAcceptanceResult::StorageError) {
 		rtvalue["error"] = ErrorCodes::RPC_ERROR;
 		return;
 	}
@@ -450,7 +459,12 @@ void LogicSystem::TextChatMsgCallback(std::shared_ptr<CSession> session, short m
 {
     Json::Reader reader;
     Json::Value root;
-    reader.parse(msg_data, root);
+	if (!reader.parse(msg_data, root) || !root.isObject()
+		|| !root["touid"].isInt() || !root["text_array"].isArray()
+		|| root["text_array"].size() == 0 || root["text_array"].size() > 50) {
+		session->Close();
+		return;
+	}
 
 	    auto uid = session->GetUserId();
     auto touid = root["touid"].asInt();
@@ -470,6 +484,17 @@ void LogicSystem::TextChatMsgCallback(std::shared_ptr<CSession> session, short m
 	if (touid <= 0 || touid == uid) {
 		rtvalue["error"] = ErrorCodes::UidInvalid;
 		return;
+	}
+	// 服务端在任何路由或跨节点转发前执行好友授权，客户端 UI 不能替代该边界。
+	if (!MysqlMgr::GetInstance()->AreFriends(uid, touid)) {
+		rtvalue["error"] = ErrorCodes::UidInvalid;
+		return;
+	}
+	for (const auto& text : arrays) {
+		if (!text.isObject() || !text["content"].isString() || !text["msgid"].isString()) {
+			rtvalue["error"] = ErrorCodes::JSON_ERROR;
+			return;
+		}
 	}
 
 
@@ -503,8 +528,6 @@ void LogicSystem::TextChatMsgCallback(std::shared_ptr<CSession> session, short m
     for (const auto& txt_obj : arrays) {
         auto content = txt_obj["content"].asString();
         auto msgid = txt_obj["msgid"].asString();
-        std::cout << "content is " << content << std::endl;
-        std::cout << "msgid is " << msgid << std::endl;
         auto* text_msg = text_msg_req.add_textmsgs();
         text_msg->set_msgid(msgid);
         text_msg->set_msgcontent(content);
@@ -517,6 +540,7 @@ void LogicSystem::TextChatMsgCallback(std::shared_ptr<CSession> session, short m
 
 bool LogicSystem::isPureDigit(const std::string& str)
 {
+	if (str.empty()) return false;
     for (char c : str) {
         if (!std::isdigit(c)) {
             return false;
@@ -528,6 +552,12 @@ bool LogicSystem::isPureDigit(const std::string& str)
 void LogicSystem::GetUserByUid(std::string uid_str, Json::Value& rtvalue)
 {
     rtvalue["error"] = ErrorCodes::ERROR_CODE_OK;
+	int uid = 0;
+	const auto parsed = std::from_chars(uid_str.data(), uid_str.data() + uid_str.size(), uid);
+	if (parsed.ec != std::errc{} || parsed.ptr != uid_str.data() + uid_str.size() || uid <= 0) {
+		rtvalue["error"] = ErrorCodes::UidInvalid;
+		return;
+	}
 
     std::string base_key = USER_BASE_INFO + uid_str;
 
@@ -540,7 +570,6 @@ void LogicSystem::GetUserByUid(std::string uid_str, Json::Value& rtvalue)
         reader.parse(info_str, root);
         auto uid = root["uid"].asInt();
         auto name = root["name"].asString();
-        auto email = root["email"].asString();
         auto nick = root["nick"].asString();
         auto desc = root["desc"].asString();
         auto sex = root["sex"].asInt();
@@ -549,7 +578,6 @@ void LogicSystem::GetUserByUid(std::string uid_str, Json::Value& rtvalue)
 
         rtvalue["uid"] = uid;
         rtvalue["name"] = name;
-        rtvalue["email"] = email;
         rtvalue["nick"] = nick;
         rtvalue["desc"] = desc;
         rtvalue["sex"] = sex;
@@ -557,8 +585,7 @@ void LogicSystem::GetUserByUid(std::string uid_str, Json::Value& rtvalue)
         return;
     }
 
-    auto uid = std::stoi(uid_str);
-    //redis中没有则查询mysql
+	//redis中没有则查询mysql
     //查询数据库
     std::shared_ptr<UserInfo> user_info = nullptr;
     user_info = MysqlMgr::GetInstance()->GetUser(uid);
@@ -582,7 +609,6 @@ void LogicSystem::GetUserByUid(std::string uid_str, Json::Value& rtvalue)
     //返回数据
     rtvalue["uid"] = user_info->uid;
     rtvalue["name"] = user_info->name;
-    rtvalue["email"] = user_info->email;
     rtvalue["nick"] = user_info->nick;
     rtvalue["desc"] = user_info->desc;
     rtvalue["sex"] = user_info->sex;
@@ -614,7 +640,6 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue)
         reader.parse(info_str, root);
         auto uid = root["uid"].asInt();
         auto name = root["name"].asString();
-        auto email = root["email"].asString();
         auto nick = root["nick"].asString();
         auto desc = root["desc"].asString();
         auto sex = root["sex"].asInt();
@@ -622,7 +647,6 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue)
 
         rtvalue["uid"] = uid;
         rtvalue["name"] = name;
-        rtvalue["email"] = email;
         rtvalue["nick"] = nick;
         rtvalue["desc"] = desc;
         rtvalue["sex"] = sex;
@@ -652,7 +676,6 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue)
     //返回数据
     rtvalue["uid"] = user_info->uid;
     rtvalue["name"] = user_info->name;
-    rtvalue["email"] = user_info->email;
     rtvalue["nick"] = user_info->nick;
     rtvalue["desc"] = user_info->desc;
     rtvalue["sex"] = user_info->sex;
@@ -681,7 +704,11 @@ void LogicSystem::HeartbeatCallback(std::shared_ptr<CSession> session, short, st
 }
 
 LogicSystem::~LogicSystem() {
-    _b_stop = true;
+	{
+		// 停止状态必须在队列锁保护下发布，保证等待谓词读取到一致状态。
+		std::lock_guard<std::mutex> lock(_mutex);
+		_b_stop = true;
+	}
     _consume.notify_one();
     _worker_thread.join();
 }

@@ -7,8 +7,10 @@ RedisMgr::RedisMgr() {
 	auto& gCfgMgr = ConfigMgr::Inst();
 	auto host = gCfgMgr["Redis"]["Host"];
 	auto port = gCfgMgr["Redis"]["Port"];
+	auto user = gCfgMgr["Redis"]["User"];
 	auto pwd = gCfgMgr["Redis"]["Passwd"];
-	_con_pool.reset(new RedisConPool(5, host.c_str(), atoi(port.c_str()), pwd.c_str()));
+	// 共享连接池统一处理 ACL 认证、重连和停止生命周期。
+	_con_pool.reset(new RedisConPool(5, host, atoi(port.c_str()), user, pwd));
 }
 
 RedisMgr::~RedisMgr() {

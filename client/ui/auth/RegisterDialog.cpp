@@ -111,7 +111,6 @@ void RegisterDialog::initHandlers()
 		}
 		auto email = jsonObj["email"].toString();
 		showTip(tr("用户注册成功"), true);
-		qDebug() << "email is " << email;
 		changeRegisterWidgepage();
 		});
 }
@@ -163,7 +162,8 @@ void RegisterDialog::slot_reg_finished()
 	QJsonObject json_obj;
 	json_obj["user"] = ui->user_edit->text();
 	json_obj["email"] = ui->email_edit->text();
-	json_obj["passwd"] = xosString(ui->psw_edit->text());
+	// HTTPS 仅负责传输保护；口令强度校验和 Argon2id 哈希统一由服务端执行。
+	json_obj["passwd"] = ui->psw_edit->text();
 	json_obj["sex"] = 0;
 
 	int randomValue = QRandomGenerator::global()->bounded(100); // 生成0到99之间的随机整数
@@ -171,7 +171,7 @@ void RegisterDialog::slot_reg_finished()
 
 	json_obj["icon"] = heads[head_i];
 	json_obj["nick"] = ui->user_edit->text();
-	json_obj["confirm"] = xosString(ui->psw_edit_2->text());
+	json_obj["confirm"] = ui->psw_edit_2->text();
 	json_obj["varifycode"] = ui->code_edit->text();
 	Httpmgr::Getinstance()->PostHttpRequest(gate_url_prefix + "/user_register",
 		json_obj, Req::ID_REQ_USER, Modules::MOD_REGISTER);
@@ -246,15 +246,17 @@ bool RegisterDialog::checkPassValid()
 {
 	auto pass = ui->psw_edit->text();
 	auto pass_confirm = ui->psw_edit_2->text();
-	if (pass.length() < 6 || pass.length() > 15) {
+	// QString::length 按 UTF-16 单元计数；使用 Unicode 码点数与服务端策略保持一致。
+	const auto passwordCodePoints = pass.toUcs4().size();
+	if (passwordCodePoints < 10 || passwordCodePoints > 128) {
 		//提示长度不准确
-		AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为6~15"));
+		AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为10~128"));
 		return false;
 	}
 	// 创建一个正则表达式对象，按照上述密码要求
 	// 这个正则表达式解释：
 	// ^[a-zA-Z0-9!@#$%^&*]{6,15}$ 密码长度至少6，可以是字母、数字和特定的特殊字符
-	QRegularExpression regExp("^[a-zA-Z0-9!@#$%^&*]{6,15}$");
+	QRegularExpression regExp("^[^\\s]{10,128}$");
 	bool match = regExp.match(pass).hasMatch();
 	if (!match) {
 		//提示字符非法

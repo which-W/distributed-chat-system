@@ -58,4 +58,44 @@ bool PasswordHasher::needsRehash(const std::string& encoded_hash) {
                                           crypto_pwhash_MEMLIMIT_MODERATE) != 0;
 }
 
+std::string PasswordHasher::legacyClientSha256(const std::string& password) {
+    ensureSodiumInitialized();
+    std::array<unsigned char, crypto_hash_sha256_BYTES> digest{};
+    crypto_hash_sha256(digest.data(), reinterpret_cast<const unsigned char*>(password.data()),
+                       password.size());
+    std::array<char, crypto_hash_sha256_BYTES * 2 + 1> encoded{};
+    sodium_bin2hex(encoded.data(), encoded.size(), digest.data(), digest.size());
+    return encoded.data();
+}
+
+PasswordVerificationResult PasswordHasher::verifyCredential(const std::string& raw_password,
+                                                            const std::string& stored_hash,
+                                                            const std::string& password_scheme) {
+    PasswordVerificationResult result;
+    const bool raw_scheme = password_scheme == "argon2id_raw";
+    const bool legacy_scheme = password_scheme == "legacy_client_sha256";
+    if (!raw_scheme && !legacy_scheme) {
+        return result;
+    }
+
+    const std::string candidate = legacy_scheme ? legacyClientSha256(raw_password) : raw_password;
+    const bool legacy_plaintext = !isEncodedHash(stored_hash);
+    if (legacy_plaintext) {
+        result.valid = candidate.size() == stored_hash.size() &&
+                       sodium_memcmp(candidate.data(), stored_hash.data(), candidate.size()) == 0;
+    } else {
+        result.valid = verify(candidate, stored_hash);
+    }
+    if (!result.valid) {
+        return result;
+    }
+
+    result.upgrade_required = legacy_plaintext || legacy_scheme || needsRehash(stored_hash);
+    if (result.upgrade_required) {
+        // 升级结果始终基于原始口令，完成后不再走客户端 SHA-256 兼容分支。
+        result.upgraded_hash = hash(raw_password);
+    }
+    return result;
+}
+
 } // namespace chat::security
