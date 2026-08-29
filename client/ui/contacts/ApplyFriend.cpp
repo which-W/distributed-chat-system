@@ -118,8 +118,8 @@ void ApplyFriend::ShowMoreLabel()
     ui->lb_list->setFixedWidth(325);
     _tip_cur_point = QPoint(5, 5);
     auto next_point = _tip_cur_point;
-    int textWidth;
-    int textHeight;
+    int textWidth = 0;
+    int textHeight = QFontMetrics(ui->lb_list->font()).height();
     //重拍现有的label
     for (auto& added_key : _add_label_keys) {
         auto added_lb = _add_labels[added_key];

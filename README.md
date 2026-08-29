@@ -58,17 +58,6 @@ servers/
 
 Qt 客户端统一放在 `client/` 下：`app/` 是入口和主窗口，`core/` 是全局定义，`model/` 是数据模型与用户状态，`network/` 是 HTTP/TCP 通信，`ui/` 按 `auth / chat / contacts / common` 拆分界面组件，`resources/` 保存 QRC、图片和 QSS。客户端构建规则位于 `client/CMakeLists.txt`。
 
-## 前置条件
-
-- CMake 3.24+
-- Ninja
-- C++17 编译器（Linux 推荐 GCC 11+ 或 Clang 14+）
-- vcpkg
-- Node.js 18+
-- Redis 6+
-- MySQL 8+
-- 构建桌面客户端时额外安装受维护的 Qt 6；Windows 公网 TLS 不再推荐 Qt 5.12
-
 依赖由根目录的 `vcpkg.json` 声明，不再使用任何写死的本机库路径。
 
 ## Linux 服务器构建

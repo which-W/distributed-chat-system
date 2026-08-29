@@ -71,6 +71,23 @@ bool MysqlMgr::HasPendingFriendApply(int from_uid, int to_uid)
 	return _dao.HasPendingFriendApply(from_uid, to_uid);
 }
 
+bool MysqlMgr::PersistTextMessages(const std::vector<chat::messages::TextMessage>& messages)
+{
+	return _dao.PersistTextMessages(messages);
+}
+
+std::vector<chat::messages::TextMessage> MysqlMgr::GetPendingTextMessages(
+	int receiver_uid, int limit)
+{
+	return _dao.GetPendingTextMessages(receiver_uid, limit);
+}
+
+bool MysqlMgr::AcknowledgeTextMessages(int receiver_uid, int sender_uid,
+	const std::vector<std::string>& client_message_ids)
+{
+	return _dao.AcknowledgeTextMessages(receiver_uid, sender_uid, client_message_ids);
+}
+
 bool MysqlMgr::CreateFileTransfer(const chat::files::TransferRecord& value){return _dao.CreateFileTransfer(value);}
 std::optional<chat::files::TransferRecord> MysqlMgr::GetFileTransfer(const std::string& id){return _dao.GetFileTransfer(id);}
 std::vector<chat::files::TransferRecord> MysqlMgr::GetPendingFileTransfers(int uid){return _dao.GetPendingFileTransfers(uid);}

@@ -4,6 +4,7 @@
 #include "MysqlConnectionPool.h"
 #include "FriendAcceptanceTransaction.h"
 #include "FileTransferTypes.h"
+#include "ChatMessageTypes.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -32,6 +33,11 @@ public:
 	// 私聊授权必须由服务端查询双方好友关系，不能依赖客户端好友列表。
 	bool AreFriends(int first_uid, int second_uid);
 	bool HasPendingFriendApply(int from_uid, int to_uid);
+	bool PersistTextMessages(const std::vector<chat::messages::TextMessage>& messages);
+	std::vector<chat::messages::TextMessage> GetPendingTextMessages(
+		int receiver_uid, int limit = 200);
+	bool AcknowledgeTextMessages(int receiver_uid, int sender_uid,
+		const std::vector<std::string>& client_message_ids);
 	bool CreateFileTransfer(const chat::files::TransferRecord& transfer);
 	std::optional<chat::files::TransferRecord> GetFileTransfer(const std::string& id);
 	std::vector<chat::files::TransferRecord> GetPendingFileTransfers(int receiver_uid);
@@ -44,5 +50,6 @@ public:
 	bool DeleteFileTransfer(const std::string& id);
 private:
 	void EnsureFileTransferTable();
+	void EnsureChatMessageTable();
 	std::unique_ptr<MySqlPool> pool_;
 };

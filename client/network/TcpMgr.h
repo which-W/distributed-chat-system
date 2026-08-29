@@ -2,6 +2,7 @@
 #include <QSslSocket>
 #include <QSslCipher>
 #include <QTimer>
+#include <QSet>
 #include "Singleton.h"
 #include "global.h"
 #include "usermgr.h"
@@ -34,6 +35,7 @@ private:
     bool _b_recv_pending;
     quint16 _message_id;
     quint16 _message_len;
+	QSet<QString> _received_message_keys;
     void initHandlers();
     void handleMsg(Req id, int len, QByteArray data);
     void beginConnection();

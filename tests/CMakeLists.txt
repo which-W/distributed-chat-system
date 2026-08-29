@@ -30,6 +30,12 @@ if(CHAT_BUILD_SERVERS)
         CHAT_SCHEMA_FILE="${PROJECT_SOURCE_DIR}/database/schema.sql")
     add_test(NAME schema_security COMMAND schema_security_test)
 
+	add_executable(chat_protocol_test chat_protocol_test.cpp)
+	target_include_directories(chat_protocol_test PRIVATE
+		"${PROJECT_SOURCE_DIR}/common" "${PROJECT_SOURCE_DIR}/servers/chat/core")
+	target_link_libraries(chat_protocol_test PRIVATE chat_server_dependencies)
+	add_test(NAME chat_protocol COMMAND chat_protocol_test)
+
     add_executable(encrypted_file_store_test encrypted_file_store_test.cpp
         "${PROJECT_SOURCE_DIR}/servers/chat/files/EncryptedFileStore.cpp")
     target_include_directories(encrypted_file_store_test PRIVATE

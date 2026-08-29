@@ -1,15 +1,21 @@
 #include "VerifyGrpcClient.h"
+#include "GrpcClientDeadline.h"
 #include "GrpcTlsSupport.h"
 #include "InternalRpcAuth.h"
 
 message::GetVarifyRsp VerifyGrpcClient::GetVarifyCode(std::string email) {
 	    ClientContext context;
+	chat::grpc_client::setDeadline(context, chat::grpc_client::kVerificationRpcTimeout);
 	    chat::internal_rpc::authenticate(context, auth_token_);
     message::GetVarifyRsp response;
     message::GetVarifyReq request;
     request.set_email(email);
 
     auto _stub = _pool->getConnection();
+	if (!_stub) {
+		response.set_error(ERROR_CODE::RPC_ERROR);
+		return response;
+	}
     Status status = _stub->GetVarifyCode(&context, request, &response);
 
     if (status.ok()) {

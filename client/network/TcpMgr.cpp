@@ -35,8 +35,13 @@ TcpMgr::TcpMgr():_socket(nullptr),_host(""),_transport("tls"),_tls_server_name("
 				emit sig_con_success(false);
 			}
 		});
-	connect(&_socket, &QTcpSocket::readyRead, this, [this]() {
-		_buffer.append(_socket.readAll());	// 读取接收到的数据
+		connect(&_socket, &QTcpSocket::readyRead, this, [this]() {
+			_buffer.append(_socket.readAll());	// 读取接收到的数据
+			if (_buffer.size() > 256 * 1024) {
+				qWarning() << "Chat receive buffer exceeded its protocol budget";
+				_socket.abort();
+				return;
+			}
 
 
 		QDataStream stream(&_buffer, QIODevice::ReadOnly);
@@ -52,10 +57,24 @@ TcpMgr::TcpMgr():_socket(nullptr),_host(""),_transport("tls"),_tls_server_name("
 				// 读取消息头
 				 // 标记读取前位置
 				stream.device()->seek(0); // 保证从头读
-				stream >> _message_id >> _message_len;
+					stream >> _message_id >> _message_len;
 
-				_buffer.remove(0, sizeof(quint16) * 2);
-				_b_recv_pending = true;
+					_buffer.remove(0, sizeof(quint16) * 2);
+					const Req responseId = static_cast<Req>(_message_id);
+					if (!_handlers.contains(responseId) || _message_len == 0) {
+						qWarning() << "Rejected invalid chat frame header" << _message_id << _message_len;
+						_socket.abort();
+						return;
+					}
+					const bool fileFrame = responseId == Req::ID_DOWNLOAD_FILE_CHUNK;
+					const int allowedLength = fileFrame ? 60 * 1024
+						: (responseId == Req::ID_CHAT_LOGIN_RSP ? 65535 : 16 * 1024);
+					if (_message_len > allowedLength) {
+						qWarning() << "Rejected oversized chat frame" << _message_id << _message_len;
+						_socket.abort();
+						return;
+					}
+					_b_recv_pending = true;
 
 				// 输出读取的数据
 				qDebug() << "Message ID:" << _message_id << ", Length:" << _message_len;
@@ -473,11 +492,49 @@ void TcpMgr::initHandlers()
 			return;
 		}
 
-		qDebug() << "Receive Text Chat Notify Success ";
-		auto msg_ptr = std::make_shared<TextChatMsg>(jsonObj["fromuid"].toInt(),
-			jsonObj["touid"].toInt(), jsonObj["text_array"].toArray());
-		emit sig_text_chat_msg(msg_ptr);
-		});
+			const int fromUid = jsonObj["fromuid"].toInt();
+			const int toUid = jsonObj["touid"].toInt();
+			const QJsonArray messages = jsonObj["text_array"].toArray();
+			if (fromUid <= 0 || toUid != UserMgr::Getinstance()->GetUid()
+				|| messages.isEmpty() || messages.size() > 50) {
+				_socket.abort();
+				return;
+			}
+
+			QJsonArray freshMessages;
+			QJsonArray ackBatch;
+			auto flushAcks = [this, fromUid, &ackBatch]() {
+				if (ackBatch.isEmpty()) return;
+				const QJsonObject ack{{"fromuid", fromUid}, {"msgids", ackBatch}};
+				slot_send_data(Req::ID_TEXT_CHAT_MSG_ACK,
+					QJsonDocument(ack).toJson(QJsonDocument::Compact));
+				ackBatch = QJsonArray();
+			};
+			for (const auto& value : messages) {
+				const auto object = value.toObject();
+				const QString id = object["msgid"].toString();
+				if (id.isEmpty() || !object["content"].isString()) {
+					_socket.abort();
+					return;
+				}
+				const QString key = QString::number(fromUid) + ':' + id;
+				if (!_received_message_keys.contains(key)) {
+					_received_message_keys.insert(key);
+					freshMessages.append(object);
+				}
+				ackBatch.append(id);
+				const QJsonObject candidate{{"fromuid", fromUid}, {"msgids", ackBatch}};
+				if (QJsonDocument(candidate).toJson(QJsonDocument::Compact).size() > 1800) {
+					ackBatch.removeLast();
+					flushAcks();
+					ackBatch.append(id);
+				}
+			}
+			if (!freshMessages.isEmpty()) {
+				emit sig_text_chat_msg(std::make_shared<TextChatMsg>(fromUid, toUid, freshMessages));
+			}
+			flushAcks();
+			});
 
 	_handlers.insert(Req::ID_HEARTBEAT_RSP, [this](Req, int, QByteArray) {
 		_missed_heartbeats = 0;
@@ -508,6 +565,7 @@ void TcpMgr::handleMsg(Req id, int len, QByteArray data)
 
 void TcpMgr::slot_tcp_connect(ServerInfo info)
 {
+	_received_message_keys.clear();
 	_manual_disconnect = false;
 	_reconnecting = false;
 	_authenticated = false;

@@ -12,7 +12,7 @@
 
 CSession::CSession(boost::asio::io_context& io_context, CServer* server):
 	_socket(io_context), _server(server), _b_close(false),_b_head_parse(false), _user_uid(0),
-	_auth_timer(io_context){
+	_auth_timer(io_context), _idle_timer(io_context){
 	boost::uuids::uuid  a_uuid = boost::uuids::random_generator()();
 	_session_id = boost::uuids::to_string(a_uuid);
 	_recv_head_node = make_shared<MsgNode>(HEAD_TOTAL_LEN);
@@ -37,6 +37,7 @@ void CSession::SetUserId(int uid)
 	if (uid > 0) {
 		// 票据验证成功后取消预认证截止时间，避免已认证连接被旧定时器误关闭。
 		_auth_timer.cancel();
+		TouchActivity();
 	}
 }
 
@@ -57,62 +58,85 @@ void CSession::Start(){
 	AsyncReadHead(HEAD_TOTAL_LEN);
 }
 
-void CSession::Send(std::string msg, short msgid) {
+bool CSession::Send(std::string msg, short msgid) {
 	// 帧头只有 16 位长度；任何窄化前都必须硬拒绝，避免负长度转巨量分配。
 	if (msg.size() > std::numeric_limits<std::uint16_t>::max()) {
 		Close();
-		return;
+		return false;
 	}
+	if (_b_close.load() || !_socket.is_open()) return false;
 	std::lock_guard<std::mutex> lock(_send_lock);
 	int send_que_size = _send_que.size();
     if (send_que_size >= MAX_SENDQUE) {
 		std::cout << "session: " << _session_id << " send que fulled, size is " << MAX_SENDQUE << endl;
-		return;
+		return false;
 	}
 
 	_send_que.push(make_shared<SendNode>(msg.c_str(), msg.length(), msgid));
 	if (send_que_size > 0) {
-		return;
+		return true;
 	}
 	auto& msgnode = _send_que.front();
 	boost::asio::async_write(_socket, boost::asio::buffer(msgnode->_data, msgnode->_total_len),
 		std::bind(&CSession::HandleWrite, this, std::placeholders::_1, SharedSelf()));
+	return true;
 }
 
-void CSession::Send(char* msg, std::size_t max_length, short msgid) {
+bool CSession::Send(char* msg, std::size_t max_length, short msgid) {
 	if (max_length > std::numeric_limits<std::uint16_t>::max()) {
 		Close();
-		return;
+		return false;
 	}
+	if (_b_close.load() || !_socket.is_open()) return false;
 	std::lock_guard<std::mutex> lock(_send_lock);
 	int send_que_size = _send_que.size();
 	if (send_que_size >= MAX_SENDQUE) {
 		std::cout << "session: " << _session_id << " send que fulled, size is " << MAX_SENDQUE << endl;
-		return;
+		return false;
 	}
 
 	_send_que.push(make_shared<SendNode>(msg, max_length, msgid));
 	if (send_que_size>0) {
-		return;
+		return true;
 	}
 	auto& msgnode = _send_que.front();
 	boost::asio::async_write(_socket, boost::asio::buffer(msgnode->_data, msgnode->_total_len),
 		std::bind(&CSession::HandleWrite, this, std::placeholders::_1, SharedSelf()));
+	return true;
 }
 
 void CSession::Close() {
 	{
 		std::lock_guard<std::mutex> lock(_session_mtx);
-		if (_b_close) return;
-		_b_close = true;
+		if (_b_close.exchange(true)) return;
 		boost::system::error_code ignored;
 		_auth_timer.cancel();
+		_idle_timer.cancel();
 		_socket.cancel(ignored);
 		_socket.shutdown(tcp::socket::shutdown_both, ignored);
 		_socket.close(ignored);
 	}
 	// 所有错误和超时统一走幂等清理路径，释放会话表中的 shared_ptr。
 	_server->ClearSession(_session_id);
+}
+
+void CSession::TouchActivity()
+{
+	auto self = shared_from_this();
+	boost::asio::post(_socket.get_executor(), [self]() { self->ScheduleIdleTimeout(); });
+}
+
+void CSession::ScheduleIdleTimeout()
+{
+	if (_b_close.load() || GetUserId() <= 0) return;
+	_idle_timer.expires_after(std::chrono::seconds(CHAT_IDLE_TIMEOUT_SECONDS));
+	auto self = shared_from_this();
+	_idle_timer.async_wait([self](const boost::system::error_code& error) {
+		if (!error) {
+			std::cerr << "Chat session idle timeout" << std::endl;
+			self->Close();
+		}
+	});
 }
 
 std::shared_ptr<CSession>CSession::SharedSelf() {
@@ -145,7 +169,8 @@ void CSession::AsyncReadBody(int total_len)
 
 			memcpy(_recv_msg_node->_data , _data , bytes_transfered);
 			_recv_msg_node->_cur_len += bytes_transfered;
-			_recv_msg_node->_data[_recv_msg_node->_total_len] = '\0';
+				_recv_msg_node->_data[_recv_msg_node->_total_len] = '\0';
+				TouchActivity();
 			// 登录前只允许登录帧进入逻辑层，任何业务帧都立即释放连接。
 			if (_recv_msg_node->GetRecMsgNodeID() != MSG_CHAT_LOGIN && GetUserId() <= 0) {
 				Close();
@@ -211,7 +236,7 @@ void CSession::AsyncReadHead(int total_len)
 			//网络字节序转化为本地字节序
 			msg_id = boost::asio::detail::socket_ops::network_to_host_short(msg_id);
 			//id非法
-			if (msg_id == 0 || msg_id > MAX_LENGTH) {
+				if (!IsClientRequestMessage(msg_id)) {
 				std::cout << "invalid msg_id is " << msg_id << endl;
 				Close();
 				return;
@@ -268,7 +293,10 @@ void CSession::HandleWrite(const boost::system::error_code& error, std::shared_p
 //读取完整长度
 void CSession::asyncReadFull(std::size_t maxLength, std::function<void(const boost::system::error_code&, std::size_t)> handler )
 {
-	::memset(_data, 0, MAX_FILE_FRAME_LENGTH);
+	if (maxLength == 0 || maxLength > sizeof(_data)) {
+		handler(make_error_code(boost::asio::error::message_size), 0);
+		return;
+	}
 	asyncReadLen(0, maxLength, handler);
 }
 

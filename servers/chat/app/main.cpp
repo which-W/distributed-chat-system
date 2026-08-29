@@ -36,6 +36,7 @@ int main()
 		//创建Cserver智能指针
 		auto pointer_server = std::make_shared<CServer>(
 			io_context, listen_host, static_cast<unsigned short>(configured_port));
+		pointer_server->Start();
 		//启动定时器
 		pointer_server->StartTimer();
 
@@ -62,7 +63,9 @@ int main()
 
 
 		boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
-		signals.async_wait([&io_context, pool, &server](auto, auto) {
+		signals.async_wait([&io_context, pool, &server, pointer_server](auto, auto) {
+			pointer_server->Stop();
+			pointer_server->StopTimer();
 			io_context.stop();
 			pool->Stop();
 			server->Shutdown();
@@ -74,6 +77,7 @@ int main()
 		io_context.run();
 
 		grpc_server_thread.join();
+		pointer_server->Stop();
 		pointer_server->StopTimer();
 		return 0;
 	}

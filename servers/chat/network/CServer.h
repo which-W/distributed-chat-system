@@ -10,6 +10,8 @@ class CServer :public std::enable_shared_from_this<CServer>
 public:
 	CServer(boost::asio::io_context& io_context, const std::string& listen_host, unsigned short port);
 	~CServer();
+	void Start();
+	void Stop();
 	void ClearSession(std::string);
 	//uidȡsession
 	shared_ptr<CSession> GetSession(std::string);
@@ -27,4 +29,6 @@ private:
 	std::map<std::string, shared_ptr<CSession>> _sessions;
 	std::mutex _mutex;
 	boost::asio::steady_timer _timer;
+	std::atomic<bool> _started{false};
+	std::atomic<bool> _stopping{false};
 };

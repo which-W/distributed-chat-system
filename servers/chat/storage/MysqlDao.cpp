@@ -14,6 +14,25 @@ MysqlDao::MysqlDao()
 	const auto& user = cfg["Mysql"]["User"];
 	pool_.reset(new MySqlPool(host+":"+port, user, pwd,schema, 5));
 	EnsureFileTransferTable();
+	EnsureChatMessageTable();
+}
+
+void MysqlDao::EnsureChatMessageTable()
+{
+	auto con = pool_->getConnection();
+	if (!con) throw std::runtime_error("chat message schema migration failed: database unavailable");
+	Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+	std::unique_ptr<sql::Statement> statement(con->_con->createStatement());
+	statement->executeUpdate(
+		"CREATE TABLE IF NOT EXISTS chat_message ("
+		"id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
+		"client_message_id VARCHAR(128) NOT NULL, sender_uid INT NOT NULL, receiver_uid INT NOT NULL, "
+		"content TEXT NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+		"acknowledged_at TIMESTAMP NULL, "
+		"UNIQUE KEY uk_chat_message_sender_client(sender_uid,client_message_id), "
+		"KEY idx_chat_message_pending(receiver_uid,acknowledged_at,id), "
+		"CONSTRAINT fk_chat_message_sender FOREIGN KEY(sender_uid) REFERENCES user(uid), "
+		"CONSTRAINT fk_chat_message_receiver FOREIGN KEY(receiver_uid) REFERENCES user(uid)) ENGINE=InnoDB");
 }
 
 MysqlDao::~MysqlDao(){
@@ -523,6 +542,107 @@ bool MysqlDao::HasPendingFriendApply(int from_uid, int to_uid) {
 	}
 	catch (const sql::SQLException& error) {
 		std::cerr << "Friend application authorization query failed: " << error.what() << std::endl;
+		return false;
+	}
+}
+
+bool MysqlDao::PersistTextMessages(const std::vector<chat::messages::TextMessage>& messages)
+{
+	if (messages.empty()) return false;
+	auto con = pool_->getConnection();
+	if (!con) return false;
+	Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+	try {
+		con->_con->setAutoCommit(false);
+		std::unique_ptr<sql::PreparedStatement> insert(con->_con->prepareStatement(
+			"INSERT INTO chat_message(client_message_id,sender_uid,receiver_uid,content) "
+			"VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE client_message_id=client_message_id"));
+		std::unique_ptr<sql::PreparedStatement> verify(con->_con->prepareStatement(
+			"SELECT receiver_uid,content FROM chat_message "
+			"WHERE sender_uid=? AND client_message_id=? FOR UPDATE"));
+		for (const auto& message : messages) {
+			insert->setString(1, message.client_message_id);
+			insert->setInt(2, message.sender_uid);
+			insert->setInt(3, message.receiver_uid);
+			insert->setString(4, message.content);
+			insert->executeUpdate();
+
+			verify->setInt(1, message.sender_uid);
+			verify->setString(2, message.client_message_id);
+			std::unique_ptr<sql::ResultSet> row(verify->executeQuery());
+			if (!row->next() || row->getInt("receiver_uid") != message.receiver_uid
+				|| row->getString("content") != message.content) {
+				con->_con->rollback();
+				con->_con->setAutoCommit(true);
+				return false;
+			}
+		}
+		con->_con->commit();
+		con->_con->setAutoCommit(true);
+		return true;
+	}
+	catch (const sql::SQLException& error) {
+		try { con->_con->rollback(); con->_con->setAutoCommit(true); } catch (...) {}
+		std::cerr << "Persist text messages failed: " << error.what() << std::endl;
+		return false;
+	}
+}
+
+std::vector<chat::messages::TextMessage> MysqlDao::GetPendingTextMessages(
+	int receiver_uid, int limit)
+{
+	std::vector<chat::messages::TextMessage> messages;
+	if (receiver_uid <= 0 || limit <= 0) return messages;
+	auto con = pool_->getConnection();
+	if (!con) return messages;
+	Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+	try {
+		std::unique_ptr<sql::PreparedStatement> statement(con->_con->prepareStatement(
+			"SELECT client_message_id,sender_uid,receiver_uid,content FROM chat_message "
+			"WHERE receiver_uid=? AND acknowledged_at IS NULL ORDER BY id ASC LIMIT ?"));
+		statement->setInt(1, receiver_uid);
+		statement->setInt(2, limit);
+		std::unique_ptr<sql::ResultSet> rows(statement->executeQuery());
+		while (rows->next()) {
+			chat::messages::TextMessage message;
+			message.client_message_id = rows->getString("client_message_id");
+			message.sender_uid = rows->getInt("sender_uid");
+			message.receiver_uid = rows->getInt("receiver_uid");
+			message.content = rows->getString("content");
+			messages.push_back(std::move(message));
+		}
+	}
+	catch (const sql::SQLException& error) {
+		std::cerr << "List pending text messages failed: " << error.what() << std::endl;
+	}
+	return messages;
+}
+
+bool MysqlDao::AcknowledgeTextMessages(int receiver_uid, int sender_uid,
+	const std::vector<std::string>& client_message_ids)
+{
+	if (receiver_uid <= 0 || sender_uid <= 0 || client_message_ids.empty()) return false;
+	auto con = pool_->getConnection();
+	if (!con) return false;
+	Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+	try {
+		con->_con->setAutoCommit(false);
+		std::unique_ptr<sql::PreparedStatement> statement(con->_con->prepareStatement(
+			"UPDATE chat_message SET acknowledged_at=COALESCE(acknowledged_at,NOW()) "
+			"WHERE receiver_uid=? AND sender_uid=? AND client_message_id=?"));
+		for (const auto& id : client_message_ids) {
+			statement->setInt(1, receiver_uid);
+			statement->setInt(2, sender_uid);
+			statement->setString(3, id);
+			statement->executeUpdate();
+		}
+		con->_con->commit();
+		con->_con->setAutoCommit(true);
+		return true;
+	}
+	catch (const sql::SQLException& error) {
+		try { con->_con->rollback(); con->_con->setAutoCommit(true); } catch (...) {}
+		std::cerr << "Acknowledge text messages failed: " << error.what() << std::endl;
 		return false;
 	}
 }

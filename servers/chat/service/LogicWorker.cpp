@@ -165,14 +165,16 @@ void LogicWorker::RegisterCallBacks()
 						|| old->original_name!=name || old->mime_type!=mime
 						|| old->sha256!=hash || old->total_size!=size) throw std::invalid_argument("invalid resume");
 					Json::Value response;response["error"]=0;response["id"]=id;
-					response["offset"]=Json::UInt64(old->uploaded_size);session->Send(response.toStyledString(),ID_UPLOAD_FILE_RSP);return;
+					response["offset"]=Json::UInt64(old->uploaded_size);
+					(void)session->Send(response.toStyledString(),ID_UPLOAD_FILE_RSP);
+					return;
 				}
 				id=boost::uuids::to_string(boost::uuids::random_generator()());
 				chat::files::TransferRecord item{id,sender,receiver,name,mime,size,0,hash};
 				fileStore().create(id);
 				if (!MysqlMgr::GetInstance()->CreateFileTransfer(item)){fileStore().remove(id);throw std::runtime_error("metadata create failed");}
 				Json::Value response;response["error"]=0;response["id"]=id;response["offset"]=Json::UInt64(0);
-				session->Send(response.toStyledString(),ID_UPLOAD_FILE_RSP);
+				(void)session->Send(response.toStyledString(),ID_UPLOAD_FILE_RSP);
 			};
 
 	_fun_callbacks[ID_UPLOAD_FILE_CHUNK_REQ]=[](std::shared_ptr<CSession> session,const short&,const std::string& body){
@@ -187,7 +189,7 @@ void LogicWorker::RegisterCallBacks()
 			MysqlMgr::GetInstance()->CancelFileTransfer(item->id,item->sender_uid);fileStore().remove(item->id);
 			throw std::runtime_error("chunk metadata update failed");}
 		Json::Value response;response["error"]=0;response["id"]=item->id;response["offset"]=Json::UInt64(next);
-		session->Send(response.toStyledString(),ID_UPLOAD_FILE_CHUNK_RSP);
+		(void)session->Send(response.toStyledString(),ID_UPLOAD_FILE_CHUNK_RSP);
 	};
 
 	_fun_callbacks[ID_UPLOAD_FILE_FINISH_REQ]=[](std::shared_ptr<CSession> session,const short&,const std::string& body){
@@ -196,9 +198,9 @@ void LogicWorker::RegisterCallBacks()
 		if(!item||item->sender_uid!=session->GetUserId()||item->uploaded_size!=item->total_size
 			||fileStore().sha256(item->id,item->total_size)!=item->sha256)throw std::invalid_argument("file checksum mismatch");
 		if(!MysqlMgr::GetInstance()->CompleteFileTransfer(item->id,item->sender_uid))throw std::runtime_error("complete failed");
-		Json::Value response=transferJson(*item);response["error"]=0;session->Send(response.toStyledString(),ID_UPLOAD_FILE_FINISH_RSP);
+		Json::Value response=transferJson(*item);response["error"]=0;(void)session->Send(response.toStyledString(),ID_UPLOAD_FILE_FINISH_RSP);
 		if(auto target=UserMgr::GetInstance()->GetSession(item->receiver_uid)) {
-			target->Send(response.toStyledString(),ID_NOTIFY_FILE_REQ);
+			(void)target->Send(response.toStyledString(),ID_NOTIFY_FILE_REQ);
 		} else {
 			std::string server_name;
 			if (RedisMgr::GetInstance()->Get(USERIPPREFIX + std::to_string(item->receiver_uid), server_name)
@@ -219,7 +221,7 @@ void LogicWorker::RegisterCallBacks()
 		Json::Value response=transferJson(*item);response["error"]=0;response["offset"]=Json::UInt64(offset);
 		if(offset<item->total_size){auto chunk=fileStore().read(item->id,offset,chat::files::PlainChunkBytes);response["data"]=encodeBase64(chunk);response["next_offset"]=Json::UInt64(offset+chunk.size());}
 		else response["complete"]=true;
-		session->Send(response.toStyledString(),ID_DOWNLOAD_FILE_CHUNK);
+		(void)session->Send(response.toStyledString(),ID_DOWNLOAD_FILE_CHUNK);
 	};
 
 	_fun_callbacks[ID_DOWNLOAD_FILE_DONE]=[](std::shared_ptr<CSession> session,const short&,const std::string& body){
