@@ -78,7 +78,9 @@ Status ChatServiceImp::NotifyAddFriend(ServerContext* context, const AddFriendRe
 
 	std::string return_str = rtvalue.toStyledString();
 
-	session->Send(return_str, ID_NOTIFY_ADD_FRIEND_REQ);
+		if (!session->Send(return_str, ID_NOTIFY_ADD_FRIEND_REQ)) {
+			return Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "session send queue is full");
+		}
 	return Status::OK;
 
 }
@@ -129,7 +131,9 @@ Status ChatServiceImp::NotifyAuthFriend(ServerContext* context, const AuthFriend
 
 	std::string return_str = rtvalue.toStyledString();
 
-	session->Send(return_str, ID_NOTIFY_AUTH_FRIEND_REQ);
+		if (!session->Send(return_str, ID_NOTIFY_AUTH_FRIEND_REQ)) {
+			return Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "session send queue is full");
+		}
 	return Status::OK;
 }
 
@@ -174,7 +178,10 @@ Status ChatServiceImp::NotifyTextChatMsg(::grpc::ServerContext* context, const T
 			return Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "chat frame is too large");
 		}
 
-		session->Send(return_str, ID_NOTIFY_TEXT_CHAT_MSG_REQ);
+			if (!session->Send(return_str, ID_NOTIFY_TEXT_CHAT_MSG_REQ)) {
+				reply->set_error(ErrorCodes::RPC_ERROR);
+				return Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "session send queue is full");
+			}
 		return Status::OK;
 }
 
@@ -183,20 +190,26 @@ bool ChatServiceImp::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<
 	//优先查redis中查询用户信息
 	std::string info_str = "";
 	bool b_base = RedisMgr::GetInstance()->Get(base_key, info_str);
-	if (b_base) {
-		Json::Reader reader;
-		Json::Value root;
-		reader.parse(info_str, root);
-		userinfo->uid = root["uid"].asInt();
-		userinfo->name = root["name"].asString();
-		userinfo->email = root["email"].asString();
-		userinfo->nick = root["nick"].asString();
-		userinfo->desc = root["desc"].asString();
-		userinfo->sex = root["sex"].asInt();
-		userinfo->icon = root["icon"].asString();
-		std::cout << "user login uid is " << userinfo->uid << " name is " << userinfo->name << endl;
-	}
-	else {
+		if (b_base) {
+			Json::Reader reader;
+			Json::Value root;
+			if (reader.parse(info_str, root) && root.isObject()
+				&& root["uid"].isInt() && root["uid"].asInt() == uid
+				&& root["name"].isString() && root["email"].isString()
+				&& root["nick"].isString() && root["desc"].isString()
+				&& root["sex"].isInt() && root["icon"].isString()) {
+				userinfo->uid = uid;
+				userinfo->name = root["name"].asString();
+				userinfo->email = root["email"].asString();
+				userinfo->nick = root["nick"].asString();
+				userinfo->desc = root["desc"].asString();
+				userinfo->sex = root["sex"].asInt();
+				userinfo->icon = root["icon"].asString();
+				return true;
+			}
+			RedisMgr::GetInstance()->Del(base_key);
+		}
+		{
 		//redis中没有则查询mysql
 		//查询数据库
 		std::shared_ptr<UserInfo> user_info = nullptr;
@@ -240,7 +253,10 @@ Status ChatServiceImp::NotifyFileAvailable(::grpc::ServerContext* context,
 		value["touid"]=stored->receiver_uid;value["name"]=stored->original_name;
 		value["mime"]=stored->mime_type;value["total_size"]=Json::UInt64(stored->total_size);
 		value["sha256"]=stored->sha256;
-		session->Send(value.toStyledString(), ID_NOTIFY_FILE_REQ);
+			if (!session->Send(value.toStyledString(), ID_NOTIFY_FILE_REQ)) {
+				response->set_error(ErrorCodes::RPC_ERROR);
+				return Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "session send queue is full");
+			}
 	}
 	return Status::OK;
 }

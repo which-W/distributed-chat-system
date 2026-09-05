@@ -50,6 +50,21 @@ CREATE TABLE IF NOT EXISTS friend (
   CONSTRAINT fk_friend_target FOREIGN KEY (friend_id) REFERENCES user (uid)
 ) ENGINE = InnoDB;
 
+CREATE TABLE IF NOT EXISTS chat_message (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  client_message_id VARCHAR(128) NOT NULL,
+  sender_uid INT NOT NULL,
+  receiver_uid INT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  acknowledged_at TIMESTAMP NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_chat_message_sender_client (sender_uid, client_message_id),
+  KEY idx_chat_message_pending (receiver_uid, acknowledged_at, id),
+  CONSTRAINT fk_chat_message_sender FOREIGN KEY (sender_uid) REFERENCES user(uid),
+  CONSTRAINT fk_chat_message_receiver FOREIGN KEY (receiver_uid) REFERENCES user(uid)
+) ENGINE = InnoDB;
+
 CREATE TABLE IF NOT EXISTS file_transfer (
   id CHAR(36) NOT NULL,
   sender_uid INT NOT NULL,

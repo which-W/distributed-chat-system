@@ -1,5 +1,6 @@
 #include "ChatGrpcClient.h"
 #include "InternalRpcAuth.h"
+#include "GrpcClientDeadline.h"
 
 ChatGrpcClient::ChatGrpcClient() {
     auto& cfg = ConfigMgr::Inst();
@@ -30,11 +31,9 @@ ChatGrpcClient::ChatGrpcClient() {
 AddFriendRsp ChatGrpcClient::NotifyAddFriend(std::string server_ip, const AddFriendReq& req)
 {
 	AddFriendRsp rsp;
-	Defer defer([&rsp, &req]() {
-		rsp.set_error(ErrorCodes::ERROR_CODE_OK);
-		rsp.set_applyuid(req.applyuid());
-		rsp.set_touid(req.touid());
-		});
+	rsp.set_error(ErrorCodes::RPC_ERROR);
+	rsp.set_applyuid(req.applyuid());
+	rsp.set_touid(req.touid());
 
 	auto find_iter = _pools.find(server_ip);
 	if (find_iter == _pools.end()) {
@@ -43,8 +42,10 @@ AddFriendRsp ChatGrpcClient::NotifyAddFriend(std::string server_ip, const AddFri
 
 	auto& pool = find_iter->second;
 	ClientContext context;
+	chat::grpc_client::setDeadline(context, chat::grpc_client::kInternalRpcTimeout);
 	chat::internal_rpc::authenticate(context, _auth_token);
 	auto stub = pool->Get_connection();
+	if (!stub) return rsp;
 	Status status = stub->NotifyAddFriend(&context, req, &rsp);
 	Defer defercon([&stub, this, &pool]() {
 		pool->Return_connection(std::move(stub));
@@ -62,7 +63,7 @@ AddFriendRsp ChatGrpcClient::NotifyAddFriend(std::string server_ip, const AddFri
 AuthFriendRsp ChatGrpcClient::NotifyAuthFriend(std::string server_ip, const AuthFriendReq& req)
 {
 	AuthFriendRsp rsp;
-	rsp.set_error(ErrorCodes::ERROR_CODE_OK);
+	rsp.set_error(ErrorCodes::RPC_ERROR);
 
 	Defer defer([&rsp, &req]() {
 		rsp.set_fromuid(req.fromuid());
@@ -76,8 +77,10 @@ AuthFriendRsp ChatGrpcClient::NotifyAuthFriend(std::string server_ip, const Auth
 
 	auto& pool = find_iter->second;
 	ClientContext context;
+	chat::grpc_client::setDeadline(context, chat::grpc_client::kInternalRpcTimeout);
 	chat::internal_rpc::authenticate(context, _auth_token);
 	auto stub = pool->Get_connection();
+	if (!stub) return rsp;
 	Status status = stub->NotifyAuthFriend(&context, req, &rsp);
 	Defer defercon([&stub, this, &pool]() {
 		pool->Return_connection(std::move(stub));
@@ -99,17 +102,23 @@ bool ChatGrpcClient::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<
 	if (b_base) {
 		Json::Reader reader;
 		Json::Value root;
-		reader.parse(info_str, root);
-		userinfo->uid = root["uid"].asInt();
-		userinfo->name = root["name"].asString();
-		userinfo->email = root["email"].asString();
-		userinfo->nick = root["nick"].asString();
-		userinfo->desc = root["desc"].asString();
-		userinfo->sex = root["sex"].asInt();
-		userinfo->icon = root["icon"].asString();
-		std::cout << "user login uid is " << userinfo->uid << " name is " << userinfo->name << std::endl;
+		if (reader.parse(info_str, root) && root.isObject()
+			&& root["uid"].isInt() && root["uid"].asInt() == uid
+			&& root["name"].isString() && root["email"].isString()
+			&& root["nick"].isString() && root["desc"].isString()
+			&& root["sex"].isInt() && root["icon"].isString()) {
+			userinfo->uid = uid;
+			userinfo->name = root["name"].asString();
+			userinfo->email = root["email"].asString();
+			userinfo->nick = root["nick"].asString();
+			userinfo->desc = root["desc"].asString();
+			userinfo->sex = root["sex"].asInt();
+			userinfo->icon = root["icon"].asString();
+			return true;
+		}
+		RedisMgr::GetInstance()->Del(base_key);
 	}
-	else {
+	{
 		//redis中没有则查询mysql
 		//查询数据库
 		std::shared_ptr<UserInfo> user_info = nullptr;
@@ -136,8 +145,8 @@ bool ChatGrpcClient::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<
 
 TextChatMsgRsp ChatGrpcClient::NotifyTextChatMsg(std::string server_ip, const TextChatMsgReq& req, const Json::Value& rtvalue)
 {
-		TextChatMsgRsp rsp;
-		rsp.set_error(ErrorCodes::ERROR_CODE_OK);
+			TextChatMsgRsp rsp;
+			rsp.set_error(ErrorCodes::RPC_ERROR);
 
 		Defer defer([&rsp, &req]() {
 			rsp.set_fromuid(req.fromuid());
@@ -156,9 +165,11 @@ TextChatMsgRsp ChatGrpcClient::NotifyTextChatMsg(std::string server_ip, const Te
 		}
 
 		auto& pool = find_iter->second;
-		ClientContext context;
-		chat::internal_rpc::authenticate(context, _auth_token);
-		auto stub = pool->Get_connection();
+			ClientContext context;
+			chat::grpc_client::setDeadline(context, chat::grpc_client::kInternalRpcTimeout);
+			chat::internal_rpc::authenticate(context, _auth_token);
+			auto stub = pool->Get_connection();
+			if (!stub) return rsp;
 		Status status = stub->NotifyTextChatMsg(&context, req, &rsp);
 		Defer defercon([&stub, this, &pool]() {
 			pool->Return_connection(std::move(stub));
@@ -183,6 +194,7 @@ message::FileAvailableRsp ChatGrpcClient::NotifyFileAvailable(
 	if (!stub) { response.set_error(ErrorCodes::RPC_ERROR); return response; }
 	Defer defer([&stub, &pool]() { pool->Return_connection(std::move(stub)); });
 	ClientContext context;
+	chat::grpc_client::setDeadline(context, chat::grpc_client::kInternalRpcTimeout);
 	chat::internal_rpc::authenticate(context, _auth_token);
 	if (!stub->NotifyFileAvailable(&context, req, &response).ok()) response.set_error(ErrorCodes::RPC_ERROR);
 	return response;

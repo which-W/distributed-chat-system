@@ -43,6 +43,7 @@
 // 进程级会话和预认证时间预算，避免未登录连接无限占用资源。
 #define MAX_CHAT_SESSIONS 10000
 #define CHAT_AUTH_TIMEOUT_SECONDS 10
+#define CHAT_IDLE_TIMEOUT_SECONDS 120
 
 //file文件
 //头部总长度
@@ -104,6 +105,7 @@ enum Msg_ID {
 	ID_TEXT_CHAT_MSG_REQ = 1017, //文本聊天信息请求
 	ID_TEXT_CHAT_MSG_RSP = 1018, //文本聊天信息回复
 	ID_NOTIFY_TEXT_CHAT_MSG_REQ = 1019, //通知用户文本聊天信息
+	ID_TEXT_CHAT_MSG_ACK = 1020, //接收方确认已处理文本消息
 	ID_NOTIFY_OFF_LINE_REQ = 1021, //通知用户下线
 	ID_HEART_BEAT_REQ = 1023,      //心跳请求
 	ID_HEARTBEAT_RSP = 1024,       //心跳回复
@@ -144,4 +146,25 @@ enum Msg_ID {
 
 inline bool IsFileTransferMessage(std::uint16_t id) {
 	return id >= ID_UPLOAD_FILE_REQ && id <= ID_FILE_TRANSFER_CANCEL;
+}
+
+inline bool IsClientRequestMessage(std::uint16_t id) {
+	switch (id) {
+	case MSG_CHAT_LOGIN:
+	case ID_SEARCH_USER_REQ:
+	case ID_ADD_FRIEND_REQ:
+	case ID_AUTH_FRIEND_REQ:
+	case ID_TEXT_CHAT_MSG_REQ:
+	case ID_TEXT_CHAT_MSG_ACK:
+	case ID_HEART_BEAT_REQ:
+	case ID_UPLOAD_FILE_REQ:
+	case ID_UPLOAD_FILE_CHUNK_REQ:
+	case ID_UPLOAD_FILE_FINISH_REQ:
+	case ID_DOWNLOAD_FILE_REQ:
+	case ID_DOWNLOAD_FILE_DONE:
+	case ID_FILE_TRANSFER_CANCEL:
+		return true;
+	default:
+		return false;
+	}
 }

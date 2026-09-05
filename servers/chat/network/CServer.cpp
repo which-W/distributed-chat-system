@@ -13,15 +13,35 @@ CServer::CServer(boost::asio::io_context& io_context, const std::string& listen_
 {
 	cout << "Chat server is listening on " << listen_host << ':' << _port << endl;
 
-	StartAccept();
 }
 
 CServer::~CServer() {
+	Stop();
 	cout << "Server destruct listen on port : " << _port << endl;
+}
 
+void CServer::Start()
+{
+	bool expected = false;
+	if (_started.compare_exchange_strong(expected, true)) StartAccept();
+}
+
+void CServer::Stop()
+{
+	if (_stopping.exchange(true)) return;
+	boost::system::error_code ignored;
+	_acceptor.cancel(ignored);
+	_acceptor.close(ignored);
+	std::vector<std::shared_ptr<CSession>> sessions;
+	{
+		std::lock_guard<std::mutex> lock(_mutex);
+		for (const auto& entry : _sessions) sessions.push_back(entry.second);
+	}
+	for (const auto& session : sessions) session->Close();
 }
 
 void CServer::HandleAccept(shared_ptr<CSession> new_session, const boost::system::error_code& error) {
+	if (_stopping.load()) return;
 	if (!error) {
 		bool accepted = false;
 		{
@@ -39,13 +59,18 @@ void CServer::HandleAccept(shared_ptr<CSession> new_session, const boost::system
 		cout << "session accept failed, error is " << error.what() << endl;
 	}
 
-	StartAccept();
+	if (!_stopping.load()) StartAccept();
 }
 
 void CServer::StartAccept() {
+	if (_stopping.load() || !_acceptor.is_open()) return;
 	auto& io_context = AsioIOServicePool::GetInstance()->GetIOServer();
 	shared_ptr<CSession> new_session = make_shared<CSession>(io_context, this);
-	_acceptor.async_accept(new_session->GetSocket(), std::bind(&CServer::HandleAccept, this, new_session, placeholders::_1));
+	auto self = shared_from_this();
+	_acceptor.async_accept(new_session->GetSocket(),
+		[self, new_session](const boost::system::error_code& accept_error) {
+			self->HandleAccept(new_session, accept_error);
+		});
 }
 
 //根据session 的id删除session，并移除用户和session的关联

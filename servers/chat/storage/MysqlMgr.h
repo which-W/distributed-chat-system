@@ -17,6 +17,11 @@ public:
 	bool GetFriendList(int self_id, std::vector<std::shared_ptr<UserInfo> >& user_info);
 	bool AreFriends(int first_uid, int second_uid);
 	bool HasPendingFriendApply(int from_uid, int to_uid);
+	bool PersistTextMessages(const std::vector<chat::messages::TextMessage>& messages);
+	std::vector<chat::messages::TextMessage> GetPendingTextMessages(
+		int receiver_uid, int limit = 200);
+	bool AcknowledgeTextMessages(int receiver_uid, int sender_uid,
+		const std::vector<std::string>& client_message_ids);
 	bool AuthFriendApply(const int& from, const int& to);
 	chat::storage::FriendAcceptanceResult AddFriend(
 		const int& from, const int& to, std::string back_name);
