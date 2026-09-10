@@ -21,7 +21,34 @@
 - `VarifyServer`：Node.js 邮箱验证码 gRPC 服务，默认端口 `5000`。
 - `chat_client`：Qt 桌面客户端，默认不参与服务器构建。
 
-架构与调用关系见 [CODEGRAPH.md](CODEGRAPH.md)。
+```mermaid
+flowchart LR
+    Client[Qt / Headless Client] -->|HTTPS| Gate[Gate Server]
+    Gate -->|gRPC + request_id| Verify[Varify Server]
+    Gate -->|gRPC + request_id| Status[Status Server]
+    Status --> Redis[(Redis)]
+    Gate --> MySQL[(MySQL)]
+    Client -->|TLS TCP| Chat1[Chat Server 1]
+    Client -->|TLS TCP| Chat2[Chat Server 2]
+    Chat1 <-->|gRPC mTLS| Chat2
+    Chat1 --> Redis
+    Chat2 --> Redis
+    Chat1 --> MySQL
+    Chat2 --> MySQL
+```
+
+完整架构、信任边界和消息时序见 [架构与消息流](docs/ARCHITECTURE.md)。
+
+## 一键双节点演示
+
+只需 Git、Docker 和 Compose。在 Linux 上执行：
+
+```bash
+sh scripts/demo.sh          # 成功后自动清理
+sh scripts/demo.sh --keep   # 保留服务和数据以便检查
+```
+
+脚本实时生成开发密钥，启动 MySQL、Redis、Mailpit、Varify、Gate、Status、两个 ChatServer，并用无界面协议客户端完成注册、跨节点消息、离线幂等/ACK 和文件断点续传。报告保存为 JSON、JUnit 和 Markdown；故障恢复套件可在 `--keep` 后运行 `sh scripts/fault-test.sh`。脚本没有固定验证码、认证绕过或测试专用生产接口。
 
 ## 服务端目录结构
 
@@ -125,6 +152,10 @@ C++ 服务支持以下环境变量覆盖 INI：
 
 - `CHAT_REDIS_HOST`、`CHAT_REDIS_PORT`、`CHAT_REDIS_PASSWORD`、`CHAT_REDIS_USER`
 - `CHAT_MYSQL_HOST`、`CHAT_MYSQL_PORT`、`CHAT_MYSQL_PASSWORD`、`CHAT_MYSQL_USER`、`CHAT_MYSQL_SCHEMA`
+- `CHAT_LOG_LEVEL`、`CHAT_LOG_DIR`、`CHAT_LOG_CONSOLE`、`CHAT_LOG_FILE_ENABLED`
+- `CHAT_LOG_MAX_FILE_MB`、`CHAT_LOG_MAX_FILES`、`CHAT_LOG_QUEUE_CAPACITY`
+
+三个 C++ 服务使用固定在 `v1.0.0` 的 [LogSystem](https://github.com/which-W/LogSystem) 子模块输出 JSON Lines；Node 验证码服务输出相同核心字段。禁止记录密码、验证码、登录票据、RPC token、邮件/聊天正文及文件内容，邮箱只使用不可逆短摘要。性能复现和本机实测结果见 [性能测试](docs/PERFORMANCE.md)，当前验证状态见 [验证记录](docs/VALIDATION_REPORT.md)。
 
 验证码服务使用 `VARIFY_*` 环境变量，完整列表见 `.env.example`。`.env`、旧 `config.ini` 和 `VarifyServer/config.json` 已被 `.gitignore` 排除。
 

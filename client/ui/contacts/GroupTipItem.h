@@ -1,22 +1,24 @@
 #pragma once
 
-#include <QWidget>
-#include "ui_GroupTipItem.h"
 #include "ListItemBase.h"
+#include "ui_GroupTipItem.h"
+#include <QWidget>
 QT_BEGIN_NAMESPACE
-namespace Ui { class GroupTipItemClass; };
+namespace Ui {
+class GroupTipItemClass;
+};
 QT_END_NAMESPACE
 
-class GroupTipItem : public ListItemBase
-{
-	Q_OBJECT
+class GroupTipItem : public ListItemBase {
+    Q_OBJECT
 
-public:
+  public:
     explicit GroupTipItem(QWidget* parent = nullptr);
     ~GroupTipItem();
     QSize sizeHint() const override;
     void SetGroupTip(QString str);
-private:
+
+  private:
     QString _tip;
     Ui::GroupTipItemClass* ui;
 };

@@ -1,14 +1,14 @@
 #pragma once
-#include <QObject>
-#include <memory>
 #include "Singleton.h"
 #include "UserData.h"
 #include "global.h"
-class UserMgr :public QObject, public Singleton<UserMgr>,
-    public std::enable_shared_from_this<UserMgr>
-{
+#include <QObject>
+#include <memory>
+class UserMgr : public QObject,
+                public Singleton<UserMgr>,
+                public std::enable_shared_from_this<UserMgr> {
     Q_OBJECT
-public:
+  public:
     friend class Singleton<UserMgr>;
     ~UserMgr();
     void SetToken(QString token);
@@ -21,9 +21,9 @@ public:
     void AppendApplyList(QJsonArray array);
     void AppendFriendList(QJsonArray array);
     void AddApplyList(std::shared_ptr<ApplyInfo> app);
-	void SetUserInfo(std::shared_ptr<UserInfo> user_info);
+    void SetUserInfo(std::shared_ptr<UserInfo> user_info);
     std::vector<std::shared_ptr<ApplyInfo>> GetApplyList();
-	bool isAlreadyApply(int uid);
+    bool isAlreadyApply(int uid);
     bool CheckFriendById(int uid);
     void AddFriend(std::shared_ptr<AuthRsp> auth_rsp);
     void AddFriend(std::shared_ptr<AuthInfo> auth_info);
@@ -36,7 +36,8 @@ public:
     void UpdateContactLoadedCount();
     bool IsLoadConFin();
     void ResetSession();
-private:
+
+  private:
     UserMgr();
     std::vector<std::shared_ptr<ApplyInfo>> _apply_list;
     std::vector<std::shared_ptr<FriendInfo>> _friend_list;

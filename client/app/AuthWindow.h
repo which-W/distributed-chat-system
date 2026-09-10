@@ -9,18 +9,17 @@ class ElaIconButton;
 class QStackedWidget;
 class QWidget;
 
-class AuthWindow final : public ElaWidget
-{
+class AuthWindow final : public ElaWidget {
     Q_OBJECT
 
-public:
+  public:
     explicit AuthWindow(QWidget* parent = nullptr);
 
-signals:
+  signals:
     void authenticationSucceeded();
     void themeChanged(ElaThemeType::ThemeMode mode);
 
-private:
+  private:
     void showLogin();
     void showRegister();
     void showReset();

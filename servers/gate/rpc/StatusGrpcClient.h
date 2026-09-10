@@ -1,29 +1,30 @@
 #pragma once
-#include<grpc/grpc.h>
-#include<grpcpp/grpcpp.h>
-#include"message.grpc.pb.h"
-#include"message.pb.h"
-#include"Singleton.h"
-#include"const.h"
-#include<queue>
-#include<atomic>
-#include"ConfigMgr.h"
+#include "ConfigMgr.h"
 #include "GrpcTlsSupport.h"
+#include "Singleton.h"
+#include "const.h"
+#include "message.grpc.pb.h"
+#include "message.pb.h"
+#include <atomic>
+#include <grpc/grpc.h>
+#include <grpcpp/grpcpp.h>
+#include <queue>
 using grpc::Channel;
-using grpc::Status;
 using grpc::ClientContext;
+using grpc::Status;
 using message::GetChatServerReq;
 using message::GetChatServerRsp;
-using message::StatusService;
 using message::LoginReq;
 using message::LoginRsp;
+using message::StatusService;
 class StatusConPool {
-public:
+  public:
     StatusConPool(size_t poolSize, std::string host, std::string port,
-        const chat::grpc_tls::Options& tls, const std::string& tls_name)
+                  const chat::grpc_tls::Options& tls, const std::string& tls_name)
         : poolSize_(poolSize), host_(host), port_(port), b_stop_(false) {
         for (size_t i = 0; i < poolSize_; ++i) {
-            std::shared_ptr<Channel> channel = chat::grpc_tls::make_channel(host, port, tls, tls_name);
+            std::shared_ptr<Channel> channel =
+                chat::grpc_tls::make_channel(host, port, tls, tls_name);
             connections_.push(StatusService::NewStub(channel));
         }
     }
@@ -41,10 +42,10 @@ public:
                 return true;
             }
             return !connections_.empty();
-            });
-        //如果停止则直接返回空指针
+        });
+        // 如果停止则直接返回空指针
         if (b_stop_) {
-            return  nullptr;
+            return nullptr;
         }
         auto context = std::move(connections_.front());
         connections_.pop();
@@ -62,7 +63,8 @@ public:
         b_stop_ = true;
         cond_.notify_all();
     }
-private:
+
+  private:
     std::atomic<bool> b_stop_;
     size_t poolSize_;
     std::string host_;
@@ -72,18 +74,16 @@ private:
     std::condition_variable cond_;
 };
 
-
-
-class StatusGrpcClient :public Singleton<StatusGrpcClient>
-{
+class StatusGrpcClient : public Singleton<StatusGrpcClient> {
     friend class Singleton<StatusGrpcClient>;
-public:
-    ~StatusGrpcClient() {
-    }
-    GetChatServerRsp GetChatServer(int uid);
+
+  public:
+    ~StatusGrpcClient() {}
+    GetChatServerRsp GetChatServer(int uid, const std::string& request_id = {});
     LoginRsp Login(int uid, std::string token);
-private:
+
+  private:
     StatusGrpcClient();
     std::unique_ptr<StatusConPool> pool_;
-	std::string auth_token_;
+    std::string auth_token_;
 };

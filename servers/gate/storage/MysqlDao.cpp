@@ -1,11 +1,11 @@
 #include "MysqlDao.h"
+#include "ChatLogger.h"
 #include "PasswordHasher.h"
 #include "PasswordUpgradeGuard.h"
 #include <sodium.h>
 #include <vector>
 
-MysqlDao::MysqlDao()
-{
+MysqlDao::MysqlDao() {
     auto& cfg = ConfigMgr::ins();
     const auto& host = cfg["Mysql"]["Host"];
     const auto& port = cfg["Mysql"]["Port"];
@@ -21,8 +21,7 @@ MysqlDao::~MysqlDao() {
     pool_->Close();
 }
 
-void MysqlDao::EnsurePasswordSchemeColumn()
-{
+void MysqlDao::EnsurePasswordSchemeColumn() {
     auto con = pool_->getConnection();
     if (con == nullptr) {
         throw std::runtime_error("password scheme migration failed: database unavailable");
@@ -33,23 +32,21 @@ void MysqlDao::EnsurePasswordSchemeColumn()
             // 首次升级时，已有账户都来自旧客户端预哈希协议，因此默认标记为 legacy。
             std::unique_ptr<sql::Statement> add(con->_con->createStatement());
             add->executeUpdate("ALTER TABLE user ADD COLUMN password_scheme VARCHAR(32) "
-                "NOT NULL DEFAULT 'legacy_client_sha256'");
-        }
-        catch (const sql::SQLException& error) {
-            if (error.getErrorCode() != 1060) throw;
+                               "NOT NULL DEFAULT 'legacy_client_sha256'");
+        } catch (const sql::SQLException& error) {
+            if (error.getErrorCode() != 1060)
+                throw;
         }
         // 新注册账户保存原始口令的 Argon2id；显式默认值避免再次误走兼容分支。
         std::unique_ptr<sql::Statement> set_default(con->_con->createStatement());
         set_default->executeUpdate(
             "ALTER TABLE user ALTER password_scheme SET DEFAULT 'argon2id_raw'");
-    }
-    catch (const sql::SQLException& error) {
+    } catch (const sql::SQLException& error) {
         throw std::runtime_error(std::string("password scheme migration failed: ") + error.what());
     }
 }
 
-void MysqlDao::MigrateLegacyPasswords()
-{
+void MysqlDao::MigrateLegacyPasswords() {
     auto con = pool_->getConnection();
     if (con == nullptr) {
         return;
@@ -76,24 +73,24 @@ void MysqlDao::MigrateLegacyPasswords()
                 continue;
             }
             const auto encoded = chat::security::PasswordHasher::hash(plaintext);
-            std::unique_ptr<sql::PreparedStatement> update(con->_con->prepareStatement(
-                "UPDATE user SET pwd = ? WHERE uid = ? AND pwd = ?"));
+            std::unique_ptr<sql::PreparedStatement> update(
+                con->_con->prepareStatement("UPDATE user SET pwd = ? WHERE uid = ? AND pwd = ?"));
             update->setString(1, encoded);
             update->setInt(2, uid);
             update->setString(3, plaintext);
             migrated += update->executeUpdate();
         }
         if (migrated > 0) {
-            std::cout << "Migrated " << migrated << " legacy password row(s) to Argon2id" << std::endl;
+            chat::observability::stream(chat::observability::Level::Info)
+                << "Migrated " << migrated << " legacy password row(s) to Argon2id" << std::endl;
         }
-    }
-    catch (const std::exception& error) {
-        std::cerr << "Legacy password migration failed: " << error.what() << std::endl;
+    } catch (const std::exception& error) {
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "Legacy password migration failed: " << error.what() << std::endl;
     }
 }
 
-int MysqlDao::RegUser(const std::string& name, const std::string& email, const std::string& pwd)
-{
+int MysqlDao::RegUser(const std::string& name, const std::string& email, const std::string& pwd) {
     auto con = pool_->getConnection();
     try {
         if (con == nullptr) {
@@ -102,55 +99,57 @@ int MysqlDao::RegUser(const std::string& name, const std::string& email, const s
         }
         const auto password_hash = chat::security::PasswordHasher::hash(pwd);
         // 准备调用存储过程
-        std::unique_ptr<sql::PreparedStatement>stmt(con->_con->prepareStatement("CALL reg_user(?,?,?,@result)"));
+        std::unique_ptr<sql::PreparedStatement> stmt(
+            con->_con->prepareStatement("CALL reg_user(?,?,?,@result)"));
         // 设置输入参数
         stmt->setString(1, name);
         stmt->setString(2, email);
         stmt->setString(3, password_hash);
         // 由于PreparedStatement不直接支持注册输出参数，我们需要使用会话变量或其他方法来获取输出参数的值
-          // 执行存储过程
+        // 执行存储过程
         stmt->execute();
-       // 例如，如果存储过程设置了一个会话变量@result来存储输出结果，可以这样获取：
+        // 例如，如果存储过程设置了一个会话变量@result来存储输出结果，可以这样获取：
         std::unique_ptr<sql::Statement> stmtResult(con->_con->createStatement());
         std::unique_ptr<sql::ResultSet> res(stmtResult->executeQuery("SELECT @result AS result"));
         if (res->next()) {
             int result = res->getInt("result");
-            std::cout << "Result: " << result << std::endl;
+            chat::observability::stream(chat::observability::Level::Info)
+                << "Result: " << result << std::endl;
             pool_->returnConnection(std::move(con));
             return result;
         }
         pool_->returnConnection(std::move(con));
         return -1;
-    }
-    catch (sql::SQLException& e) {
+    } catch (sql::SQLException& e) {
         pool_->returnConnection(std::move(con));
-        std::cerr << "SQLException: " << e.what();
-        std::cerr << " (MySQL error code: " << e.getErrorCode();
-        std::cerr << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "SQLException: " << e.what();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << " (MySQL error code: " << e.getErrorCode();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << ", SQLState: " << e.getSQLState() << " )" << std::endl;
         return -1;
     }
 }
 
-int MysqlDao::RegUserTransaction(const std::string& name, const std::string& email, const std::string& pwd,
-    const std::string& icon)
-{
+int MysqlDao::RegUserTransaction(const std::string& name, const std::string& email,
+                                 const std::string& pwd, const std::string& icon) {
     auto con = pool_->getConnection();
     if (con == nullptr) {
         return false;
     }
 
-    Defer defer([this, &con] {
-        pool_->returnConnection(std::move(con));
-        });
+    Defer defer([this, &con] { pool_->returnConnection(std::move(con)); });
 
     try {
         const auto password_hash = chat::security::PasswordHasher::hash(pwd);
-        //开始事务
+        // 开始事务
         con->_con->setAutoCommit(false);
-        //执行第一个数据库操作，根据email查找用户
-            // 准备查询语句
+        // 执行第一个数据库操作，根据email查找用户
+        //  准备查询语句
 
-        std::unique_ptr<sql::PreparedStatement> pstmt_email(con->_con->prepareStatement("SELECT 1 FROM user WHERE email = ?"));
+        std::unique_ptr<sql::PreparedStatement> pstmt_email(
+            con->_con->prepareStatement("SELECT 1 FROM user WHERE email = ?"));
 
         // 绑定参数
         pstmt_email->setString(1, email);
@@ -161,12 +160,13 @@ int MysqlDao::RegUserTransaction(const std::string& name, const std::string& ema
         auto email_exist = res_email->next();
         if (email_exist) {
             con->_con->rollback();
-            std::cout << "email already exists";
+            chat::observability::stream(chat::observability::Level::Info) << "email already exists";
             return 0;
         }
 
         // 准备查询用户名是否重复
-        std::unique_ptr<sql::PreparedStatement> pstmt_name(con->_con->prepareStatement("SELECT 1 FROM user WHERE name = ?"));
+        std::unique_ptr<sql::PreparedStatement> pstmt_name(
+            con->_con->prepareStatement("SELECT 1 FROM user WHERE name = ?"));
 
         // 绑定参数
         pstmt_name->setString(1, name);
@@ -177,60 +177,66 @@ int MysqlDao::RegUserTransaction(const std::string& name, const std::string& ema
         auto name_exist = res_name->next();
         if (name_exist) {
             con->_con->rollback();
-            std::cout << "name " << name << " exist";
+            chat::observability::stream(chat::observability::Level::Info)
+                << "name " << name << " exist";
             return 0;
         }
 
         // 准备更新用户id
-        std::unique_ptr<sql::PreparedStatement> pstmt_upid(con->_con->prepareStatement("UPDATE user_id SET id = id + 1"));
+        std::unique_ptr<sql::PreparedStatement> pstmt_upid(
+            con->_con->prepareStatement("UPDATE user_id SET id = id + 1"));
 
         // 执行更新
         pstmt_upid->executeUpdate();
 
         // 获取更新后的 id 值
-        std::unique_ptr<sql::PreparedStatement> pstmt_uid(con->_con->prepareStatement("SELECT id FROM user_id"));
+        std::unique_ptr<sql::PreparedStatement> pstmt_uid(
+            con->_con->prepareStatement("SELECT id FROM user_id"));
         std::unique_ptr<sql::ResultSet> res_uid(pstmt_uid->executeQuery());
         int newId = 0;
         // 处理结果集
         if (res_uid->next()) {
             newId = res_uid->getInt("id");
-        }
-        else {
-            std::cout << "select id from user_id failed" << std::endl;
+        } else {
+            chat::observability::stream(chat::observability::Level::Info)
+                << "select id from user_id failed" << std::endl;
             con->_con->rollback();
             return -1;
         }
 
         // 插入user信息
-        std::unique_ptr<sql::PreparedStatement> pstmt_insert(con->_con->prepareStatement("INSERT INTO user (uid, name, email, pwd, nick, icon) "
-            "VALUES (?, ?, ?, ?,?,?)"));
+        std::unique_ptr<sql::PreparedStatement> pstmt_insert(
+            con->_con->prepareStatement("INSERT INTO user (uid, name, email, pwd, nick, icon) "
+                                        "VALUES (?, ?, ?, ?,?,?)"));
         pstmt_insert->setInt(1, newId);
         pstmt_insert->setString(2, name);
         pstmt_insert->setString(3, email);
         pstmt_insert->setString(4, password_hash);
         pstmt_insert->setString(5, name);
         pstmt_insert->setString(6, icon);
-        //执行插入
+        // 执行插入
         pstmt_insert->executeUpdate();
         // 提交事务
         con->_con->commit();
-        std::cout << "newuser insert into user success" << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "newuser insert into user success" << std::endl;
         return newId;
-    }
-    catch (sql::SQLException& e) {
+    } catch (sql::SQLException& e) {
         // 如果发生错误，回滚事务
         if (con) {
             con->_con->rollback();
         }
-        std::cerr << "SQLException: " << e.what();
-        std::cerr << " (MySQL error code: " << e.getErrorCode();
-        std::cerr << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "SQLException: " << e.what();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << " (MySQL error code: " << e.getErrorCode();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << ", SQLState: " << e.getSQLState() << " )" << std::endl;
         return -1;
     }
 }
 
-bool MysqlDao::CheckEmail(const std::string& name, const std::string& email)
-{
+bool MysqlDao::CheckEmail(const std::string& name, const std::string& email) {
     auto con = pool_->getConnection();
     try {
         if (con == nullptr) {
@@ -238,14 +244,16 @@ bool MysqlDao::CheckEmail(const std::string& name, const std::string& email)
             return false;
         }
         // 准备查询语句
-        std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement("SELECT email FROM user WHERE name = ?"));
+        std::unique_ptr<sql::PreparedStatement> pstmt(
+            con->_con->prepareStatement("SELECT email FROM user WHERE name = ?"));
         // 绑定参数
         pstmt->setString(1, name);
         // 执行查询
         std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
         // 遍历结果集
         while (res->next()) {
-            std::cout << "Email lookup completed" << std::endl;
+            chat::observability::stream(chat::observability::Level::Info)
+                << "Email lookup completed" << std::endl;
             if (email != res->getString("email")) {
                 pool_->returnConnection(std::move(con));
                 return false;
@@ -255,18 +263,19 @@ bool MysqlDao::CheckEmail(const std::string& name, const std::string& email)
         }
         pool_->returnConnection(std::move(con));
         return false;
-    }
-    catch (sql::SQLException& e) {
+    } catch (sql::SQLException& e) {
         pool_->returnConnection(std::move(con));
-        std::cerr << "SQLException: " << e.what();
-        std::cerr << " (MySQL error code: " << e.getErrorCode();
-        std::cerr << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "SQLException: " << e.what();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << " (MySQL error code: " << e.getErrorCode();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << ", SQLState: " << e.getSQLState() << " )" << std::endl;
         return false;
     }
 }
 
-bool MysqlDao::UpdatePwd(const std::string& name, const std::string& newpwd)
-{
+bool MysqlDao::UpdatePwd(const std::string& name, const std::string& newpwd) {
     auto con = pool_->getConnection();
     try {
         if (con == nullptr) {
@@ -282,26 +291,29 @@ bool MysqlDao::UpdatePwd(const std::string& name, const std::string& newpwd)
         pstmt->setString(1, password_hash);
         // 执行更新
         int updateCount = pstmt->executeUpdate();
-        std::cout << "Updated rows: " << updateCount << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Updated rows: " << updateCount << std::endl;
         pool_->returnConnection(std::move(con));
         return true;
-    }
-    catch (sql::SQLException& e) {
+    } catch (sql::SQLException& e) {
         pool_->returnConnection(std::move(con));
-        std::cerr << "SQLException: " << e.what();
-        std::cerr << " (MySQL error code: " << e.getErrorCode();
-        std::cerr << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "SQLException: " << e.what();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << " (MySQL error code: " << e.getErrorCode();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << ", SQLState: " << e.getSQLState() << " )" << std::endl;
         return false;
     }
 }
 
-bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userInfo) {
+bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userInfo, bool* unavailable) {
+    if (unavailable) *unavailable = false;
     auto con = pool_->getConnection();
-    Defer defer([this, &con]() {
-        pool_->returnConnection(std::move(con));
-        });
+    Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
     try {
         if (con == nullptr) {
+            if (unavailable) *unavailable = true;
             return false;
         }
         // 准备SQL语句
@@ -315,8 +327,8 @@ bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserIn
         }
         const std::string stored_hash = res->getString("pwd");
         const std::string stored_scheme = res->getString("password_scheme");
-        const auto verification = chat::security::PasswordHasher::verifyCredential(
-            pwd, stored_hash, stored_scheme);
+        const auto verification =
+            chat::security::PasswordHasher::verifyCredential(pwd, stored_hash, stored_scheme);
         if (!verification.valid) {
             return false;
         }
@@ -324,13 +336,13 @@ bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserIn
         const int uid = res->getInt("uid");
         const bool upgrade_applied = chat::security::ApplyPasswordUpgradeIfCurrent(
             verification, stored_hash, stored_scheme,
-            [&con, uid](const std::string& upgraded_hash,
-                const std::string& expected_hash, const std::string& expected_scheme) {
+            [&con, uid](const std::string& upgraded_hash, const std::string& expected_hash,
+                        const std::string& expected_scheme) {
                 // 使用二进制比较绕过数据库默认的不区分大小写排序规则，确保 CAS 精确匹配。
-                std::unique_ptr<sql::PreparedStatement> upgrade(
-                    con->_con->prepareStatement("UPDATE user SET pwd = ?, "
-                        "password_scheme = 'argon2id_raw' WHERE uid = ? "
-                        "AND BINARY pwd = BINARY ? AND password_scheme = ?"));
+                std::unique_ptr<sql::PreparedStatement> upgrade(con->_con->prepareStatement(
+                    "UPDATE user SET pwd = ?, "
+                    "password_scheme = 'argon2id_raw' WHERE uid = ? "
+                    "AND BINARY pwd = BINARY ? AND password_scheme = ?"));
                 upgrade->setString(1, upgraded_hash);
                 upgrade->setInt(2, uid);
                 upgrade->setString(3, expected_hash);
@@ -346,11 +358,14 @@ bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserIn
         userInfo.uid = uid;
         userInfo.pwd.clear();
         return true;
-    }
-    catch (sql::SQLException& e) {
-        std::cerr << "SQLException: " << e.what();
-        std::cerr << " (MySQL error code: " << e.getErrorCode();
-        std::cerr << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+    } catch (sql::SQLException& e) {
+        if (unavailable) *unavailable = true;
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "SQLException: " << e.what();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << " (MySQL error code: " << e.getErrorCode();
+        chat::observability::stream(chat::observability::Level::Warn)
+            << ", SQLState: " << e.getSQLState() << " )" << std::endl;
         return false;
     }
 }

@@ -1,27 +1,28 @@
 #pragma once
 
-#include <QDialog>
-#include "ui_FindSuccessWidght.h"
-#include <QDir>
-#include "global.h"
-#include "UserData.h"
 #include "ApplyFriend.h"
+#include "UserData.h"
+#include "global.h"
+#include "ui_FindSuccessWidght.h"
+#include <QDialog>
+#include <QDir>
 QT_BEGIN_NAMESPACE
-namespace Ui { class FindSuccessWidghtClass; };
+namespace Ui {
+class FindSuccessWidghtClass;
+};
 QT_END_NAMESPACE
 
-class FindSuccessWidght : public QDialog
-{
-	Q_OBJECT
+class FindSuccessWidght : public QDialog {
+    Q_OBJECT
 
-public:
+  public:
     explicit FindSuccessWidght(QWidget* parent = nullptr);
     ~FindSuccessWidght();
     void SetSearchInfo(std::shared_ptr<SearchInfo> si);
-private slots:
+  private slots:
     void on_add_friend_btn_clicked();
 
-private:
+  private:
     Ui::FindSuccessWidghtClass* ui;
     QWidget* _parent;
     std::shared_ptr<SearchInfo> _si;

@@ -17,13 +17,11 @@
 #include "ThemeManager.h"
 
 namespace {
-class HeroPanel final : public QWidget
-{
-public:
+class HeroPanel final : public QWidget {
+  public:
     using QWidget::QWidget;
 
-    void setDarkMode(bool dark)
-    {
+    void setDarkMode(bool dark) {
         if (darkMode_ == dark) {
             return;
         }
@@ -31,9 +29,8 @@ public:
         update();
     }
 
-protected:
-    void paintEvent(QPaintEvent*) override
-    {
+  protected:
+    void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         QLinearGradient gradient(rect().topLeft(), rect().bottomRight());
@@ -49,20 +46,18 @@ protected:
         painter.drawEllipse(QPointF(width() * 0.18, height() * 0.82), 190, 190);
     }
 
-private:
+  private:
     bool darkMode_{true};
 };
 
-void prepareEmbeddedDialog(QDialog* dialog)
-{
+void prepareEmbeddedDialog(QDialog* dialog) {
     dialog->setWindowFlags(Qt::Widget);
     dialog->setMinimumSize(0, 0);
     dialog->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
     dialog->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 
-void refreshWidgetTree(QWidget* root)
-{
+void refreshWidgetTree(QWidget* root) {
     root->style()->unpolish(root);
     root->style()->polish(root);
     root->update();
@@ -73,11 +68,9 @@ void refreshWidgetTree(QWidget* root)
         child->update();
     }
 }
-}
+} // namespace
 
-AuthWindow::AuthWindow(QWidget* parent)
-    : ElaWidget(parent)
-{
+AuthWindow::AuthWindow(QWidget* parent) : ElaWidget(parent) {
     setObjectName("authWindow");
     setAttribute(Qt::WA_StyledBackground, true);
     setWindowTitle(tr("Nebula Chat · Sign in"));
@@ -104,7 +97,8 @@ AuthWindow::AuthWindow(QWidget* parent)
     title->setTextPixelSize(24);
     title->setWordWrap(true);
     title->setStyleSheet("color: white; font-weight: 600; background: transparent;");
-    auto* subtitle = new ElaText(tr("Secure distributed messaging, wrapped in a calm Fluent workspace."), heroPanel_);
+    auto* subtitle = new ElaText(
+        tr("Secure distributed messaging, wrapped in a calm Fluent workspace."), heroPanel_);
     subtitle->setTextPixelSize(14);
     subtitle->setWordWrap(true);
     subtitle->setStyleSheet("color: rgba(255,255,255,205); background: transparent;");
@@ -143,47 +137,51 @@ AuthWindow::AuthWindow(QWidget* parent)
     rootLayout->addWidget(heroPanel_, 5);
     rootLayout->addWidget(formCard, 6);
 
-    connect(themeButton_, &QPushButton::clicked, &ThemeManager::instance(), &ThemeManager::toggleTheme);
+    connect(themeButton_, &QPushButton::clicked, &ThemeManager::instance(),
+            &ThemeManager::toggleTheme);
     connect(login_, &LoginDialog::switch_RegisterDialog, this, &AuthWindow::showRegister);
     connect(login_, &LoginDialog::sig_switch_Reset, this, &AuthWindow::showReset);
     connect(register_, &RegisterDialog::sig_retrun_login, this, &AuthWindow::showLogin);
     connect(reset_, &ResetDialog::switchLogin, this, &AuthWindow::showLogin);
-    connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_swich_chatdlg,
-            this, &AuthWindow::authenticationSucceeded);
+    connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_swich_chatdlg, this,
+            &AuthWindow::authenticationSucceeded);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, &AuthWindow::applyTheme);
-    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, &AuthWindow::themeChanged);
-    connect(pages_, &QStackedWidget::currentChanged, this, [this] {
-        applyTheme(ThemeManager::instance().themeMode());
-    });
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,
+            &AuthWindow::themeChanged);
+    connect(pages_, &QStackedWidget::currentChanged, this,
+            [this] { applyTheme(ThemeManager::instance().themeMode()); });
     applyTheme(ThemeManager::instance().themeMode());
 }
 
-void AuthWindow::showLogin() { pages_->setCurrentWidget(login_); }
-void AuthWindow::showRegister() { pages_->setCurrentWidget(register_); }
-void AuthWindow::showReset() { pages_->setCurrentWidget(reset_); }
+void AuthWindow::showLogin() {
+    pages_->setCurrentWidget(login_);
+}
+void AuthWindow::showRegister() {
+    pages_->setCurrentWidget(register_);
+}
+void AuthWindow::showReset() {
+    pages_->setCurrentWidget(reset_);
+}
 
-void AuthWindow::applyTheme(ElaThemeType::ThemeMode mode)
-{
+void AuthWindow::applyTheme(ElaThemeType::ThemeMode mode) {
     const bool dark = mode == ElaThemeType::Dark;
     static_cast<HeroPanel*>(heroPanel_)->setDarkMode(dark);
     themeButton_->setAwesome(dark ? ElaIconType::SunBright : ElaIconType::MoonStars);
     themeButton_->setToolTip(dark ? tr("Switch to light theme") : tr("Switch to dark theme"));
-    setStyleSheet(QString(
-        "#authWindow { background: %5; }"
-        "#authCard { background: %1; border: 1px solid %2; border-radius: 20px; }"
-        "#authPages { background: transparent; border: none; }"
-        "#authCard QDialog { background: transparent; }"
-        "#authCard ElaLineEdit, #authCard ElaPushButton { min-height: 34px; }"
-        "#authCard TimerBtn { min-height: 34px; padding: 0 10px; border-radius: 8px; "
-        "border: 1px solid %2; background: %3; color: %4; }"
-        "#authCard QLabel { color: %4; background: transparent; }")
-        .arg(dark ? "rgba(27,29,40,232)" : "rgba(255,255,255,238)",
-             dark ? "#414555" : "#D7DAE3",
-             dark ? "#20222D" : "#F5F6FA",
-             dark ? "#F4F5F8" : "#20222A")
-        .arg(dark
-                 ? "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #11131C, stop:1 #20243A)"
-                 : "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #F4F6FC, stop:1 #E8EDFA)"));
+    setStyleSheet(
+        QString("#authWindow { background: %5; }"
+                "#authCard { background: %1; border: 1px solid %2; border-radius: 20px; }"
+                "#authPages { background: transparent; border: none; }"
+                "#authCard QDialog { background: transparent; }"
+                "#authCard ElaLineEdit, #authCard ElaPushButton { min-height: 34px; }"
+                "#authCard TimerBtn { min-height: 34px; padding: 0 10px; border-radius: 8px; "
+                "border: 1px solid %2; background: %3; color: %4; }"
+                "#authCard QLabel { color: %4; background: transparent; }")
+            .arg(dark ? "rgba(27,29,40,232)" : "rgba(255,255,255,238)",
+                 dark ? "#414555" : "#D7DAE3", dark ? "#20222D" : "#F5F6FA",
+                 dark ? "#F4F5F8" : "#20222A")
+            .arg(dark ? "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #11131C, stop:1 #20243A)"
+                      : "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #F4F6FC, stop:1 #E8EDFA)"));
 
     refreshWidgetTree(this);
 }

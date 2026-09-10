@@ -16,6 +16,9 @@ if [ -f "$PROJECT_DIR/.env" ]; then
 fi
 
 mkdir -p "$RUN_DIR" "$LOG_DIR"
+export CHAT_LOG_DIR="$LOG_DIR"
+export CHAT_LOG_CONSOLE=false
+export CHAT_LOG_FILE_ENABLED=true
 
 start_cpp_service() {
     name=$1
@@ -32,7 +35,7 @@ start_cpp_service() {
         exit 1
     fi
 
-    CHAT_CONFIG_FILE="$config_file" nohup "$executable" >"$LOG_DIR/$name.log" 2>&1 &
+    CHAT_CONFIG_FILE="$config_file" nohup "$executable" >"$LOG_DIR/$name.bootstrap.log" 2>&1 &
     echo $! >"$pid_file"
     echo "started $name (pid $!)"
 }
@@ -50,7 +53,7 @@ start_node_service() {
     fi
     (
         cd "$PROJECT_DIR/VarifyServer"
-        nohup node server.js >"$LOG_DIR/$name.log" 2>&1 &
+        nohup node server.js >"$LOG_DIR/$name.jsonl" 2>&1 &
         echo $! >"$pid_file"
     )
     echo "started $name (pid $(cat "$pid_file"))"

@@ -1,160 +1,162 @@
 #include "CServer.h"
+#include "AsioIOServicePool.h"
+#include "ChatLogger.h"
+#include "ConfigMgr.h"
+#include "RedisMgr.h"
+#include "UserMgr.h"
 #include <chrono>
 #include <iostream>
-#include "AsioIOServicePool.h"
-#include "UserMgr.h"
-#include "RedisMgr.h"
-#include "ConfigMgr.h"
 
-CServer::CServer(boost::asio::io_context& io_context, const std::string& listen_host, unsigned short port)
+CServer::CServer(boost::asio::io_context& io_context, const std::string& listen_host,
+                 unsigned short port)
     : _io_context(io_context), _port(port),
       _acceptor(io_context, tcp::endpoint(boost::asio::ip::make_address(listen_host), port)),
-      _timer(_io_context)
-{
-	cout << "Chat server is listening on " << listen_host << ':' << _port << endl;
-
+      _timer(_io_context) {
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Chat server is listening on " << listen_host << ':' << _port << endl;
 }
 
 CServer::~CServer() {
-	Stop();
-	cout << "Server destruct listen on port : " << _port << endl;
+    Stop();
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Server destruct listen on port : " << _port << endl;
 }
 
-void CServer::Start()
-{
-	bool expected = false;
-	if (_started.compare_exchange_strong(expected, true)) StartAccept();
+void CServer::Start() {
+    bool expected = false;
+    if (_started.compare_exchange_strong(expected, true))
+        StartAccept();
 }
 
-void CServer::Stop()
-{
-	if (_stopping.exchange(true)) return;
-	boost::system::error_code ignored;
-	_acceptor.cancel(ignored);
-	_acceptor.close(ignored);
-	std::vector<std::shared_ptr<CSession>> sessions;
-	{
-		std::lock_guard<std::mutex> lock(_mutex);
-		for (const auto& entry : _sessions) sessions.push_back(entry.second);
-	}
-	for (const auto& session : sessions) session->Close();
+void CServer::Stop() {
+    if (_stopping.exchange(true))
+        return;
+    boost::system::error_code ignored;
+    _acceptor.cancel(ignored);
+    _acceptor.close(ignored);
+    std::vector<std::shared_ptr<CSession>> sessions;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        for (const auto& entry : _sessions)
+            sessions.push_back(entry.second);
+    }
+    for (const auto& session : sessions)
+        session->Close();
 }
 
-void CServer::HandleAccept(shared_ptr<CSession> new_session, const boost::system::error_code& error) {
-	if (_stopping.load()) return;
-	if (!error) {
-		bool accepted = false;
-		{
-			lock_guard<mutex> lock(_mutex);
-			// 在创建更多异步读取前执行全局连接预算，防止连接洪泛耗尽内存和句柄。
-			if (_sessions.size() < MAX_CHAT_SESSIONS) {
-				_sessions.insert(make_pair(new_session->GetSessionId(), new_session));
-				accepted = true;
-			}
-		}
-		if (accepted) new_session->Start();
-		else new_session->Close();
-	}
-	else {
-		cout << "session accept failed, error is " << error.what() << endl;
-	}
+void CServer::HandleAccept(shared_ptr<CSession> new_session,
+                           const boost::system::error_code& error) {
+    if (_stopping.load())
+        return;
+    if (!error) {
+        bool accepted = false;
+        {
+            lock_guard<mutex> lock(_mutex);
+            // 在创建更多异步读取前执行全局连接预算，防止连接洪泛耗尽内存和句柄。
+            if (_sessions.size() < MAX_CHAT_SESSIONS) {
+                _sessions.insert(make_pair(new_session->GetSessionId(), new_session));
+                accepted = true;
+            }
+        }
+        if (accepted)
+            new_session->Start();
+        else
+            new_session->Close();
+    } else {
+        chat::observability::stream(chat::observability::Level::Info)
+            << "session accept failed, error is " << error.what() << endl;
+    }
 
-	if (!_stopping.load()) StartAccept();
+    if (!_stopping.load())
+        StartAccept();
 }
 
 void CServer::StartAccept() {
-	if (_stopping.load() || !_acceptor.is_open()) return;
-	auto& io_context = AsioIOServicePool::GetInstance()->GetIOServer();
-	shared_ptr<CSession> new_session = make_shared<CSession>(io_context, this);
-	auto self = shared_from_this();
-	_acceptor.async_accept(new_session->GetSocket(),
-		[self, new_session](const boost::system::error_code& accept_error) {
-			self->HandleAccept(new_session, accept_error);
-		});
+    if (_stopping.load() || !_acceptor.is_open())
+        return;
+    auto& io_context = AsioIOServicePool::GetInstance()->GetIOServer();
+    shared_ptr<CSession> new_session = make_shared<CSession>(io_context, this);
+    auto self = shared_from_this();
+    _acceptor.async_accept(new_session->GetSocket(),
+                           [self, new_session](const boost::system::error_code& accept_error) {
+                               self->HandleAccept(new_session, accept_error);
+                           });
 }
 
-//根据session 的id删除session，并移除用户和session的关联
+// 根据session 的id删除session，并移除用户和session的关联
 void CServer::ClearSession(std::string session_id) {
 
-	lock_guard<mutex> lock(_mutex);
-	if (_sessions.find(session_id) != _sessions.end()) {
-		auto uid = _sessions[session_id]->GetUserId();
+    lock_guard<mutex> lock(_mutex);
+    if (_sessions.find(session_id) != _sessions.end()) {
+        auto uid = _sessions[session_id]->GetUserId();
 
-		//移除用户和session的关联
-		if (uid > 0) UserMgr::GetInstance()->RmvUserSession(uid);
-	}
+        // 移除用户和session的关联
+        if (uid > 0)
+            UserMgr::GetInstance()->RmvUserSession(uid, _sessions[session_id]);
+    }
 
-	_sessions.erase(session_id);
-
+    _sessions.erase(session_id);
 }
 
-//根据用户获取session
+// 根据用户获取session
 shared_ptr<CSession> CServer::GetSession(std::string uuid) {
-	lock_guard<mutex> lock(_mutex);
-	auto it = _sessions.find(uuid);
-	if (it != _sessions.end()) {
-		return it->second;
-	}
-	return nullptr;
+    lock_guard<mutex> lock(_mutex);
+    auto it = _sessions.find(uuid);
+    if (it != _sessions.end()) {
+        return it->second;
+    }
+    return nullptr;
 }
 
-bool CServer::CheckValid(std::string uuid)
-{
-	lock_guard<mutex> lock(_mutex);
-	auto it = _sessions.find(uuid);
-	if (it != _sessions.end()) {
-		return true;
-	}
-	return false;
+bool CServer::CheckValid(std::string uuid) {
+    lock_guard<mutex> lock(_mutex);
+    auto it = _sessions.find(uuid);
+    if (it != _sessions.end()) {
+        return true;
+    }
+    return false;
 }
 
 void CServer::on_timer(const boost::system::error_code& ec) {
-	if (ec == boost::asio::error::operation_aborted) {
-		return;
-	}
-	if (ec) {
-		std::cerr << "Chat health timer failed: " << ec.message() << std::endl;
-	}
-	else {
-		PublishHealth();
-	}
+    if (ec == boost::asio::error::operation_aborted) {
+        return;
+    }
+    if (ec) {
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "Chat health timer failed: " << ec.message() << std::endl;
+    } else {
+        PublishHealth();
+    }
 
-	_timer.expires_after(std::chrono::seconds(CHAT_HEARTBEAT_INTERVAL_SECONDS));
-	auto self = shared_from_this();
-	_timer.async_wait([self](const boost::system::error_code& error) {
-		self->on_timer(error);
-	});
+    _timer.expires_after(std::chrono::seconds(CHAT_HEARTBEAT_INTERVAL_SECONDS));
+    auto self = shared_from_this();
+    _timer.async_wait([self](const boost::system::error_code& error) { self->on_timer(error); });
 }
 
-void CServer::StartTimer()
-{
-	PublishHealth();
-	_timer.expires_after(std::chrono::seconds(CHAT_HEARTBEAT_INTERVAL_SECONDS));
-	auto self = shared_from_this();
-	_timer.async_wait([self](const boost::system::error_code& error) {
-		self->on_timer(error);
-	});
+void CServer::StartTimer() {
+    PublishHealth();
+    _timer.expires_after(std::chrono::seconds(CHAT_HEARTBEAT_INTERVAL_SECONDS));
+    auto self = shared_from_this();
+    _timer.async_wait([self](const boost::system::error_code& error) { self->on_timer(error); });
 }
 
-void CServer::StopTimer()
-{
-	_timer.cancel();
-	auto& cfg = ConfigMgr::Inst();
-	RedisMgr::GetInstance()->Del(CHAT_HEALTH_PREFIX + cfg["SelfServer"]["Name"]);
+void CServer::StopTimer() {
+    _timer.cancel();
+    auto& cfg = ConfigMgr::Inst();
+    RedisMgr::GetInstance()->Del(CHAT_HEALTH_PREFIX + cfg["SelfServer"]["Name"]);
 }
 
-void CServer::PublishHealth()
-{
-	std::size_t session_count = 0;
-	{
-		lock_guard<mutex> lock(_mutex);
-		session_count = _sessions.size();
-	}
-	auto& cfg = ConfigMgr::Inst();
-	const auto key = CHAT_HEALTH_PREFIX + cfg["SelfServer"]["Name"];
-	if (!RedisMgr::GetInstance()->SetWithTtl(
-			key, std::to_string(session_count), CHAT_HEARTBEAT_TTL_SECONDS)) {
-		std::cerr << "Failed to publish chat health for "
-			<< cfg["SelfServer"]["Name"] << std::endl;
-	}
+void CServer::PublishHealth() {
+    std::size_t session_count = 0;
+    {
+        lock_guard<mutex> lock(_mutex);
+        session_count = _sessions.size();
+    }
+    auto& cfg = ConfigMgr::Inst();
+    const auto key = CHAT_HEALTH_PREFIX + cfg["SelfServer"]["Name"];
+    if (!RedisMgr::GetInstance()->SetWithTtl(key, std::to_string(session_count),
+                                             CHAT_HEARTBEAT_TTL_SECONDS)) {
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "Failed to publish chat health for " << cfg["SelfServer"]["Name"] << std::endl;
+    }
 }

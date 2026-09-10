@@ -1,19 +1,13 @@
 #include "ListItemBase.h"
 
-ListItemBase::ListItemBase(QWidget* parent)
-{
+ListItemBase::ListItemBase(QWidget* parent) {}
+
+void ListItemBase::SetItemType(ListItemType itemType) {
+    _itemType = itemType;
 }
 
-void ListItemBase::SetItemType(ListItemType itemType)
-{
-	_itemType = itemType;
-}
+ListItemBase::~ListItemBase() {}
 
-ListItemBase::~ListItemBase()
-{
-}
-
-ListItemType ListItemBase::GetItemType()
-{
-	return _itemType;
+ListItemType ListItemBase::GetItemType() {
+    return _itemType;
 }

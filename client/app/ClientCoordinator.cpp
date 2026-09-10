@@ -5,23 +5,18 @@
 #include "TcpMgr.h"
 #include "usermgr.h"
 
-ClientCoordinator::ClientCoordinator(QObject* parent)
-    : QObject(parent)
-{
-}
+ClientCoordinator::ClientCoordinator(QObject* parent) : QObject(parent) {}
 
-void ClientCoordinator::start()
-{
+void ClientCoordinator::start() {
     showAuthentication();
 }
 
-void ClientCoordinator::showAuthentication()
-{
+void ClientCoordinator::showAuthentication() {
     if (!authWindow_) {
         authWindow_ = new AuthWindow;
         authWindow_->setAttribute(Qt::WA_DeleteOnClose);
-        connect(authWindow_, &AuthWindow::authenticationSucceeded,
-                this, &ClientCoordinator::showChat);
+        connect(authWindow_, &AuthWindow::authenticationSucceeded, this,
+                &ClientCoordinator::showChat);
     }
     authWindow_->show();
     authWindow_->raise();
@@ -35,13 +30,12 @@ void ClientCoordinator::showAuthentication()
     }
 }
 
-void ClientCoordinator::showChat()
-{
+void ClientCoordinator::showChat() {
     if (!chatWindow_) {
         chatWindow_ = new ChatWindow;
         chatWindow_->setAttribute(Qt::WA_DeleteOnClose);
-        connect(chatWindow_, &ChatWindow::logoutRequested,
-                this, &ClientCoordinator::showAuthentication);
+        connect(chatWindow_, &ChatWindow::logoutRequested, this,
+                &ClientCoordinator::showAuthentication);
     }
     chatWindow_->show();
     chatWindow_->raise();

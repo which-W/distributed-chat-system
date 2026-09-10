@@ -1,21 +1,24 @@
 #pragma once
-#include <QSslSocket>
-#include <QSslCipher>
-#include <QTimer>
-#include <QSet>
+#include "MessageStore.h"
 #include "Singleton.h"
+#include "UserData.h"
 #include "global.h"
 #include "usermgr.h"
-#include "UserData.h"
-class TcpMgr :
-	public QObject, public Singleton<TcpMgr>, public std::enable_shared_from_this<TcpMgr>
-{
-	Q_OBJECT
-public:
-	~TcpMgr() = default;
-private:
-	friend class Singleton<TcpMgr>;
-	TcpMgr();
+#include <QSet>
+#include <QSslCipher>
+#include <QSslSocket>
+#include <QTimer>
+class TcpMgr : public QObject,
+               public Singleton<TcpMgr>,
+               public std::enable_shared_from_this<TcpMgr> {
+    Q_OBJECT
+  public:
+    ~TcpMgr() = default;
+    bool enqueueText(const QJsonObject& message);
+
+  private:
+    friend class Singleton<TcpMgr>;
+    TcpMgr();
     QSslSocket _socket;
     QString _host;
     QString _transport;
@@ -35,25 +38,28 @@ private:
     bool _b_recv_pending;
     quint16 _message_id;
     quint16 _message_len;
-	QSet<QString> _received_message_keys;
+    MessageStore _messages;
+    QTimer _outbox_timer;
+    void flushOutbox();
+    void writeFrame(Req reqId, const QByteArray& data);
     void initHandlers();
     void handleMsg(Req id, int len, QByteArray data);
     void beginConnection();
     void handleTransportReady();
     void scheduleReconnect();
     void resetParser();
-	QMap<Req, std::function<void(Req id, int len, QByteArray data)>> _handlers;
-public slots:
+    QMap<Req, std::function<void(Req id, int len, QByteArray data)>> _handlers;
+  public slots:
     void slot_tcp_connect(ServerInfo);
     void slot_send_data(Req reqId, QByteArray data);
     void slot_disconnect();
     void slot_reconnect_for_proxy();
-signals:
+  signals:
     void sig_con_success(bool bsuccess);
     void sig_send_data(Req reqId, QByteArray data);
     void sig_login_failed(int err);
     void sig_swich_chatdlg();
-	void sig_user_search(std::shared_ptr<SearchInfo> si);
+    void sig_user_search(std::shared_ptr<SearchInfo> si);
     void sig_friend_apply(std::shared_ptr<AddFriendApply>);
     void sig_add_auth_friend(std::shared_ptr<AuthInfo>);
     void sig_auth_rsp(std::shared_ptr<AuthRsp>);

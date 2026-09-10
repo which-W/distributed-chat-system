@@ -18,4 +18,4 @@ inline const char* env(const char* name) {
     return value != nullptr && *value != '\0' ? value : nullptr;
 }
 
-}  // namespace chat::config
+} // namespace chat::config

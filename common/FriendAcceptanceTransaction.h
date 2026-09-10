@@ -12,13 +12,13 @@ enum class FriendAcceptanceResult {
 
 // Store 由生产 MySQL 适配器或内存假事务实现；该函数固定原子操作的执行次序。
 template <typename Store>
-FriendAcceptanceResult ExecuteFriendAcceptanceTransaction(
-    Store& store, int accepter_uid, int applicant_uid, const std::string& back_name)
-{
+FriendAcceptanceResult ExecuteFriendAcceptanceTransaction(Store& store, int accepter_uid,
+                                                          int applicant_uid,
+                                                          const std::string& back_name) {
     store.begin();
     try {
-        if (store.insertFriend(accepter_uid, applicant_uid, back_name) < 0
-            || store.insertFriend(applicant_uid, accepter_uid, "") < 0) {
+        if (store.insertFriend(accepter_uid, applicant_uid, back_name) < 0 ||
+            store.insertFriend(applicant_uid, accepter_uid, "") < 0) {
             store.rollback();
             return FriendAcceptanceResult::StorageError;
         }
@@ -29,13 +29,11 @@ FriendAcceptanceResult ExecuteFriendAcceptanceTransaction(
         }
         store.commit();
         return FriendAcceptanceResult::Success;
-    }
-    catch (...) {
+    } catch (...) {
         // rollback 本身不得覆盖原始数据库异常。
         try {
             store.rollback();
-        }
-        catch (...) {
+        } catch (...) {
         }
         throw;
     }

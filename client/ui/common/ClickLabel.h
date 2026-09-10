@@ -1,11 +1,10 @@
 #pragma once
-#include <QLabel>
-#include <QEnterEvent>
 #include "global.h"
-class ClickLabel : public QLabel
-{
+#include <QEnterEvent>
+#include <QLabel>
+class ClickLabel : public QLabel {
     Q_OBJECT
-public:
+  public:
     ClickLabel(QWidget* parent);
     virtual void mousePressEvent(QMouseEvent* ev) override;
     virtual void mouseReleaseEvent(QMouseEvent* ev) override;
@@ -15,15 +14,15 @@ public:
     void enterEvent(QEvent* event) override;
 #endif
     virtual void leaveEvent(QEvent* event) override;
-    void SetState(QString normal = "", QString hover = "", QString press = "",
-        QString select = "", QString select_hover = "", QString select_press = "");
+    void SetState(QString normal = "", QString hover = "", QString press = "", QString select = "",
+                  QString select_hover = "", QString select_press = "");
 
     ClickLbState GetCurState();
     bool SetCurState(ClickLbState state);
     void ResetNormalState();
-protected:
 
-private:
+  protected:
+  private:
     QString _normal;
     QString _normal_hover;
     QString _normal_press;
@@ -33,6 +32,6 @@ private:
     QString _selected_press;
 
     ClickLbState _curstate;
-signals:
+  signals:
     void clicked(QString, ClickLbState);
 };

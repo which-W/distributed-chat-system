@@ -1,27 +1,28 @@
 #pragma once
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QString>
 #include <memory>
-#include <QJsonArray>
 #include <vector>
-#include <QJsonObject>
 
 inline constexpr std::size_t MAX_CHAT_HISTORY_MESSAGES = 500;
 
 template <typename Message>
 void AppendBoundedChatMessage(std::vector<std::shared_ptr<Message>>& messages,
-    const std::shared_ptr<Message>& message) {
-	// 模型只保留最近消息，避免长会话持续增长；历史持久化应由独立分页存储负责。
-	if (messages.size() >= MAX_CHAT_HISTORY_MESSAGES) messages.erase(messages.begin());
-	messages.push_back(message);
+                              const std::shared_ptr<Message>& message) {
+    // 模型只保留最近消息，避免长会话持续增长；历史持久化应由独立分页存储负责。
+    if (messages.size() >= MAX_CHAT_HISTORY_MESSAGES)
+        messages.erase(messages.begin());
+    messages.push_back(message);
 }
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QString>
 #include <memory>
-#include <QJsonArray>
 #include <vector>
-#include <QJsonObject>
 
 class SearchInfo {
-public:
+  public:
     SearchInfo(int uid, QString name, QString nick, QString desc, int sex, QString icon);
     int _uid;
     QString _name;
@@ -32,29 +33,24 @@ public:
 };
 
 class AddFriendApply {
-public:
-    AddFriendApply(int from_uid, QString name, QString desc,
-        QString icon, QString nick, int sex);
+  public:
+    AddFriendApply(int from_uid, QString name, QString desc, QString icon, QString nick, int sex);
     int _from_uid;
     QString _name;
     QString _desc;
     QString _icon;
     QString _nick;
-    int     _sex;
+    int _sex;
 };
 
 struct ApplyInfo {
-    ApplyInfo(int uid, QString name, QString desc,
-        QString icon, QString nick, int sex, int status)
-        :_uid(uid), _name(name), _desc(desc),
-        _icon(icon), _nick(nick), _sex(sex), _status(status) {}
+    ApplyInfo(int uid, QString name, QString desc, QString icon, QString nick, int sex, int status)
+        : _uid(uid), _name(name), _desc(desc), _icon(icon), _nick(nick), _sex(sex),
+          _status(status) {}
 
     ApplyInfo(std::shared_ptr<AddFriendApply> addinfo)
-        :_uid(addinfo->_from_uid), _name(addinfo->_name),
-        _desc(addinfo->_desc), _icon(addinfo->_icon),
-        _nick(addinfo->_nick), _sex(addinfo->_sex),
-        _status(0)
-    {}
+        : _uid(addinfo->_from_uid), _name(addinfo->_name), _desc(addinfo->_desc),
+          _icon(addinfo->_icon), _nick(addinfo->_nick), _sex(addinfo->_sex), _status(0) {}
     void SetIcon(QString head) {
         _icon = head;
     }
@@ -68,10 +64,8 @@ struct ApplyInfo {
 };
 
 struct AuthInfo {
-    AuthInfo(int uid, QString name,
-        QString nick, QString icon, int sex) :
-        _uid(uid), _name(name), _nick(nick), _icon(icon),
-        _sex(sex) {}
+    AuthInfo(int uid, QString name, QString nick, QString icon, int sex)
+        : _uid(uid), _name(name), _nick(nick), _icon(icon), _sex(sex) {}
     int _uid;
     QString _name;
     QString _nick;
@@ -80,11 +74,8 @@ struct AuthInfo {
 };
 
 struct AuthRsp {
-    AuthRsp(int peer_uid, QString peer_name,
-        QString peer_nick, QString peer_icon, int peer_sex)
-        :_uid(peer_uid), _name(peer_name), _nick(peer_nick),
-        _icon(peer_icon), _sex(peer_sex)
-    {}
+    AuthRsp(int peer_uid, QString peer_name, QString peer_nick, QString peer_icon, int peer_sex)
+        : _uid(peer_uid), _name(peer_name), _nick(peer_nick), _icon(peer_icon), _sex(peer_sex) {}
 
     int _uid;
     QString _name;
@@ -95,18 +86,18 @@ struct AuthRsp {
 
 struct TextChatData;
 struct FriendInfo {
-    FriendInfo(int uid, QString name, QString nick, QString icon,
-        int sex, QString desc, QString back, QString last_msg = "") :_uid(uid),
-        _name(name), _nick(nick), _icon(icon), _sex(sex), _desc(desc),
-        _back(back), _last_msg(last_msg) {}
+    FriendInfo(int uid, QString name, QString nick, QString icon, int sex, QString desc,
+               QString back, QString last_msg = "")
+        : _uid(uid), _name(name), _nick(nick), _icon(icon), _sex(sex), _desc(desc), _back(back),
+          _last_msg(last_msg) {}
 
-    FriendInfo(std::shared_ptr<AuthInfo> auth_info) :_uid(auth_info->_uid),
-        _nick(auth_info->_nick), _icon(auth_info->_icon), _name(auth_info->_name),
-        _sex(auth_info->_sex) {}
+    FriendInfo(std::shared_ptr<AuthInfo> auth_info)
+        : _uid(auth_info->_uid), _nick(auth_info->_nick), _icon(auth_info->_icon),
+          _name(auth_info->_name), _sex(auth_info->_sex) {}
 
-    FriendInfo(std::shared_ptr<AuthRsp> auth_rsp) :_uid(auth_rsp->_uid),
-        _nick(auth_rsp->_nick), _icon(auth_rsp->_icon), _name(auth_rsp->_name),
-        _sex(auth_rsp->_sex) {}
+    FriendInfo(std::shared_ptr<AuthRsp> auth_rsp)
+        : _uid(auth_rsp->_uid), _nick(auth_rsp->_nick), _icon(auth_rsp->_icon),
+          _name(auth_rsp->_name), _sex(auth_rsp->_sex) {}
 
     void AppendChatMsgs(const std::vector<std::shared_ptr<TextChatData>> text_vec);
 
@@ -122,32 +113,29 @@ struct FriendInfo {
 };
 
 struct UserInfo {
-    UserInfo(int uid, QString name, QString nick, QString icon, int sex, QString last_msg = "", QString desc = "") :
-        _uid(uid), _name(name), _nick(nick), _icon(icon), _sex(sex), _last_msg(last_msg), _desc(desc) {}
+    UserInfo(int uid, QString name, QString nick, QString icon, int sex, QString last_msg = "",
+             QString desc = "")
+        : _uid(uid), _name(name), _nick(nick), _icon(icon), _sex(sex), _last_msg(last_msg),
+          _desc(desc) {}
 
-    UserInfo(std::shared_ptr<AuthInfo> auth) :
-        _uid(auth->_uid), _name(auth->_name), _nick(auth->_nick),
-        _icon(auth->_icon), _sex(auth->_sex), _last_msg(""), _desc("") {}
+    UserInfo(std::shared_ptr<AuthInfo> auth)
+        : _uid(auth->_uid), _name(auth->_name), _nick(auth->_nick), _icon(auth->_icon),
+          _sex(auth->_sex), _last_msg(""), _desc("") {}
 
-    UserInfo(int uid, QString name, QString icon) :
-        _uid(uid), _name(name), _icon(icon), _nick(_name),
-        _sex(0), _last_msg(""), _desc("") {
+    UserInfo(int uid, QString name, QString icon)
+        : _uid(uid), _name(name), _icon(icon), _nick(_name), _sex(0), _last_msg(""), _desc("") {}
 
-    }
+    UserInfo(std::shared_ptr<AuthRsp> auth)
+        : _uid(auth->_uid), _name(auth->_name), _nick(auth->_nick), _icon(auth->_icon),
+          _sex(auth->_sex), _last_msg("") {}
 
-    UserInfo(std::shared_ptr<AuthRsp> auth) :
-        _uid(auth->_uid), _name(auth->_name), _nick(auth->_nick),
-        _icon(auth->_icon), _sex(auth->_sex), _last_msg("") {}
+    UserInfo(std::shared_ptr<SearchInfo> search_info)
+        : _uid(search_info->_uid), _name(search_info->_name), _nick(search_info->_nick),
+          _icon(search_info->_icon), _sex(search_info->_sex), _last_msg("") {}
 
-    UserInfo(std::shared_ptr<SearchInfo> search_info) :
-        _uid(search_info->_uid), _name(search_info->_name), _nick(search_info->_nick),
-        _icon(search_info->_icon), _sex(search_info->_sex), _last_msg("") {
-
-    }
-
-    UserInfo(std::shared_ptr<FriendInfo> friend_info) :
-        _uid(friend_info->_uid), _name(friend_info->_name), _nick(friend_info->_nick),
-        _icon(friend_info->_icon), _sex(friend_info->_sex), _last_msg("") {
+    UserInfo(std::shared_ptr<FriendInfo> friend_info)
+        : _uid(friend_info->_uid), _name(friend_info->_name), _nick(friend_info->_nick),
+          _icon(friend_info->_icon), _sex(friend_info->_sex), _last_msg("") {
         _chat_msgs = friend_info->_chat_msgs;
     }
 
@@ -163,9 +151,7 @@ struct UserInfo {
 
 struct TextChatData {
     TextChatData(QString msg_id, QString msg_content, int fromuid, int touid)
-        :_msg_id(msg_id), _msg_content(msg_content), _from_uid(fromuid), _to_uid(touid) {
-
-    }
+        : _msg_id(msg_id), _msg_content(msg_content), _from_uid(fromuid), _to_uid(touid) {}
     QString _msg_id;
     QString _msg_content;
     int _from_uid;
@@ -173,14 +159,13 @@ struct TextChatData {
 };
 
 struct TextChatMsg {
-    TextChatMsg(int fromuid, int touid, QJsonArray arrays) :
-        _from_uid(fromuid), _to_uid(touid) {
+    TextChatMsg(int fromuid, int touid, QJsonArray arrays) : _from_uid(fromuid), _to_uid(touid) {
         for (auto msg_data : arrays) {
             auto msg_obj = msg_data.toObject();
             auto content = msg_obj["content"].toString();
             auto msgid = msg_obj["msgid"].toString();
             auto msg_ptr = std::make_shared<TextChatData>(msgid, content, fromuid, touid);
-			AppendBoundedChatMessage(_chat_msgs, msg_ptr);
+            AppendBoundedChatMessage(_chat_msgs, msg_ptr);
         }
     }
     int _to_uid;

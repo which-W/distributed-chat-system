@@ -12,21 +12,22 @@
 class FileTransferManager : public QObject, public Singleton<FileTransferManager> {
     Q_OBJECT
     friend class Singleton<FileTransferManager>;
-public:
+
+  public:
     // 当前实现对上传和下载分别串行化，避免多个大文件同时占满聊天连接。
     QString startUpload(const QString& path, int receiverUid);
     void startDownload(const QJsonObject& metadata, const QString& savePath);
     void cancel(const QString& transferId);
     QList<QJsonObject> availableForPeer(int peerUid) const;
 
-signals:
+  signals:
     void transferAvailable(const QJsonObject& metadata);
     void transferRegistered(const QString& localToken, const QString& id);
     void progressChanged(const QString& id, qint64 current, qint64 total);
     void transferFinished(const QString& id, const QString& localPath);
     void transferFailed(const QString& id, const QString& reason);
 
-private:
+  private:
     FileTransferManager();
     void handleFrame(Req id, const QJsonObject& value);
     void hashUploadStep();

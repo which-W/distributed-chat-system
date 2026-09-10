@@ -6,6 +6,8 @@ const emailModule = require('./email')
 const redis_module = require('./redis')
 const fs = require('fs')
 const { generateVerificationCode, normalizeEmail } = require('./security')
+const { log, emailHash } = require('./logger')
+const crypto = require('crypto')
 
 const INTERNAL_TOKEN_HEADER = 'x-chat-internal-token'
 const DEVELOPMENT_TOKEN = 'local-development-only-change-me'
@@ -54,12 +56,18 @@ function serverCredentials() {
 }
 
 async function GetVarifyCode(call, callback) {
+	const suppliedRequestId = call.metadata.get('x-chat-request-id')
+	const requestId = suppliedRequestId.length === 1 && String(suppliedRequestId[0]).length <= 64
+		? String(suppliedRequestId[0]) : crypto.randomUUID()
+	const started = Date.now()
 	if (!authorizeGate(call)) {
+		log('warn', 'grpc.request_rejected', 'invalid internal RPC identity', { request_id: requestId })
 		callback({ code: grpc.status.UNAUTHENTICATED, message: 'invalid internal RPC identity' })
 		return
 	}
     const email = normalizeEmail(call.request.email)
     if (!email) {
+		log('warn', 'verification.rejected', 'invalid email', { request_id: requestId, duration_ms: Date.now() - started })
         callback(null, { email: '', error: const_module.Errors.InvalidEmail })
         return
     }
@@ -67,10 +75,12 @@ async function GetVarifyCode(call, callback) {
         const uniqueId = generateVerificationCode()
         const issueResult = await redis_module.IssueVerificationCode(email, uniqueId)
 	        if (issueResult === 2 || issueResult === 3 || issueResult === 4) {
+			log('warn', 'verification.rate_limited', 'verification request rate limited', { request_id: requestId, email_hash: emailHash(email), duration_ms: Date.now() - started })
             callback(null, { email, error: const_module.Errors.RateLimited })
             return
         }
         if (issueResult !== 1) {
+			log('error', 'verification.redis_failed', 'verification code could not be stored', { request_id: requestId, email_hash: emailHash(email), duration_ms: Date.now() - started })
             callback(null, { email, error: const_module.Errors.RedisErr })
             return
         }
@@ -85,6 +95,7 @@ async function GetVarifyCode(call, callback) {
         };
 
         await emailModule.SendMail(mailOptions);
+		log('info', 'verification.sent', 'verification email sent', { request_id: requestId, email_hash: emailHash(email), duration_ms: Date.now() - started })
 
         callback(null, { email,
             error:const_module.Errors.Success
@@ -92,7 +103,7 @@ async function GetVarifyCode(call, callback) {
 
 
     }catch(error){
-        console.log("verification email failed:", error.message)
+		log('error', 'verification.send_failed', 'verification email failed', { request_id: requestId, email_hash: emailHash(email), duration_ms: Date.now() - started, error: error.message })
 
         callback(null, { email,
             error:const_module.Errors.Exception
@@ -115,7 +126,7 @@ function main() {
     server.addService(message_proto.VarifyService.service, { GetVarifyCode: GetVarifyCode })
     server.bindAsync(bindAddress, serverCredentials(), (error) => {
         if (error) throw error
-        console.log(`grpc server started on ${bindAddress}`)
+        log('info', 'server.started', 'verification server is listening', { address: bindAddress, tls_mode: tlsMode })
     })
 }
 

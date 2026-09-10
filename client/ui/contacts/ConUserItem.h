@@ -1,19 +1,20 @@
 #pragma once
 
-#include <QWidget>
-#include "ui_ConUserItem.h"
 #include "ListItemBase.h"
 #include "UserData.h"
-#include <QPixmap>
 #include "statewidget.h"
+#include "ui_ConUserItem.h"
+#include <QPixmap>
+#include <QWidget>
 QT_BEGIN_NAMESPACE
-namespace Ui { class ConUserItemClass; };
+namespace Ui {
+class ConUserItemClass;
+};
 QT_END_NAMESPACE
 
-class ConUserItem : public ListItemBase
-{
-	Q_OBJECT
-public:
+class ConUserItem : public ListItemBase {
+    Q_OBJECT
+  public:
     explicit ConUserItem(QWidget* parent = nullptr);
     ~ConUserItem();
     QSize sizeHint() const override;
@@ -22,7 +23,8 @@ public:
     void SetInfo(int uid, QString name, QString icon);
     void ShowRedPoint(bool show = false);
     std::shared_ptr<UserInfo> GetInfo();
-private:
+
+  private:
     Ui::ConUserItemClass* ui;
     std::shared_ptr<UserInfo> _info;
 };

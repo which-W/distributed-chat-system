@@ -1,20 +1,20 @@
 #pragma once
-#include <QFrame>
 #include "global.h"
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QPainter>
-class BubbleFrame : public QFrame
-{
-	Q_OBJECT
-public:
+class BubbleFrame : public QFrame {
+    Q_OBJECT
+  public:
     BubbleFrame(ChatRole role, QWidget* parent = nullptr);
     void setMargin(int margin);
     void setWidget(QWidget* w);
-protected:
+
+  protected:
     void paintEvent(QPaintEvent* e);
-private:
+
+  private:
     QHBoxLayout* m_pHLayout;
     ChatRole m_role;
-    int      m_margin;
-
+    int m_margin;
 };

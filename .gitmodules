@@ -1,3 +1,6 @@
 [submodule "third_party/ElaWidgetTools"]
 	path = third_party/ElaWidgetTools
 	url = https://github.com/Liniyous/ElaWidgetTools.git
+[submodule "third_party/LogSystem"]
+	path = third_party/LogSystem
+	url = https://github.com/which-W/LogSystem.git

@@ -1,18 +1,16 @@
 #include "ChatView.h"
 
-ChatView::ChatView(QWidget* parent) : QWidget(parent)
-, isAppended(false)
-{
-	//创建主布局
+ChatView::ChatView(QWidget* parent) : QWidget(parent), isAppended(false) {
+    // 创建主布局
     QVBoxLayout* pMainLayout = new QVBoxLayout();
     this->setLayout(pMainLayout);
     pMainLayout->setContentsMargins(0, 0, 0, 0);
-	//添加滚动区域
+    // 添加滚动区域
     m_pScrollArea = new QScrollArea();
     m_pScrollArea->setObjectName("chat_area");
     pMainLayout->addWidget(m_pScrollArea);
 
-    //构建消息内容容器
+    // 构建消息内容容器
     QWidget* w = new QWidget(this);
     w->setObjectName("chat_bg");
     w->setAutoFillBackground(true);
@@ -22,71 +20,64 @@ ChatView::ChatView(QWidget* parent) : QWidget(parent)
     w->setLayout(pVLayout_1);
     m_pScrollArea->setWidget(w);
 
-	//滚动条相关设置
+    // 滚动条相关设置
     m_pScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     QScrollBar* pVScrollBar = m_pScrollArea->verticalScrollBar();
     connect(pVScrollBar, &QScrollBar::rangeChanged, this, &ChatView::onVScrollBarMoved);
 
-    //手动重新布局滚动条（非标准方法）
-    //把垂直ScrollBar放到上边 而不是原来的并排
+    // 手动重新布局滚动条（非标准方法）
+    // 把垂直ScrollBar放到上边 而不是原来的并排
     QHBoxLayout* pHLayout_2 = new QHBoxLayout();
     pHLayout_2->addWidget(pVScrollBar, 0, Qt::AlignRight);
     pHLayout_2->setContentsMargins(0, 0, 0, 0);
     m_pScrollArea->setLayout(pHLayout_2);
     pVScrollBar->setHidden(true);
-    //其它设置
-	m_pScrollArea->setWidgetResizable(true);//允许内容自适应大小
-	m_pScrollArea->installEventFilter(this);//安装事件过滤器
-	initStyleSheet();//初始化样式表
+    // 其它设置
+    m_pScrollArea->setWidgetResizable(true); // 允许内容自适应大小
+    m_pScrollArea->installEventFilter(this); // 安装事件过滤器
+    initStyleSheet();                        // 初始化样式表
 }
 
-void ChatView::appendChatItem(QWidget* item)
-{
+void ChatView::appendChatItem(QWidget* item) {
     QVBoxLayout* vl = qobject_cast<QVBoxLayout*>(m_pScrollArea->widget()->layout());
-	// UI 控件也必须与模型使用同一数量预算，否则仅限制 vector 仍会耗尽内存。
-	if (vl->count() - 1 >= static_cast<int>(MAX_CHAT_HISTORY_MESSAGES)) {
-		QLayoutItem* oldest = vl->takeAt(0);
-		if (oldest) {
-			delete oldest->widget();
-			delete oldest;
-		}
-	}
+    // UI 控件也必须与模型使用同一数量预算，否则仅限制 vector 仍会耗尽内存。
+    if (vl->count() - 1 >= static_cast<int>(MAX_CHAT_HISTORY_MESSAGES)) {
+        QLayoutItem* oldest = vl->takeAt(0);
+        if (oldest) {
+            delete oldest->widget();
+            delete oldest;
+        }
+    }
     vl->insertWidget(vl->count() - 1, item);
     isAppended = true;
 }
 
-void ChatView::prependChatItem(QWidget* item)
-{
-	QVBoxLayout* vl = qobject_cast<QVBoxLayout*>(m_pScrollArea->widget()->layout());
-	if (vl->count() - 1 >= static_cast<int>(MAX_CHAT_HISTORY_MESSAGES)) {
-		QLayoutItem* newest = vl->takeAt(vl->count() - 2);
-		if (newest) {
-			delete newest->widget();
-			delete newest;
-		}
-	}
-	vl->insertWidget(0, item);
-	isAppended = true;
+void ChatView::prependChatItem(QWidget* item) {
+    QVBoxLayout* vl = qobject_cast<QVBoxLayout*>(m_pScrollArea->widget()->layout());
+    if (vl->count() - 1 >= static_cast<int>(MAX_CHAT_HISTORY_MESSAGES)) {
+        QLayoutItem* newest = vl->takeAt(vl->count() - 2);
+        if (newest) {
+            delete newest->widget();
+            delete newest;
+        }
+    }
+    vl->insertWidget(0, item);
+    isAppended = true;
 }
 
-void ChatView::insertChatItem(QWidget* before, QWidget* item)
-{
-	QVBoxLayout* vl = qobject_cast<QVBoxLayout*>(m_pScrollArea->widget()->layout());
-	int index = vl->indexOf(before);
-	if (index != -1)
-	{
-		vl->insertWidget(index, item);
-		isAppended = true;
-	}
-	else
-	{
-		//如果没有找到before，则直接添加到末尾
-		appendChatItem(item);
-	}
+void ChatView::insertChatItem(QWidget* before, QWidget* item) {
+    QVBoxLayout* vl = qobject_cast<QVBoxLayout*>(m_pScrollArea->widget()->layout());
+    int index = vl->indexOf(before);
+    if (index != -1) {
+        vl->insertWidget(index, item);
+        isAppended = true;
+    } else {
+        // 如果没有找到before，则直接添加到末尾
+        appendChatItem(item);
+    }
 }
 
-void ChatView::removeAllItem()
-{
+void ChatView::removeAllItem() {
     QVBoxLayout* layout = qobject_cast<QVBoxLayout*>(m_pScrollArea->widget()->layout());
 
     int count = layout->count();
@@ -102,45 +93,35 @@ void ChatView::removeAllItem()
     }
 }
 
-bool ChatView::eventFilter(QObject* o, QEvent* e)
-{
+bool ChatView::eventFilter(QObject* o, QEvent* e) {
     /*if(e->type() == QEvent::Resize && o == )
     {
 
     }
     else */
-    if (e->type() == QEvent::Enter && o == m_pScrollArea)
-    {
-        m_pScrollArea->verticalScrollBar()->setHidden(m_pScrollArea->verticalScrollBar()->maximum() == 0);
-    }
-    else if (e->type() == QEvent::Leave && o == m_pScrollArea)
-    {
+    if (e->type() == QEvent::Enter && o == m_pScrollArea) {
+        m_pScrollArea->verticalScrollBar()->setHidden(
+            m_pScrollArea->verticalScrollBar()->maximum() == 0);
+    } else if (e->type() == QEvent::Leave && o == m_pScrollArea) {
         m_pScrollArea->verticalScrollBar()->setHidden(true);
     }
     return QWidget::eventFilter(o, e);
 }
-void ChatView::paintEvent(QPaintEvent* event)
-{
+void ChatView::paintEvent(QPaintEvent* event) {
     QStyleOption opt;
     opt.initFrom(this);
     QPainter p(this);
     style()->drawPrimitive(QStyle::PE_Widget, &opt, &p, this);
 }
 
-void ChatView::onVScrollBarMoved(int min, int max)
-{
-    if (isAppended) //添加item可能调用多次
+void ChatView::onVScrollBarMoved(int min, int max) {
+    if (isAppended) // 添加item可能调用多次
     {
         QScrollBar* pVScrollBar = m_pScrollArea->verticalScrollBar();
         pVScrollBar->setSliderPosition(pVScrollBar->maximum());
-        //500毫秒内可能调用多次
-        QTimer::singleShot(500, [this]()
-            {
-                isAppended = false;
-            });
+        // 500毫秒内可能调用多次
+        QTimer::singleShot(500, [this]() { isAppended = false; });
     }
 }
 
-void ChatView::initStyleSheet()
-{
-}
+void ChatView::initStyleSheet() {}

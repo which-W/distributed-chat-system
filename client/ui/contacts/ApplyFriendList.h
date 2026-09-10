@@ -1,18 +1,18 @@
 #pragma once
-#include <QListWidget>
 #include <QEvent>
-#include <QWheelEvent>
+#include <QListWidget>
 #include <QScrollbar>
-class ApplyFriendList : public QListWidget
-{
+#include <QWheelEvent>
+class ApplyFriendList : public QListWidget {
     Q_OBJECT
-public:
+  public:
     ApplyFriendList(QWidget* parent = nullptr);
-protected:
+
+  protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
-private slots:
+  private slots:
 
-signals:
+  signals:
     void sig_show_search(bool);
 };

@@ -1,4 +1,5 @@
 #include "RedisMgr.h"
+#include "ChatLogger.h"
 #include <chrono>
 #include <cstring>
 
@@ -12,27 +13,27 @@ RedisMgr::RedisMgr() {
     _con_pool.reset(new RedisConPool(5, host, atoi(port.c_str()), user, pwd));
 }
 
-RedisMgr::~RedisMgr()
-{
+RedisMgr::~RedisMgr() {
     Close();
 }
 
-bool RedisMgr::Get(const std::string& key, std::string& value)
-{
+bool RedisMgr::Get(const std::string& key, std::string& value) {
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
     }
     auto reply = (redisReply*)redisCommand(connect, "GET %s", key.c_str());
     if (reply == NULL) {
-        std::cout << "[ GET  " << key << " ] failed" << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "[ GET  " << key << " ] failed" << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
 
     if (reply->type != REDIS_REPLY_STRING) {
-        std::cout << "[ GET  " << key << " ] failed" << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "[ GET  " << key << " ] failed" << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
@@ -41,162 +42,170 @@ bool RedisMgr::Get(const std::string& key, std::string& value)
     value = reply->str;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
-    std::cout << "Succeed to execute command [ GET " << key << "  ]" << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Succeed to execute command [ GET " << key << "  ]" << std::endl;
     return true;
 }
 
-bool RedisMgr::Set(const std::string& key, const std::string& value)
-{
-    //执行redis命令行
+bool RedisMgr::Set(const std::string& key, const std::string& value) {
+    // 执行redis命令行
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
     }
     auto reply = (redisReply*)redisCommand(connect, "SET %s %s", key.c_str(), value.c_str());
 
-    //如果返回NULL则说明执行失败
-    if (NULL == reply)
-    {
-        std::cout << "Redis SET failed for key " << key << std::endl;
+    // 如果返回NULL则说明执行失败
+    if (NULL == reply) {
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Redis SET failed for key " << key << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
 
-    //如果执行失败则释放连接
-    if (!(reply->type == REDIS_REPLY_STATUS && (strcmp(reply->str, "OK") == 0 || strcmp(reply->str, "ok") == 0)))
-    {
-        std::cout << "Redis SET failed for key " << key << std::endl;
+    // 如果执行失败则释放连接
+    if (!(reply->type == REDIS_REPLY_STATUS &&
+          (strcmp(reply->str, "OK") == 0 || strcmp(reply->str, "ok") == 0))) {
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Redis SET failed for key " << key << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
 
-    //执行成功 释放redisCommand执行后返回的redisReply所占用的内存
+    // 执行成功 释放redisCommand执行后返回的redisReply所占用的内存
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
-    std::cout << "Redis SET succeeded for key " << key << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Redis SET succeeded for key " << key << std::endl;
     return true;
 }
 
-bool RedisMgr::LPush(const std::string& key, const std::string& value)
-{
+bool RedisMgr::LPush(const std::string& key, const std::string& value) {
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
     }
     auto reply = (redisReply*)redisCommand(connect, "LPUSH %s %s", key.c_str(), value.c_str());
-    if (NULL == reply)
-    {
-        std::cout << "Redis LPUSH failed for key " << key << std::endl;
+    if (NULL == reply) {
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Redis LPUSH failed for key " << key << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
 
     if (reply->type != REDIS_REPLY_INTEGER || reply->integer <= 0) {
-        std::cout << "Redis LPUSH failed for key " << key << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Redis LPUSH failed for key " << key << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
 
-    std::cout << "Redis LPUSH succeeded for key " << key << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Redis LPUSH succeeded for key " << key << std::endl;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
     return true;
 }
 
-bool RedisMgr::LPop(const std::string& key, std::string& value)
-{
+bool RedisMgr::LPop(const std::string& key, std::string& value) {
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
     }
     auto reply = (redisReply*)redisCommand(connect, "LPOP %s ", key.c_str());
     if (reply == nullptr || reply->type == REDIS_REPLY_NIL) {
-        std::cout << "Execut command [ LPOP " << key << " ] failure ! " << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Execut command [ LPOP " << key << " ] failure ! " << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
     value = reply->str;
-    std::cout << "Execut command [ LPOP " << key << " ] success ! " << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Execut command [ LPOP " << key << " ] success ! " << std::endl;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
     return true;
 }
 
-bool RedisMgr::RPush(const std::string& key, const std::string& value)
-{
+bool RedisMgr::RPush(const std::string& key, const std::string& value) {
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
     }
     auto reply = (redisReply*)redisCommand(connect, "RPUSH %s %s", key.c_str(), value.c_str());
-    if (NULL == reply)
-    {
-        std::cout << "Redis RPUSH failed for key " << key << std::endl;
+    if (NULL == reply) {
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Redis RPUSH failed for key " << key << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
 
     if (reply->type != REDIS_REPLY_INTEGER || reply->integer <= 0) {
-        std::cout << "Redis RPUSH failed for key " << key << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Redis RPUSH failed for key " << key << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
 
-    std::cout << "Redis RPUSH succeeded for key " << key << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Redis RPUSH succeeded for key " << key << std::endl;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
     return true;
 }
 
-bool RedisMgr::RPop(const std::string& key, std::string& value)
-{
+bool RedisMgr::RPop(const std::string& key, std::string& value) {
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
     }
     auto reply = (redisReply*)redisCommand(connect, "RPOP %s ", key.c_str());
     if (reply == nullptr || reply->type == REDIS_REPLY_NIL) {
-        std::cout << "Execut command [ RPOP " << key << " ] failure ! " << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Execut command [ RPOP " << key << " ] failure ! " << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
     value = reply->str;
-    std::cout << "Execut command [ RPOP " << key << " ] success ! " << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Execut command [ RPOP " << key << " ] success ! " << std::endl;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
     return true;
 }
 
 bool RedisMgr::HSet(const std::string& key, const std::string& hkey, const std::string& value) {
-    //二级set
+    // 二级set
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
     }
-    auto reply = (redisReply*)redisCommand(connect, "HSET %s %s %s", key.c_str(), hkey.c_str(), value.c_str());
+    auto reply = (redisReply*)redisCommand(connect, "HSET %s %s %s", key.c_str(), hkey.c_str(),
+                                           value.c_str());
     if (reply == nullptr || reply->type != REDIS_REPLY_INTEGER) {
-        std::cout << "Redis HSET failed for key " << key << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Redis HSET failed for key " << key << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
-    std::cout << "Redis HSET succeeded for key " << key << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Redis HSET succeeded for key " << key << std::endl;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
     return true;
 }
 
-bool RedisMgr::HSet(const char* key, const char* hkey, const char* hvalue, size_t hvaluelen)
-{
-    //二级set
+bool RedisMgr::HSet(const char* key, const char* hkey, const char* hvalue, size_t hvaluelen) {
+    // 二级set
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
@@ -213,19 +222,20 @@ bool RedisMgr::HSet(const char* key, const char* hkey, const char* hvalue, size_
     argvlen[3] = hvaluelen;
     auto reply = (redisReply*)redisCommandArgv(connect, 4, argv, argvlen);
     if (reply == nullptr || reply->type != REDIS_REPLY_INTEGER) {
-        std::cout << "Redis HSET failed for key " << key << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Redis HSET failed for key " << key << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
-    std::cout << "Redis HSET succeeded for key " << key << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Redis HSET succeeded for key " << key << std::endl;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
     return true;
 }
 
-std::string RedisMgr::HGet(const std::string& key, const std::string& hkey)
-{
+std::string RedisMgr::HGet(const std::string& key, const std::string& hkey) {
     const char* argv[3];
     size_t argvlen[3];
     argv[0] = "HGET";
@@ -242,63 +252,66 @@ std::string RedisMgr::HGet(const std::string& key, const std::string& hkey)
     if (reply == nullptr || reply->type == REDIS_REPLY_NIL) {
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
-        std::cout << "Execut command [ HGet " << key << " " << hkey << "  ] failure ! " << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Execut command [ HGet " << key << " " << hkey << "  ] failure ! " << std::endl;
         return "";
     }
 
     std::string value = reply->str;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
-    std::cout << "Execut command [ HGet " << key << " " << hkey << " ] success ! " << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Execut command [ HGet " << key << " " << hkey << " ] success ! " << std::endl;
     return value;
 }
 
-bool RedisMgr::Del(const std::string& key)
-{
+bool RedisMgr::Del(const std::string& key) {
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
     }
     auto reply = (redisReply*)redisCommand(connect, "DEL %s", key.c_str());
     if (reply == nullptr || reply->type != REDIS_REPLY_INTEGER) {
-        std::cout << "Execut command [ Del " << key << " ] failure ! " << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Execut command [ Del " << key << " ] failure ! " << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
-    std::cout << "Execut command [ Del " << key << " ] success ! " << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << "Execut command [ Del " << key << " ] success ! " << std::endl;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
     return true;
 }
 
-bool RedisMgr::ExistsKey(const std::string& key)
-{
+bool RedisMgr::ExistsKey(const std::string& key) {
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
         return false;
     }
     auto reply = (redisReply*)redisCommand(connect, "exists %s", key.c_str());
     if (reply == nullptr || reply->type != REDIS_REPLY_INTEGER || reply->integer == 0) {
-        std::cout << "Not Found [ Key " << key << " ]  ! " << std::endl;
+        chat::observability::stream(chat::observability::Level::Info)
+            << "Not Found [ Key " << key << " ]  ! " << std::endl;
         freeReplyObject(reply);
         _con_pool->returnContext(connect);
         return false;
     }
-    std::cout << " Found [ Key " << key << " ] exists ! " << std::endl;
+    chat::observability::stream(chat::observability::Level::Info)
+        << " Found [ Key " << key << " ] exists ! " << std::endl;
     freeReplyObject(reply);
     _con_pool->returnContext(connect);
     return true;
 }
 
-void RedisMgr::Close()
-{
+void RedisMgr::Close() {
     _con_pool->Close();
 };
 
-RedisMgr::VerificationResult RedisMgr::ConsumeVerificationCode(
-    const std::string& email, const std::string& submitted_code, int max_attempts)
-{
+RedisMgr::VerificationResult RedisMgr::ConsumeVerificationCode(const std::string& email,
+                                                               const std::string& submitted_code,
+                                                               int max_attempts) {
     static constexpr const char* script = R"lua(
 local expected = redis.call('GET', KEYS[1])
 if not expected then
@@ -331,12 +344,20 @@ return 1
     const std::string code_key = CODE_HEAD + email;
     const std::string attempts_key = "code_attempts_" + email;
     const std::string max_attempts_text = std::to_string(max_attempts);
-    const char* argv[] = {
-        "EVAL", script, "2", code_key.c_str(), attempts_key.c_str(),
-        submitted_code.c_str(), max_attempts_text.c_str()};
-    const size_t argvlen[] = {
-        4, std::strlen(script), 1, code_key.size(), attempts_key.size(),
-        submitted_code.size(), max_attempts_text.size()};
+    const char* argv[] = {"EVAL",
+                          script,
+                          "2",
+                          code_key.c_str(),
+                          attempts_key.c_str(),
+                          submitted_code.c_str(),
+                          max_attempts_text.c_str()};
+    const size_t argvlen[] = {4,
+                              std::strlen(script),
+                              1,
+                              code_key.size(),
+                              attempts_key.size(),
+                              submitted_code.size(),
+                              max_attempts_text.size()};
 
     auto* reply = static_cast<redisReply*>(redisCommandArgv(connection, 7, argv, argvlen));
     _con_pool->returnContext(connection);
@@ -349,9 +370,13 @@ return 1
 
     const auto result = reply->integer;
     freeReplyObject(reply);
-    if (result == 1) return VerificationResult::Success;
-    if (result == -1) return VerificationResult::Expired;
-    if (result == -2) return VerificationResult::Mismatch;
-    if (result == -3) return VerificationResult::TooManyAttempts;
+    if (result == 1)
+        return VerificationResult::Success;
+    if (result == -1)
+        return VerificationResult::Expired;
+    if (result == -2)
+        return VerificationResult::Mismatch;
+    if (result == -3)
+        return VerificationResult::TooManyAttempts;
     return VerificationResult::RedisError;
 }

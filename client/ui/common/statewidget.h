@@ -1,29 +1,28 @@
 #pragma once
-#include <QWidget>
 #include "global.h"
-#include <QLabel>
 #include <QEnterEvent>
+#include <QLabel>
+#include <QWidget>
 
-class StateWidget : public QWidget
-{
+class StateWidget : public QWidget {
     Q_OBJECT
-public:
-    explicit StateWidget(QWidget *parent = nullptr);
+  public:
+    explicit StateWidget(QWidget* parent = nullptr);
 
-    void SetState(QString normal="", QString hover="", QString press="",
-                  QString select="", QString select_hover="", QString select_press="");
+    void SetState(QString normal = "", QString hover = "", QString press = "", QString select = "",
+                  QString select_hover = "", QString select_press = "");
 
     ClickLbState GetCurState();
     void ClearState();
 
     void SetSelected(bool bselected);
     void AddRedPoint();
-    void ShowRedPoint(bool show=true);
+    void ShowRedPoint(bool show = true);
 
-protected:
+  protected:
     void paintEvent(QPaintEvent* event);
-    virtual void mousePressEvent(QMouseEvent *ev) override;
-    virtual void mouseReleaseEvent(QMouseEvent *ev) override;
+    virtual void mousePressEvent(QMouseEvent* ev) override;
+    virtual void mouseReleaseEvent(QMouseEvent* ev) override;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void enterEvent(QEnterEvent* event) override;
 #else
@@ -31,8 +30,7 @@ protected:
 #endif
     virtual void leaveEvent(QEvent* event) override;
 
-private:
-
+  private:
     QString _normal;
     QString _normal_hover;
     QString _normal_press;
@@ -42,9 +40,9 @@ private:
     QString _selected_press;
 
     ClickLbState _curstate;
-    QLabel * _red_point;
+    QLabel* _red_point;
 
-signals:
+  signals:
     void clicked(void);
     void sig_close_redpoint();
 };

@@ -1,9 +1,10 @@
 #pragma once
+#include "PoolMetrics.h"
 
-#include <jdbc/cppconn/statement.h>
+#include <jdbc/cppconn/exception.h>
 #include <jdbc/cppconn/prepared_statement.h>
 #include <jdbc/cppconn/resultset.h>
-#include <jdbc/cppconn/exception.h>
+#include <jdbc/cppconn/statement.h>
 #include <jdbc/mysql_connection.h>
 #include <jdbc/mysql_driver.h>
 
@@ -24,9 +25,7 @@
 namespace chat::storage {
 
 // 归还池化连接时统一撤销未完成事务，防止锁和未提交数据泄漏到下一个请求。
-template <typename Connection>
-void ResetMysqlTransaction(Connection& connection)
-{
+template <typename Connection> void ResetMysqlTransaction(Connection& connection) {
     if (!connection.getAutoCommit()) {
         connection.rollback();
         connection.setAutoCommit(true);
@@ -34,18 +33,16 @@ void ResetMysqlTransaction(Connection& connection)
 }
 
 class SqlConnection {
-public:
+  public:
     SqlConnection(sql::Connection* connection, std::int64_t last_operation_time)
-        : _con(connection), _last_oper_time(last_operation_time)
-    {
-    }
+        : _con(connection), _last_oper_time(last_operation_time) {}
 
     std::unique_ptr<sql::Connection> _con;
     std::int64_t _last_oper_time;
 };
 
 class MySqlPool {
-public:
+  public:
     using ConnectionFactory = std::function<std::unique_ptr<SqlConnection>()>;
     using ConnectionAction = std::function<void(SqlConnection&)>;
 
@@ -57,48 +54,52 @@ public:
     };
 
     MySqlPool(const std::string& url, const std::string& user, const std::string& pass,
-        const std::string& schema, int pool_size)
+              const std::string& schema, int pool_size)
         : MySqlPool(
-            Options {static_cast<std::size_t>(pool_size), std::chrono::seconds(5),
-                std::chrono::seconds(60), true},
-            [url, user, pass, schema]() {
-                auto* driver = sql::mysql::get_mysql_driver_instance();
-                std::unique_ptr<sql::Connection> connection(driver->connect(url, user, pass));
-                connection->setSchema(schema);
-                const auto now = std::chrono::system_clock::now().time_since_epoch();
-                const auto timestamp =
-                    std::chrono::duration_cast<std::chrono::seconds>(now).count();
-                return std::make_unique<SqlConnection>(connection.release(), timestamp);
-            },
-            [](SqlConnection& connection) {
-                if (!connection._con) {
-                    throw std::runtime_error("MySQL connection is null");
-                }
-                ResetMysqlTransaction(*connection._con);
-            },
-            [](SqlConnection& connection) {
-                if (!connection._con) {
-                    throw std::runtime_error("MySQL connection is null");
-                }
-                const auto now = std::chrono::system_clock::now().time_since_epoch();
-                const auto timestamp =
-                    std::chrono::duration_cast<std::chrono::seconds>(now).count();
-                if (timestamp - connection._last_oper_time < 5) {
-                    return;
-                }
-                std::unique_ptr<sql::Statement> statement(connection._con->createStatement());
-                std::unique_ptr<sql::ResultSet> result(statement->executeQuery("SELECT 1"));
-                connection._last_oper_time = timestamp;
-            })
-    {
-    }
+              Options{static_cast<std::size_t>(pool_size), std::chrono::seconds(5),
+                      std::chrono::seconds(60), true},
+              [url, user, pass, schema]() {
+                  auto* driver = sql::mysql::get_mysql_driver_instance();
+                  sql::ConnectOptionsMap properties;
+                  properties["hostName"] = url;
+                  properties["userName"] = user;
+                  properties["password"] = pass;
+                  properties[OPT_CONNECT_TIMEOUT] = 3;
+                  properties[OPT_READ_TIMEOUT] = 5;
+                  properties[OPT_WRITE_TIMEOUT] = 5;
+                  std::unique_ptr<sql::Connection> connection(driver->connect(properties));
+                  connection->setSchema(schema);
+                  const auto now = std::chrono::system_clock::now().time_since_epoch();
+                  const auto timestamp =
+                      std::chrono::duration_cast<std::chrono::seconds>(now).count();
+                  return std::make_unique<SqlConnection>(connection.release(), timestamp);
+              },
+              [](SqlConnection& connection) {
+                  if (!connection._con) {
+                      throw std::runtime_error("MySQL connection is null");
+                  }
+                  ResetMysqlTransaction(*connection._con);
+              },
+              [](SqlConnection& connection) {
+                  if (!connection._con) {
+                      throw std::runtime_error("MySQL connection is null");
+                  }
+                  const auto now = std::chrono::system_clock::now().time_since_epoch();
+                  const auto timestamp =
+                      std::chrono::duration_cast<std::chrono::seconds>(now).count();
+                  if (timestamp - connection._last_oper_time < 5) {
+                      return;
+                  }
+                  std::unique_ptr<sql::Statement> statement(connection._con->createStatement());
+                  std::unique_ptr<sql::ResultSet> result(statement->executeQuery("SELECT 1"));
+                  connection._last_oper_time = timestamp;
+              }) {}
 
     // 该构造函数仅用于内存假后端测试，不改变生产 DAO 的公开接口。
     MySqlPool(Options options, ConnectionFactory factory, ConnectionAction sanitizer,
-        ConnectionAction health_check)
+              ConnectionAction health_check)
         : options_(std::move(options)), factory_(std::move(factory)),
-          sanitizer_(std::move(sanitizer)), health_check_(std::move(health_check))
-    {
+          sanitizer_(std::move(sanitizer)), health_check_(std::move(health_check)) {
         for (std::size_t index = 0; index < options_.pool_size; ++index) {
             if (!CreateOneConnection()) {
                 break;
@@ -112,43 +113,39 @@ public:
     MySqlPool(const MySqlPool&) = delete;
     MySqlPool& operator=(const MySqlPool&) = delete;
 
-    ~MySqlPool()
-    {
+    ~MySqlPool() {
         Close();
     }
 
-    std::unique_ptr<SqlConnection> getConnection()
-    {
+    std::unique_ptr<SqlConnection> getConnection() {
+        chat::observability::BorrowTimer timer(chat::observability::mysql_pool_metrics);
         std::unique_lock<std::mutex> lock(mutex_);
-        const bool available = connection_ready_.wait_for(lock, options_.borrow_timeout, [this]() {
-            return stopped_ || !connections_.empty();
-        });
+        const bool available = connection_ready_.wait_for(
+            lock, options_.borrow_timeout, [this]() { return stopped_ || !connections_.empty(); });
         if (!available || stopped_) {
             return nullptr;
         }
         auto connection = std::move(connections_.front());
         connections_.pop();
+        timer.success();
         return connection;
     }
 
-    void returnConnection(std::unique_ptr<SqlConnection> connection)
-    {
+    void returnConnection(std::unique_ptr<SqlConnection> connection) {
         if (!connection) {
             return;
         }
 
         try {
             sanitizer_(*connection);
-        }
-        catch (const std::exception& error) {
+        } catch (const std::exception& error) {
             std::cerr << "MySQL connection sanitation failed: " << error.what() << std::endl;
             DiscardConnection(std::move(connection));
             // 先同步补建一次；失败后健康线程仍会按缺口继续重试。
             CreateOneConnection();
             health_wakeup_.notify_all();
             return;
-        }
-        catch (...) {
+        } catch (...) {
             std::cerr << "MySQL connection sanitation failed" << std::endl;
             DiscardConnection(std::move(connection));
             CreateOneConnection();
@@ -167,14 +164,12 @@ public:
         connection_ready_.notify_one();
     }
 
-    void Close()
-    {
+    void Close() {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (stopped_) {
                 // 即使其他线程先执行了 Close，也仍需由析构线程完成 join。
-            }
-            else {
+            } else {
                 stopped_ = true;
             }
         }
@@ -193,15 +188,13 @@ public:
         }
     }
 
-    std::size_t liveConnectionCountForTest() const
-    {
+    std::size_t liveConnectionCountForTest() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return live_connections_;
     }
 
-private:
-    bool CreateOneConnection()
-    {
+  private:
+    bool CreateOneConnection() {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (stopped_ || live_connections_ >= options_.pool_size) {
@@ -214,11 +207,9 @@ private:
         std::unique_ptr<SqlConnection> connection;
         try {
             connection = factory_();
-        }
-        catch (const std::exception& error) {
+        } catch (const std::exception& error) {
             std::cerr << "MySQL connection creation failed: " << error.what() << std::endl;
-        }
-        catch (...) {
+        } catch (...) {
             std::cerr << "MySQL connection creation failed" << std::endl;
         }
 
@@ -238,8 +229,7 @@ private:
         return true;
     }
 
-    void DiscardConnection(std::unique_ptr<SqlConnection> connection)
-    {
+    void DiscardConnection(std::unique_ptr<SqlConnection> connection) {
         connection.reset();
         std::lock_guard<std::mutex> lock(mutex_);
         if (live_connections_ > 0) {
@@ -247,8 +237,7 @@ private:
         }
     }
 
-    void CheckIdleConnections()
-    {
+    void CheckIdleConnections() {
         std::size_t idle_count = 0;
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -268,8 +257,7 @@ private:
 
             try {
                 health_check_(*connection);
-            }
-            catch (...) {
+            } catch (...) {
                 DiscardConnection(std::move(connection));
                 continue;
             }
@@ -279,22 +267,19 @@ private:
                 if (live_connections_ > 0) {
                     --live_connections_;
                 }
-            }
-            else {
+            } else {
                 connections_.push(std::move(connection));
                 connection_ready_.notify_one();
             }
         }
     }
 
-    void ReplenishConnections()
-    {
+    void ReplenishConnections() {
         while (CreateOneConnection()) {
         }
     }
 
-    void HealthWorker()
-    {
+    void HealthWorker() {
         std::unique_lock<std::mutex> lock(mutex_);
         while (!stopped_) {
             health_wakeup_.wait_for(lock, options_.health_interval);

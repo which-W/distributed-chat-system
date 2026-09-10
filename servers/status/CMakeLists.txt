@@ -15,6 +15,7 @@ target_include_directories(status_server PRIVATE
 target_link_libraries(status_server PRIVATE
     chat_server_dependencies
     chat_security
-    chat_server_selection)
+    chat_server_selection
+    chat_observability)
 
 chat_copy_runtime_config(status_server "status.ini" "status.ini")

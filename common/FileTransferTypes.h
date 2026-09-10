@@ -30,14 +30,18 @@ struct TransferRecord {
     TransferStatus status = TransferStatus::Uploading;
 };
 
-inline const char* ToString(TransferStatus status)
-{
+inline const char* ToString(TransferStatus status) {
     switch (status) {
-    case TransferStatus::Uploading: return "uploading";
-    case TransferStatus::Available: return "available";
-    case TransferStatus::Downloaded: return "downloaded";
-    case TransferStatus::Cancelled: return "cancelled";
-    case TransferStatus::Expired: return "expired";
+    case TransferStatus::Uploading:
+        return "uploading";
+    case TransferStatus::Available:
+        return "available";
+    case TransferStatus::Downloaded:
+        return "downloaded";
+    case TransferStatus::Cancelled:
+        return "cancelled";
+    case TransferStatus::Expired:
+        return "expired";
     }
     return "expired";
 }

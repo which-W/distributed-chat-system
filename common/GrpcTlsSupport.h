@@ -34,8 +34,7 @@ inline std::string read_file(const std::string& path, const char* description) {
     return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
 }
 
-template <typename Config>
-Options from_config(Config& cfg) {
+template <typename Config> Options from_config(Config& cfg) {
     Options options;
     options.mode = env_or("CHAT_GRPC_TLS_MODE", cfg["GrpcTLS"]["Mode"]);
     if (options.mode.empty()) {
@@ -72,14 +71,12 @@ inline std::shared_ptr<grpc::ServerCredentials> server_credentials(const Options
                                       read_file(options.cert, "server certificate")});
     if (options.mode == "mtls") {
         ssl.pem_root_certs = read_file(options.ca_cert, "CA certificate");
-        ssl.client_certificate_request =
-            GRPC_SSL_REQUEST_AND_REQUIRE_CLIENT_CERTIFICATE_AND_VERIFY;
+        ssl.client_certificate_request = GRPC_SSL_REQUEST_AND_REQUIRE_CLIENT_CERTIFICATE_AND_VERIFY;
     }
     return grpc::SslServerCredentials(ssl);
 }
 
-inline std::shared_ptr<grpc::Channel> make_channel(const std::string& host,
-                                                   const std::string& port,
+inline std::shared_ptr<grpc::Channel> make_channel(const std::string& host, const std::string& port,
                                                    const Options& options,
                                                    const std::string& tls_name = {}) {
     grpc::ChannelArguments arguments;
@@ -89,4 +86,4 @@ inline std::shared_ptr<grpc::Channel> make_channel(const std::string& host,
     return grpc::CreateCustomChannel(host + ":" + port, channel_credentials(options), arguments);
 }
 
-}  // namespace chat::grpc_tls
+} // namespace chat::grpc_tls
