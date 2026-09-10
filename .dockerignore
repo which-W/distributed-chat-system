@@ -1,0 +1,10 @@
+.git
+.codegraph
+.tmp-logsystem-upstream
+build
+out
+**/node_modules
+*.log
+.env
+certs
+file-storage

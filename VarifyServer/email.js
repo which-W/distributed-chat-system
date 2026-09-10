@@ -1,18 +1,19 @@
 const nodemailer = require('nodemailer');
 const config_module = require("./config")
+const { log } = require('./logger')
 
 /**
  * 创建发送邮件的代理
  */
-let transport = nodemailer.createTransport({
+const transportOptions = {
     host: config_module.smtp_host,
     port: config_module.smtp_port,
     secure: config_module.smtp_secure,
-    auth: {
-        user: config_module.email_user, // 发送方邮箱地址
-        pass: config_module.email_pass // 邮箱授权码或者密码
-    }
-});
+};
+if (config_module.email_user && config_module.email_pass) {
+    transportOptions.auth = { user: config_module.email_user, pass: config_module.email_pass };
+}
+let transport = nodemailer.createTransport(transportOptions);
 
 
 /**
@@ -317,10 +318,10 @@ function SendMail(mailOptions_){
     return new Promise(function(resolve, reject){
         transport.sendMail(mailOptions_, function(error, info){
             if (error) {
-                console.log(error);
+                log('error', 'smtp.send_failed', 'SMTP send failed', { error: error.message });
                 reject(error);
             } else {
-                console.log('邮件已成功发送：' + info.response);
+                log('debug', 'smtp.send_succeeded', 'SMTP accepted verification email');
                 resolve(info.response)
             }
         });

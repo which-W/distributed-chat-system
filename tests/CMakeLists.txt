@@ -11,6 +11,17 @@ if(TARGET chat_server_selection)
 endif()
 
 if(CHAT_BUILD_SERVERS)
+    foreach(test_name IN ITEMS delivery_window keyed_executor token_bucket text_message_service)
+        add_executable(${test_name}_test ${test_name}_test.cpp)
+        target_include_directories(${test_name}_test PRIVATE "${PROJECT_SOURCE_DIR}/common")
+        target_link_libraries(${test_name}_test PRIVATE Threads::Threads)
+        add_test(NAME ${test_name} COMMAND ${test_name}_test)
+    endforeach()
+    add_executable(chat_logger_test chat_logger_test.cpp)
+    target_include_directories(chat_logger_test PRIVATE "${PROJECT_SOURCE_DIR}/common")
+    target_link_libraries(chat_logger_test PRIVATE chat_observability ${CHAT_JSONCPP_TARGET})
+    add_test(NAME chat_logger COMMAND chat_logger_test)
+
     add_executable(mysql_pool_security_test mysql_pool_security_test.cpp)
     target_include_directories(mysql_pool_security_test PRIVATE "${PROJECT_SOURCE_DIR}/common")
     target_link_libraries(mysql_pool_security_test PRIVATE chat_server_dependencies)
@@ -46,6 +57,15 @@ if(CHAT_BUILD_SERVERS)
 endif()
 
 find_program(CHAT_NODE_EXECUTABLE NAMES node)
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND AND CHAT_BUILD_SERVERS)
+    add_test(NAME benchmark_comparison
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/benchmark_comparison_test.py")
+    add_test(NAME benchmark_protocol
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/benchmark_protocol_test.py"
+                "$<TARGET_FILE:chat_loadgen>")
+    set_tests_properties(benchmark_protocol PROPERTIES TIMEOUT 30)
+endif()
 if(CHAT_NODE_EXECUTABLE)
     add_test(
         NAME varify_node_tests

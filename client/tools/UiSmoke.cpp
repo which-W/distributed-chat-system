@@ -8,18 +8,16 @@
 #include "ElaTheme.h"
 
 namespace {
-QWidget* createAuthPage(const QString& buttonText, QWidget* parent)
-{
+QWidget* createAuthPage(const QString& buttonText, QWidget* parent) {
     auto* page = new QWidget(parent);
     auto* layout = new QVBoxLayout(page);
     layout->addWidget(new ElaLineEdit(page));
     layout->addWidget(new ElaPushButton(buttonText, page));
     return page;
 }
-}
+} // namespace
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
 
     QStackedWidget pages;

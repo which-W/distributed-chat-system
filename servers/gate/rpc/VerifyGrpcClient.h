@@ -1,23 +1,23 @@
 #pragma once
-#include<grpc/grpc.h>
-#include<grpcpp/grpcpp.h>
-#include"message.grpc.pb.h"
-#include"message.pb.h"
-#include"Singleton.h"
-#include"const.h"
-#include<queue>
-#include<atomic>
-#include"ConfigMgr.h"
+#include "ConfigMgr.h"
+#include "Singleton.h"
+#include "const.h"
+#include "message.grpc.pb.h"
+#include "message.pb.h"
+#include <atomic>
+#include <grpc/grpc.h>
+#include <grpcpp/grpcpp.h>
+#include <queue>
 using grpc::Channel;
-using grpc::Status;
 using grpc::ClientContext;
+using grpc::Status;
 
 using message::GetVarifyReq;
 using message::GetVarifyRsp;
 using message::VarifyService;
 
 class RPConPool {
-public:
+  public:
     RPConPool(size_t poolSize, std::string host, std::string port);
 
     ~RPConPool();
@@ -28,7 +28,7 @@ public:
 
     void Close();
 
-private:
+  private:
     std::atomic<bool> b_stop_;
     size_t poolSize_;
     std::string host_;
@@ -38,14 +38,14 @@ private:
     std::condition_variable cond_;
 };
 
+class VerifyGrpcClient : public Singleton<VerifyGrpcClient> {
+    friend class Singleton<VerifyGrpcClient>;
 
-class VerifyGrpcClient: public Singleton<VerifyGrpcClient>
-{
-	friend class Singleton<VerifyGrpcClient>;
-public:
-    GetVarifyRsp GetVarifyCode(std::string email);
-private:
-	VerifyGrpcClient();
+  public:
+    GetVarifyRsp GetVarifyCode(std::string email, const std::string& request_id = {});
+
+  private:
+    VerifyGrpcClient();
     std::unique_ptr<RPConPool> _pool;
-	std::string auth_token_;
+    std::string auth_token_;
 };

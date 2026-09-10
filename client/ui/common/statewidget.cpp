@@ -1,27 +1,23 @@
 #include "statewidget.h"
-#include <QPaintEvent>
-#include <QStyleOption>
-#include <QPainter>
 #include <QLabel>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QStyleOption>
 #include <QVBoxLayout>
 
-
-StateWidget::StateWidget(QWidget* parent) : QWidget(parent), _curstate(ClickLbState::Normal)
-{
+StateWidget::StateWidget(QWidget* parent) : QWidget(parent), _curstate(ClickLbState::Normal) {
     setCursor(Qt::PointingHandCursor);
-	_red_point = new QLabel();
-    //添加红点
+    _red_point = new QLabel();
+    // 添加红点
     AddRedPoint();
 }
 
-void StateWidget::paintEvent(QPaintEvent* event)
-{
+void StateWidget::paintEvent(QPaintEvent* event) {
     QStyleOption opt;
     opt.initFrom(this);
     QPainter p(this);
     style()->drawPrimitive(QStyle::PE_Widget, &opt, &p, this);
     return;
-
 }
 
 // 处理鼠标点击事件
@@ -42,8 +38,6 @@ void StateWidget::mousePressEvent(QMouseEvent* event) {
             setProperty("state", _selected_press);
             repolish(this);
             update();
-
-
         }
 
         return;
@@ -52,18 +46,16 @@ void StateWidget::mousePressEvent(QMouseEvent* event) {
     QWidget::mousePressEvent(event);
 }
 
-void StateWidget::mouseReleaseEvent(QMouseEvent* event)
-{
+void StateWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         if (_curstate == ClickLbState::Normal) {
-            //qDebug()<<"ReleaseEvent , change to normal hover: "<< _normal_hover;
+            // qDebug()<<"ReleaseEvent , change to normal hover: "<< _normal_hover;
             setProperty("state", _normal_hover);
             repolish(this);
             update();
 
-        }
-        else {
-            //qDebug()<<"ReleaseEvent , change to select hover: "<< _selected_hover;
+        } else {
+            // qDebug()<<"ReleaseEvent , change to select hover: "<< _selected_hover;
             setProperty("state", _selected_hover);
             repolish(this);
             update();
@@ -83,14 +75,13 @@ void StateWidget::enterEvent(QEvent* event) {
 #endif
     // 在这里处理鼠标悬停进入的逻辑
     if (_curstate == ClickLbState::Normal) {
-        //qDebug()<<"enter , change to normal hover: "<< _normal_hover;
+        // qDebug()<<"enter , change to normal hover: "<< _normal_hover;
         setProperty("state", _normal_hover);
         repolish(this);
         update();
 
-    }
-    else {
-        //qDebug()<<"enter , change to selected hover: "<< _selected_hover;
+    } else {
+        // qDebug()<<"enter , change to selected hover: "<< _selected_hover;
         setProperty("state", _selected_hover);
         repolish(this);
         update();
@@ -108,8 +99,7 @@ void StateWidget::leaveEvent(QEvent* event) {
         repolish(this);
         update();
 
-    }
-    else {
+    } else {
         // qDebug()<<"leave , change to select normal : "<< _selected;
         setProperty("state", _selected);
         repolish(this);
@@ -118,9 +108,8 @@ void StateWidget::leaveEvent(QEvent* event) {
     QWidget::leaveEvent(event);
 }
 
-void StateWidget::SetState(QString normal, QString hover, QString press,
-    QString select, QString select_hover, QString select_press)
-{
+void StateWidget::SetState(QString normal, QString hover, QString press, QString select,
+                           QString select_hover, QString select_press) {
     _normal = normal;
     _normal_hover = hover;
     _normal_press = press;
@@ -137,16 +126,14 @@ ClickLbState StateWidget::GetCurState() {
     return _curstate;
 }
 
-void StateWidget::ClearState()
-{
+void StateWidget::ClearState() {
     _curstate = ClickLbState::Normal;
     setProperty("state", _normal);
     repolish(this);
     update();
 }
 
-void StateWidget::SetSelected(bool bselected)
-{
+void StateWidget::SetSelected(bool bselected) {
     if (bselected) {
         _curstate = ClickLbState::Selected;
         setProperty("state", _selected);
@@ -160,11 +147,9 @@ void StateWidget::SetSelected(bool bselected)
     repolish(this);
     update();
     return;
-
 }
 
-void StateWidget::AddRedPoint()
-{
+void StateWidget::AddRedPoint() {
     _red_point->setObjectName("red_point");
     QVBoxLayout* layout2 = new QVBoxLayout;
     _red_point->setAlignment(Qt::AlignCenter);
@@ -174,8 +159,7 @@ void StateWidget::AddRedPoint()
     _red_point->setVisible(false);
 }
 
-void StateWidget::ShowRedPoint(bool show)
-{
+void StateWidget::ShowRedPoint(bool show) {
     if (!_red_point) {
         AddRedPoint();
     }

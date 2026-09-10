@@ -1,13 +1,12 @@
 #include "ClientCoordinator.h"
-#include "ThemeManager.h"
 #include "ProxyManager.h"
+#include "ThemeManager.h"
+#include "global.h"
+#include <QUrl>
 #include <QtWidgets/QApplication>
 #include <qdebug.h>
-#include <QUrl>
-#include "global.h"
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char* argv[]) {
     QApplication a(argc, argv);
     QCoreApplication::setOrganizationName("NebulaChat");
     QCoreApplication::setApplicationName("NebulaChatClient");

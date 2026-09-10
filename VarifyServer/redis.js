@@ -1,9 +1,9 @@
 const config_module = require("./config")
 const redis = require("ioredis")
 const { verificationKeys } = require('./security')
+const { log } = require('./logger')
 //建立对象
-console.log('Redis host:', config_module.redis_host);
-console.log('Redis port:', config_module.redis_port);
+log('info', 'redis.configured', 'Redis client configured', { host: config_module.redis_host, port: config_module.redis_port });
 
 // 创建Redis客户端实例
 const RedisCli = new redis({
@@ -15,7 +15,7 @@ const RedisCli = new redis({
  * 监听错误信息
  */
 RedisCli.on("error", function (err) {
-  console.log("RedisCli connect error:" , err);
+  log('error', 'redis.connection_error', 'Redis connection error', { error: err.message });
   RedisCli.quit();
 });
 
@@ -29,13 +29,13 @@ async function GetRedis(key) {
     try {
         const result = await RedisCli.get(key)
         if (result === null) {
-            console.log('result:', '<' + result + '>', 'This key cannot be find...')
+            log('debug', 'redis.key_missing', 'Redis key was not found')
             return null
         }
-        console.log('Result:', '<' + result + '>', 'Get key success!...');
+        log('debug', 'redis.get_succeeded', 'Redis get succeeded');
         return result
     } catch (error) {
-        console.log('GetRedis error is', error);
+        log('error', 'redis.get_failed', 'Redis get failed', { error: error.message });
         return null
     }
 
@@ -51,13 +51,13 @@ async function QueryRedis(key) {
         const result = await RedisCli.exists(key)
         //  判断该值是否为空 如果为空返回null
         if (result === 0) {
-            console.log('result:<', '<' + result + '>', 'This key is null...');
+            log('debug', 'redis.key_missing', 'Redis key was not found');
             return null
         }
-        console.log('Result:', '<' + result + '>', 'With this value!...');
+        log('debug', 'redis.query_succeeded', 'Redis query succeeded');
         return result
     } catch (error) {
-        console.log('QueryRedis error is', error);
+        log('error', 'redis.query_failed', 'Redis query failed', { error: error.message });
         return null
     }
 
@@ -78,7 +78,7 @@ async function SetRedisExpire(key, value, exptime) {
         await RedisCli.expire(key, exptime);
         return true;
     } catch (error) {
-        console.log('SetRedisExpire error is', error);
+        log('error', 'redis.set_failed', 'Redis expiry write failed', { error: error.message });
         return false;
     }
 }
@@ -134,7 +134,7 @@ async function IssueVerificationCode(email, code, options = {}) {
         )
         return Number(result)
     } catch (error) {
-        console.log('IssueVerificationCode error:', error.message)
+        log('error', 'redis.verification_issue_failed', 'Verification code transaction failed', { error: error.message })
         return 0
     }
 }

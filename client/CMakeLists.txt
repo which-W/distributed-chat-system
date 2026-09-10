@@ -3,7 +3,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 6.6.3 REQUIRED
-    COMPONENTS Core Gui Widgets Network)
+    COMPONENTS Core Gui Widgets Network Sql)
 set(QT_VERSION_MAJOR 6)
 
 set(ELA_WIDGET_TOOLS_SOURCE_DIR
@@ -47,6 +47,10 @@ file(GLOB_RECURSE CLIENT_FILES CONFIGURE_DEPENDS
 add_executable(chat_client WIN32 ${CLIENT_FILES})
 set_property(TARGET chat_client PROPERTY AUTOGEN_ORIGIN_DEPENDS OFF)
 add_executable(chat_tls_probe tools/TlsProbe.cpp)
+add_executable(message_store_test tools/MessageStoreTest.cpp model/MessageStore.cpp)
+target_include_directories(message_store_test PRIVATE model)
+target_link_libraries(message_store_test PRIVATE Qt6::Core Qt6::Sql)
+add_test(NAME message_store COMMAND message_store_test)
 target_link_libraries(chat_tls_probe PRIVATE
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Network)
@@ -54,6 +58,7 @@ target_include_directories(chat_client PRIVATE
     app core model network
     ui/auth ui/chat ui/common ui/contacts)
 target_link_libraries(chat_client PRIVATE
+    Qt6::Sql
     Ela::WidgetTools
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui

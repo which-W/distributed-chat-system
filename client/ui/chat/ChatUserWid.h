@@ -1,19 +1,20 @@
 #pragma once
 
-#include <QWidget>
-#include "ui_ChatUserWid.h"
 #include "ListItemBase.h"
-#include "usermgr.h"
 #include "UserData.h"
+#include "ui_ChatUserWid.h"
+#include "usermgr.h"
+#include <QWidget>
 QT_BEGIN_NAMESPACE
-namespace Ui { class ChatUserWidClass; };
+namespace Ui {
+class ChatUserWidClass;
+};
 QT_END_NAMESPACE
 
-class ChatUserWid : public ListItemBase
-{
-	Q_OBJECT
+class ChatUserWid : public ListItemBase {
+    Q_OBJECT
 
-public:
+  public:
     explicit ChatUserWid(QWidget* parent = nullptr);
     ~ChatUserWid();
 
@@ -25,7 +26,8 @@ public:
     void SetInfo(std::shared_ptr<UserInfo> user_info);
     std::shared_ptr<UserInfo> GetUserInfo();
     void updateLastMsg(std::vector<std::shared_ptr<TextChatData>> msgs);
-private:
+
+  private:
     Ui::ChatUserWidClass* ui;
-	std::shared_ptr<UserInfo> _user_info;
+    std::shared_ptr<UserInfo> _user_info;
 };

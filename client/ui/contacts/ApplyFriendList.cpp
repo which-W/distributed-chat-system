@@ -1,7 +1,6 @@
 #include "ApplyFriendList.h"
 
-ApplyFriendList::ApplyFriendList(QWidget* parent)
-{
+ApplyFriendList::ApplyFriendList(QWidget* parent) {
     Q_UNUSED(parent);
     this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -9,16 +8,14 @@ ApplyFriendList::ApplyFriendList(QWidget* parent)
     this->viewport()->installEventFilter(this);
 }
 
-bool ApplyFriendList::eventFilter(QObject* watched, QEvent* event)
-{
+bool ApplyFriendList::eventFilter(QObject* watched, QEvent* event) {
 
     // 检查事件是否是鼠标悬浮进入或离开
     if (watched == this->viewport()) {
         if (event->type() == QEvent::Enter) {
             // 鼠标悬浮，显示滚动条
             this->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        }
-        else if (event->type() == QEvent::Leave) {
+        } else if (event->type() == QEvent::Leave) {
             // 鼠标离开，隐藏滚动条
             this->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         }
@@ -43,5 +40,4 @@ bool ApplyFriendList::eventFilter(QObject* watched, QEvent* event)
     }
 
     return QListWidget::eventFilter(watched, event);
-
 }

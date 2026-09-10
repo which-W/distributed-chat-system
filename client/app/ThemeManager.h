@@ -4,23 +4,22 @@
 
 #include "ElaWidgetToolsDef.h"
 
-class ThemeManager final : public QObject
-{
+class ThemeManager final : public QObject {
     Q_OBJECT
 
-public:
+  public:
     static ThemeManager& instance();
 
     void initialize();
     ElaThemeType::ThemeMode themeMode() const;
 
-public slots:
+  public slots:
     void setThemeMode(ElaThemeType::ThemeMode mode);
     void toggleTheme();
 
-signals:
+  signals:
     void themeChanged(ElaThemeType::ThemeMode mode);
 
-private:
+  private:
     explicit ThemeManager(QObject* parent = nullptr);
 };

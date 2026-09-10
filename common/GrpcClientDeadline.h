@@ -9,9 +9,7 @@ inline constexpr auto kInternalRpcTimeout = std::chrono::seconds(3);
 inline constexpr auto kVerificationRpcTimeout = std::chrono::seconds(10);
 
 template <typename Rep, typename Period>
-void setDeadline(grpc::ClientContext& context,
-    const std::chrono::duration<Rep, Period>& timeout)
-{
+void setDeadline(grpc::ClientContext& context, const std::chrono::duration<Rep, Period>& timeout) {
     context.set_deadline(std::chrono::system_clock::now() + timeout);
 }
 

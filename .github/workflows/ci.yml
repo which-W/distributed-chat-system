@@ -3,6 +3,9 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 19 * * 1"
 
 permissions:
   contents: read
@@ -18,6 +21,8 @@ jobs:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y ninja-build pkg-config autoconf automake libtool libtirpc-dev
       - name: Bootstrap vcpkg
@@ -58,14 +63,14 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check aqtinstall
-          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O C:\Qt
+          python -m aqt install-qt windows desktop 6.6.3 win64_msvc2022_64 -O C:\Qt
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
       - name: Configure
         shell: pwsh
-        run: cmake -S . -B build/ci-windows-client -G Ninja -DCHAT_BUILD_SERVERS=OFF -DCHAT_BUILD_CLIENT=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/msvc2022_64 -DCMAKE_CXX_COMPILER=cl
+        run: cmake -S . -B build/ci-windows-client -G Ninja -DCHAT_BUILD_SERVERS=OFF -DCHAT_BUILD_CLIENT=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/Qt/6.6.3/msvc2022_64 -DCMAKE_CXX_COMPILER=cl
       - name: Build
         shell: pwsh
         run: cmake --build build/ci-windows-client
@@ -95,8 +100,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check C++ formatting
-        run: >-
-          clang-format --dry-run --Werror
-          common/PasswordHasher.cpp common/PasswordHasher.h
-          common/ChatServerSelector.cpp common/ChatServerSelector.h
-          tests/password_hasher_test.cpp tests/chat_server_selector_test.cpp
+        run: |
+          files=$(git ls-files '*.cpp' '*.h' | grep -Ev '^(third_party|build)/')
+          clang-format --dry-run --Werror $files
+
+  docker-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run two-node acceptance suite
+        env:
+          E2E_BACKLOG: ${{ github.event_name == 'pull_request' && '257' || '1000' }}
+        run: |
+          sh scripts/demo.sh --keep
+      - name: Run fault recovery suite
+        if: github.event_name != 'pull_request'
+        run: sh scripts/fault-test.sh
+      - name: Smoke benchmark with resource sampling
+        run: |
+          docker compose --env-file build/demo/demo.env -f compose.demo.yaml --profile tools run --rm benchmark > build/demo/benchmark.log 2>&1 &
+          benchmark_pid=$!
+          while kill -0 "$benchmark_pid" 2>/dev/null; do
+            docker stats --no-stream --format '{{json .}}' >> build/demo/reports/benchmark-resources.jsonl
+            sleep 2
+          done
+          wait "$benchmark_pid"
+      - name: Capture JSON logs
+        if: always()
+        run: docker compose --env-file build/demo/demo.env -f compose.demo.yaml logs --no-color > build/demo/services.jsonl || true
+      - name: Upload reports and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributed-chat-e2e-${{ github.run_id }}
+          path: |
+            build/demo/reports
+            build/demo/services.jsonl
+            build/demo/benchmark.log
+      - name: Clean up demo
+        if: always()
+        run: docker compose --env-file build/demo/demo.env -f compose.demo.yaml down --volumes --remove-orphans || true

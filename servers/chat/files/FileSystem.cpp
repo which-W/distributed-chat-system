@@ -1,9 +1,5 @@
 #include "FileSystem.h"
 
-FileSystem::~FileSystem()
-{
-}
+FileSystem::~FileSystem() {}
 
-void FileSystem::PostMsgToQue(std::shared_ptr<FileTask> msg, int index)
-{
-}
+void FileSystem::PostMsgToQue(std::shared_ptr<FileTask> msg, int index) {}

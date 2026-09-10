@@ -1,12 +1,12 @@
 #pragma once
-#include <memory>
+#include "CServer.h"
 #include "Singleton.h"
-#include <grpc/grpc.h>
-#include "message.grpc.pb.h"
-#include "message.pb.h"
 #include "const.h"
 #include "data.h"
-#include "CServer.h"
+#include "message.grpc.pb.h"
+#include "message.pb.h"
+#include <grpc/grpc.h>
+#include <memory>
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
@@ -18,31 +18,31 @@ using message::AuthFriendReq;
 using message::AuthFriendRsp;
 
 using message::ChatService;
+using message::TextChatData;
 using message::TextChatMsgReq;
 using message::TextChatMsgRsp;
-using message::TextChatData;
 
-
-class ChatServiceImp final : public ChatService::Service
-{
-public:
-	~ChatServiceImp();
+class ChatServiceImp final : public ChatService::Service {
+  public:
+    ~ChatServiceImp();
 
     ChatServiceImp();
     Status NotifyAddFriend(ServerContext* context, const AddFriendReq* request,
-        AddFriendRsp* reply) override;
+                           AddFriendRsp* reply) override;
 
-    Status NotifyAuthFriend(ServerContext* context,
-        const AuthFriendReq* request, AuthFriendRsp* response) override;
+    Status NotifyAuthFriend(ServerContext* context, const AuthFriendReq* request,
+                            AuthFriendRsp* response) override;
 
-    Status NotifyTextChatMsg(::grpc::ServerContext* context,
-        const TextChatMsgReq* request, TextChatMsgRsp* response) override;
-	Status NotifyFileAvailable(::grpc::ServerContext* context,
-		const message::FileAvailableReq* request, message::FileAvailableRsp* response) override;
+    Status NotifyTextChatMsg(::grpc::ServerContext* context, const TextChatMsgReq* request,
+                             TextChatMsgRsp* response) override;
+    Status NotifyFileAvailable(::grpc::ServerContext* context,
+                               const message::FileAvailableReq* request,
+                               message::FileAvailableRsp* response) override;
 
     bool GetBaseInfo(std::string base_key, int uid, std::shared_ptr<UserInfo>& userinfo);
 
     void RegisterServer(std::shared_ptr<CServer> pServer);
-private:
+
+  private:
     std::shared_ptr<CServer> _p_server;
 };

@@ -1,20 +1,21 @@
 #pragma once
 
-#include <QWidget>
 #include "ui_LoadingWidget.h"
 #include <QMovie>
+#include <QWidget>
 QT_BEGIN_NAMESPACE
-namespace Ui { class LoadingWidgetClass; };
+namespace Ui {
+class LoadingWidgetClass;
+};
 QT_END_NAMESPACE
 
-class LoadingWidget : public QWidget
-{
-	Q_OBJECT
+class LoadingWidget : public QWidget {
+    Q_OBJECT
 
-public:
-	LoadingWidget(QWidget *parent = nullptr);
-	~LoadingWidget();
+  public:
+    LoadingWidget(QWidget* parent = nullptr);
+    ~LoadingWidget();
 
-private:
-	Ui::LoadingWidgetClass *ui;
+  private:
+    Ui::LoadingWidgetClass* ui;
 };

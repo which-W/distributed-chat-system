@@ -6,19 +6,18 @@
 class AuthWindow;
 class ChatWindow;
 
-class ClientCoordinator final : public QObject
-{
+class ClientCoordinator final : public QObject {
     Q_OBJECT
 
-public:
+  public:
     explicit ClientCoordinator(QObject* parent = nullptr);
     void start();
 
-private slots:
+  private slots:
     void showAuthentication();
     void showChat();
 
-private:
+  private:
     QPointer<AuthWindow> authWindow_;
     QPointer<ChatWindow> chatWindow_;
 };

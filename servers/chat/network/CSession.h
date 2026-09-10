@@ -1,90 +1,105 @@
 #pragma once
+#include "MsgNode.h"
+#include "TokenBucket.h"
+#include "const.h"
 #include <atomic>
 #include <boost/asio.hpp>
-#include <boost/uuid/uuid_io.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/beast/http.hpp>
 #include <boost/beast.hpp>
-#include <boost/asio.hpp>
-#include <queue>
-#include <mutex>
+#include <boost/beast/http.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <memory>
-#include "const.h"
-#include "MsgNode.h"
+#include <mutex>
+#include <queue>
 using namespace std;
 
-
-namespace beast = boost::beast;         // from <boost/beast.hpp>
-namespace http = beast::http;           // from <boost/beast/http.hpp>
-namespace net = boost::asio;            // from <boost/asio.hpp>
-using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
-
+namespace beast = boost::beast;   // from <boost/beast.hpp>
+namespace http = beast::http;     // from <boost/beast/http.hpp>
+namespace net = boost::asio;      // from <boost/asio.hpp>
+using tcp = boost::asio::ip::tcp; // from <boost/asio/ip/tcp.hpp>
 
 class CServer;
 class LogicSystem;
 
-class CSession: public std::enable_shared_from_this<CSession>
-{
-public:
-	CSession(boost::asio::io_context& io_context, CServer* server);
-	~CSession();
-	tcp::socket& GetSocket();
-	std::string& GetSessionId();
-	void SetUserId(int uid);
-	int GetUserId();
-	void Start();
-	bool Send(char* msg, std::size_t max_length, short msgid);
-	bool Send(std::string msg, short msgid);
-	void Close();
-	void TouchActivity();
-	std::shared_ptr<CSession> SharedSelf();
-	void AsyncReadBody(int length);
-	void AsyncReadHead(int total_len);
-	void NotifyOffline(int uid);
-	////判断心跳是否过期
-	//bool IsHeartbeatExpired(std::time_t& now);
-	////更新心跳
-	//void UpdateHeartbeat();
-	////处理异常连接
-	//void DealExceptionSession();
-private:
-	void asyncReadFull(std::size_t maxLength, std::function<void(const boost::system::error_code& , std::size_t)> handler);
-	void asyncReadLen(std::size_t  read_len, std::size_t total_len,
-		std::function<void(const boost::system::error_code&, std::size_t)> handler);
+class CSession : public std::enable_shared_from_this<CSession> {
+  public:
+    CSession(boost::asio::io_context& io_context, CServer* server);
+    ~CSession();
+    tcp::socket& GetSocket();
+    std::string& GetSessionId();
+    void SetUserId(int uid);
+    int GetUserId();
+    void Start();
+    bool Send(char* msg, std::size_t max_length, short msgid);
+    bool Send(std::string msg, short msgid);
+    void Close();
+    bool IsClosed() const {
+        return _b_close.load();
+    }
+    void TouchActivity();
+    std::shared_ptr<CSession> SharedSelf();
+    void AsyncReadBody(int length);
+    void AsyncReadHead(int total_len);
+    void NotifyOffline(int uid);
+    ////判断心跳是否过期
+    // bool IsHeartbeatExpired(std::time_t& now);
+    ////更新心跳
+    // void UpdateHeartbeat();
+    ////处理异常连接
+    // void DealExceptionSession();
+  private:
+    void asyncReadFull(std::size_t maxLength,
+                       std::function<void(const boost::system::error_code&, std::size_t)> handler);
+    void asyncReadLen(std::size_t read_len, std::size_t total_len,
+                      std::function<void(const boost::system::error_code&, std::size_t)> handler);
 
-
-	void HandleWrite(const boost::system::error_code& error, std::shared_ptr<CSession> shared_self);
-	void ScheduleIdleTimeout();
-	tcp::socket _socket;
-	std::string _session_id;
-	// 文件分片允许较大帧；普通聊天消息仍在解析头时维持 2 KB 上限。
-	char _data[MAX_FILE_FRAME_LENGTH];
-	CServer* _server;
-	std::atomic<bool> _b_close;
-	std::queue<shared_ptr<SendNode> > _send_que;
-	std::mutex _send_lock;
-	//收到的消息结构
-	std::shared_ptr<RecvNode> _recv_msg_node;
-	bool _b_head_parse;
-	//收到的头部结构
-	std::shared_ptr<MsgNode> _recv_head_node;
-	std::atomic<int> _user_uid;
-	//记录上次接受数据的时间
-	std::atomic<time_t> _last_heartbeat;
-	//session 锁
-	std::mutex _session_mtx;
-	// 登录前连接必须在限定时间内完成票据认证，避免空闲连接长期占用会话表。
-	boost::asio::steady_timer _auth_timer;
-	boost::asio::steady_timer _idle_timer;
+    void HandleWrite(const boost::system::error_code& error, std::shared_ptr<CSession> shared_self);
+    void ScheduleIdleTimeout();
+    void StartOnExecutor();
+    void StartWrite();
+    tcp::socket _socket;
+    std::string _session_id;
+    // 文件分片允许较大帧；普通聊天消息仍在解析头时维持 2 KB 上限。
+    char _data[MAX_FILE_FRAME_LENGTH];
+    CServer* _server;
+    std::atomic<bool> _b_close;
+    std::queue<shared_ptr<SendNode>> _send_que;
+    std::mutex _send_lock;
+    // Includes the active write; protected by _send_lock.
+    static constexpr std::size_t SendByteLimit = 4 * 1024 * 1024;
+    std::size_t _send_bytes = 0;
+    // Independent request classes, touched only on the socket strand.
+    chat::runtime::TokenBucket _chat_requests{200, 100};
+    chat::runtime::TokenBucket _file_requests{256, 128};
+    chat::runtime::TokenBucket _file_bytes{8 * 1024 * 1024, 4 * 1024 * 1024};
+    // 收到的消息结构
+    std::shared_ptr<RecvNode> _recv_msg_node;
+    bool _b_head_parse;
+    // 收到的头部结构
+    std::shared_ptr<MsgNode> _recv_head_node;
+    std::atomic<int> _user_uid;
+    // 记录上次接受数据的时间
+    std::atomic<time_t> _last_heartbeat;
+    // session 锁
+    std::mutex _session_mtx;
+    // 登录前连接必须在限定时间内完成票据认证，避免空闲连接长期占用会话表。
+    boost::asio::steady_timer _auth_timer;
+    boost::asio::steady_timer _idle_timer;
 };
 
 class LogicNode {
-	friend class LogicSystem;
-public:
-	LogicNode(shared_ptr<CSession>, shared_ptr<RecvNode>);
-	shared_ptr<RecvNode>& getRecvNode() { return _recvnode; }
-	shared_ptr<CSession>& getCSession() { return _session; }
-private:
-	shared_ptr<CSession> _session;
-	shared_ptr<RecvNode> _recvnode;
+    friend class LogicSystem;
+
+  public:
+    LogicNode(shared_ptr<CSession>, shared_ptr<RecvNode>);
+    shared_ptr<RecvNode>& getRecvNode() {
+        return _recvnode;
+    }
+    shared_ptr<CSession>& getCSession() {
+        return _session;
+    }
+
+  private:
+    shared_ptr<CSession> _session;
+    shared_ptr<RecvNode> _recvnode;
 };

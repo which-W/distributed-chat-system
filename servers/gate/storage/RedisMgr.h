@@ -1,16 +1,17 @@
 #pragma once
-#include "const.h"
-#include "Singleton.h"
 #include "ConfigMgr.h"
 #include "RedisConnectionPool.h"
+#include "Singleton.h"
+#include "const.h"
 #include <memory>
 #include <string>
 
 using RedisConPool = chat::storage::RedisConnectionPool;
 
-class RedisMgr :public Singleton<RedisMgr>,std::enable_shared_from_this<RedisMgr> {
+class RedisMgr : public Singleton<RedisMgr>, std::enable_shared_from_this<RedisMgr> {
     friend class Singleton<RedisMgr>;
-public:
+
+  public:
     enum class VerificationResult {
         Success,
         Expired,
@@ -20,7 +21,7 @@ public:
     };
     ~RedisMgr();
     RedisMgr(const RedisMgr&) = delete;
-    RedisMgr& operator = (const RedisMgr&) = delete;
+    RedisMgr& operator=(const RedisMgr&) = delete;
     bool Get(const std::string& key, std::string& value);
     bool Set(const std::string& key, const std::string& value);
     bool LPush(const std::string& key, const std::string& value);
@@ -32,10 +33,12 @@ public:
     std::string HGet(const std::string& key, const std::string& hkey);
     bool Del(const std::string& key);
     bool ExistsKey(const std::string& key);
-    VerificationResult ConsumeVerificationCode(
-        const std::string& email, const std::string& submitted_code, int max_attempts = 5);
+    VerificationResult ConsumeVerificationCode(const std::string& email,
+                                               const std::string& submitted_code,
+                                               int max_attempts = 5);
     void Close();
-private:
+
+  private:
     RedisMgr();
     std::unique_ptr<RedisConPool> _con_pool;
 };

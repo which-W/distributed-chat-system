@@ -8,6 +8,9 @@ $binDir = Join-Path $BuildDir 'bin'
 $runDir = Join-Path $BuildDir 'run'
 $logDir = Join-Path $BuildDir 'logs'
 New-Item -ItemType Directory -Force -Path $runDir, $logDir | Out-Null
+$env:CHAT_LOG_DIR = $logDir
+$env:CHAT_LOG_CONSOLE = 'false'
+$env:CHAT_LOG_FILE_ENABLED = 'true'
 
 $envFile = Join-Path $projectDir '.env'
 if (Test-Path $envFile) {
@@ -47,8 +50,8 @@ function Start-ChatProcess {
     $startParams = @{
         FilePath = $Executable
         WorkingDirectory = $WorkingDirectory
-        RedirectStandardOutput = Join-Path $logDir "$Name.stdout.log"
-        RedirectStandardError = Join-Path $logDir "$Name.stderr.log"
+        RedirectStandardOutput = Join-Path $logDir "$Name.bootstrap.log"
+        RedirectStandardError = Join-Path $logDir "$Name.bootstrap-error.log"
         WindowStyle = 'Hidden'
         PassThru = $true
     }

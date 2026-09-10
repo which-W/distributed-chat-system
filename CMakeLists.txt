@@ -45,6 +45,10 @@ function(chat_copy_runtime_config target_name config_name output_name)
 endfunction()
 
 if(CHAT_BUILD_SERVERS)
+    set(LOGSYSTEM_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+    set(LOGSYSTEM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(third_party/LogSystem)
+
     find_package(Threads REQUIRED)
     find_package(Boost 1.74 REQUIRED COMPONENTS filesystem system)
     find_package(Protobuf CONFIG REQUIRED)
@@ -116,6 +120,10 @@ if(CHAT_BUILD_SERVERS)
     add_library(chat_server_selection STATIC common/ChatServerSelector.cpp)
     target_include_directories(chat_server_selection PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/common")
 
+    add_library(chat_observability STATIC common/ChatLogger.cpp)
+    target_include_directories(chat_observability PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/common")
+    target_link_libraries(chat_observability PUBLIC LogSystem::LogSystem)
+
     add_subdirectory(servers/gate)
     add_subdirectory(servers/status)
     add_subdirectory(servers/chat)
@@ -131,6 +139,9 @@ endif()
 
 if(BUILD_TESTING)
     add_subdirectory(tests)
+    if(CHAT_BUILD_SERVERS)
+        add_subdirectory(bench)
+    endif()
 endif()
 
 if(CHAT_BUILD_CLIENT)

@@ -3,26 +3,27 @@
 #include "GrpcTlsSupport.h"
 #include "InternalRpcAuth.h"
 
-message::GetVarifyRsp VerifyGrpcClient::GetVarifyCode(std::string email) {
-	    ClientContext context;
-	chat::grpc_client::setDeadline(context, chat::grpc_client::kVerificationRpcTimeout);
-	    chat::internal_rpc::authenticate(context, auth_token_);
+message::GetVarifyRsp VerifyGrpcClient::GetVarifyCode(std::string email,
+                                                      const std::string& request_id) {
+    ClientContext context;
+    chat::grpc_client::setDeadline(context, chat::grpc_client::kVerificationRpcTimeout);
+    chat::internal_rpc::authenticate(context, auth_token_);
+    chat::internal_rpc::propagate_request_id(context, request_id);
     message::GetVarifyRsp response;
     message::GetVarifyReq request;
     request.set_email(email);
 
     auto _stub = _pool->getConnection();
-	if (!_stub) {
-		response.set_error(ERROR_CODE::RPC_ERROR);
-		return response;
-	}
+    if (!_stub) {
+        response.set_error(ERROR_CODE::RPC_ERROR);
+        return response;
+    }
     Status status = _stub->GetVarifyCode(&context, request, &response);
 
     if (status.ok()) {
         _pool->returnConnection(std::move(_stub));
         return response;
-    }
-    else {
+    } else {
         _pool->returnConnection(std::move(_stub));
         response.set_error(ERROR_CODE::RPC_ERROR);
         return response;
@@ -32,9 +33,10 @@ message::GetVarifyRsp VerifyGrpcClient::GetVarifyCode(std::string email) {
 VerifyGrpcClient::VerifyGrpcClient() {
     auto& GCPCfgMgr = ConfigMgr::ins();
     std::string host = GCPCfgMgr["VarifyServer"]["Host"];
-	    std::string port = GCPCfgMgr["VarifyServer"]["Port"];
-	    auth_token_ = GCPCfgMgr["InternalRpc"]["VarifyToken"];
-	    if (auth_token_.empty()) throw std::runtime_error("InternalRpc.VarifyToken is required");
+    std::string port = GCPCfgMgr["VarifyServer"]["Port"];
+    auth_token_ = GCPCfgMgr["InternalRpc"]["VarifyToken"];
+    if (auth_token_.empty())
+        throw std::runtime_error("InternalRpc.VarifyToken is required");
     _pool.reset(new RPConPool(5, host, port));
 }
 
@@ -65,10 +67,10 @@ std::unique_ptr<VarifyService::Stub> RPConPool::getConnection() {
             return true;
         }
         return !connections_.empty();
-        });
-    //如果停止则直接返回空指针
+    });
+    // 如果停止则直接返回空指针
     if (b_stop_) {
-        return  nullptr;
+        return nullptr;
     }
     std::unique_ptr<VarifyService::Stub> context = std::move(connections_.front());
     connections_.pop();

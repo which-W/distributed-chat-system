@@ -2,23 +2,23 @@
 #include "ElaLineEdit.h"
 #include <QDebug>
 
-class CustomizeEdit : public ElaLineEdit
-{
+class CustomizeEdit : public ElaLineEdit {
     Q_OBJECT
-public:
+  public:
     CustomizeEdit(QWidget* parent = nullptr);
     void SetMaxLength(int maxLen);
-protected:
-    void focusOutEvent(QFocusEvent* event) override
-    {
+
+  protected:
+    void focusOutEvent(QFocusEvent* event) override {
         // 执行失去焦点时的处理逻辑
-        //qDebug() << "CustomizeEdit focusout";
+        // qDebug() << "CustomizeEdit focusout";
         // 调用基类的focusOutEvent()方法，保证基类的行为得到执行
         ElaLineEdit::focusOutEvent(event);
-        //发送失去焦点得信号
+        // 发送失去焦点得信号
         emit sig_foucus_out();
     }
-private:
+
+  private:
     void limitTextLength(QString text) {
         if (_max_len <= 0) {
             return;
@@ -33,6 +33,6 @@ private:
     }
 
     int _max_len;
-signals:
+  signals:
     void sig_foucus_out();
 };

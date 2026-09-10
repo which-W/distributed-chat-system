@@ -1,0 +1,223 @@
+name: distributed-chat-demo
+
+x-chat-environment: &chat-environment
+  CHAT_REDIS_HOST: redis
+  CHAT_REDIS_PORT: 6379
+  CHAT_REDIS_USER: default
+  CHAT_REDIS_PASSWORD: ${DEMO_REDIS_PASSWORD}
+  CHAT_MYSQL_HOST: mysql
+  CHAT_MYSQL_PORT: 3306
+  CHAT_MYSQL_USER: chat
+  CHAT_MYSQL_PASSWORD: ${DEMO_MYSQL_PASSWORD}
+  CHAT_MYSQL_SCHEMA: wgt
+  CHAT_GATE_STATUS_TOKEN: ${DEMO_GATE_STATUS_TOKEN}
+  CHAT_GATE_VARIFY_TOKEN: ${DEMO_GATE_VARIFY_TOKEN}
+  CHAT_PEER_RPC_TOKEN: ${DEMO_PEER_TOKEN}
+  CHAT_FILE_STORAGE_ROOT: /data/files
+  CHAT_FILE_STORAGE_KEY: ${DEMO_FILE_KEY}
+  CHAT_LOG_LEVEL: ${CHAT_LOG_LEVEL:-info}
+  CHAT_LOG_CONSOLE: "true"
+  CHAT_LOG_FILE_ENABLED: "false"
+
+services:
+  certgen:
+    image: alpine/openssl:3.5.2
+    volumes:
+      - demo-certs:/certs
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["test -f /certs/ca.crt || /bin/sh /scripts/generate-dev-certs.sh /certs"]
+
+  mysql:
+    cpus: 1.0
+    mem_limit: 1g
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: wgt
+      MYSQL_USER: chat
+      MYSQL_PASSWORD: ${DEMO_MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DEMO_MYSQL_ROOT_PASSWORD}
+    volumes:
+      - demo-mysql:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  redis:
+    cpus: 0.5
+    mem_limit: 256m
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${DEMO_REDIS_PASSWORD}"]
+    volumes: ["demo-redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${DEMO_REDIS_PASSWORD}", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    cpus: 0.5
+    mem_limit: 256m
+    image: axllent/mailpit:v1.31.0
+    environment:
+      MP_MAX_MESSAGES: 100
+      MP_MAX_AGE: 1h
+    ports: ["127.0.0.1:8025:8025"]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  varify:
+    cpus: 0.5
+    mem_limit: 256m
+    build:
+      context: .
+      dockerfile: deploy/docker/varify.Dockerfile
+    environment:
+      CHAT_LOG_LEVEL: ${CHAT_LOG_LEVEL:-info}
+      CHAT_GATE_VARIFY_TOKEN: ${DEMO_GATE_VARIFY_TOKEN}
+      VARIFY_BIND_ADDRESS: 0.0.0.0:5000
+      VARIFY_GRPC_TLS_MODE: mtls
+      VARIFY_GRPC_CA_CERT: /certs/ca.crt
+      VARIFY_GRPC_CERT: /certs/varify.crt
+      VARIFY_GRPC_KEY: /certs/varify.key
+      VARIFY_REDIS_HOST: redis
+      VARIFY_REDIS_PORT: 6379
+      VARIFY_REDIS_PASSWORD: ${DEMO_REDIS_PASSWORD}
+      VARIFY_EMAIL_USER: demo@distributed-chat.test
+      VARIFY_EMAIL_PASSWORD: ""
+      VARIFY_SMTP_HOST: mailpit
+      VARIFY_SMTP_PORT: 1025
+      VARIFY_SMTP_SECURE: "false"
+    volumes: ["demo-certs:/certs:ro"]
+    depends_on:
+      certgen: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      mailpit: {condition: service_healthy}
+
+  status:
+    cpus: 0.5
+    mem_limit: 256m
+    cpus: 0.5
+    mem_limit: 256m
+    build: &server-build
+      context: .
+      dockerfile: deploy/docker/server.Dockerfile
+    command: ["/app/bin/status_server"]
+    environment:
+      <<: *chat-environment
+      CHAT_CONFIG_FILE: /config/status.ini
+    volumes:
+      - ./deploy/demo/status.ini:/config/status.ini:ro
+      - demo-certs:/certs:ro
+    depends_on:
+      certgen: {condition: service_completed_successfully}
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  chatserver1:
+    cpus: 1.0
+    mem_limit: 512m
+    cpus: 1.0
+    mem_limit: 512m
+    build: *server-build
+    command: ["/app/bin/chat_server"]
+    environment:
+      <<: *chat-environment
+      CHAT_CONFIG_FILE: /config/chat.ini
+    volumes:
+      - ./deploy/demo/chatserver1.ini:/config/chat.ini:ro
+      - demo-certs:/certs:ro
+      - demo-files:/data/files
+    depends_on:
+      certgen: {condition: service_completed_successfully}
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      status: {condition: service_started}
+
+  chatserver2:
+    cpus: 1.0
+    mem_limit: 512m
+    cpus: 1.0
+    mem_limit: 512m
+    build: *server-build
+    command: ["/app/bin/chat_server"]
+    environment:
+      <<: *chat-environment
+      CHAT_CONFIG_FILE: /config/chat.ini
+    volumes:
+      - ./deploy/demo/chatserver2.ini:/config/chat.ini:ro
+      - demo-certs:/certs:ro
+      - demo-files:/data/files
+    depends_on:
+      certgen: {condition: service_completed_successfully}
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      status: {condition: service_started}
+
+  gate:
+    cpus: 0.5
+    mem_limit: 256m
+    cpus: 0.5
+    mem_limit: 256m
+    build: *server-build
+    command: ["/app/bin/gate_server"]
+    environment:
+      <<: *chat-environment
+      CHAT_CONFIG_FILE: /config/gate.ini
+    volumes:
+      - ./deploy/demo/gate.ini:/config/gate.ini:ro
+      - demo-certs:/certs:ro
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      varify: {condition: service_started}
+      status: {condition: service_started}
+      chatserver1: {condition: service_started}
+      chatserver2: {condition: service_started}
+
+  e2e:
+    image: python:3.12-alpine
+    profiles: ["tools"]
+    working_dir: /workspace
+    command: ["python", "tests/e2e/chat_e2e.py", "--gate", "http://gate:8080", "--mailpit", "http://mailpit:8025"]
+    volumes:
+      - ./:/workspace:ro
+      - ${DEMO_REPORT_DIR:-./build/demo/reports}:/reports
+      - demo-files:/files:ro
+      - demo-state:/state
+    environment:
+      E2E_REPORT_DIR: /reports
+      E2E_GIT_COMMIT: ${E2E_GIT_COMMIT:-unknown}
+      E2E_BACKLOG: ${E2E_BACKLOG:-1000}
+    depends_on:
+      gate: {condition: service_started}
+
+  benchmark:
+    cpus: 1.0
+    mem_limit: 512m
+    cpus: 1.0
+    mem_limit: 512m
+    build: *server-build
+    profiles: ["tools"]
+    working_dir: /workspace
+    command: ["python3", "scripts/benchmark.py", "--prepare", "--accounts", "/state/benchmark.json", "--gate", "http://gate:8080", "--mailpit", "http://mailpit:8025", "--loadgen", "/app/bin/chat_loadgen", "--smoke", "--output-root", "/reports/bench"]
+    volumes:
+      - ./:/workspace:ro
+      - ${DEMO_REPORT_DIR:-./build/demo/reports}:/reports
+      - demo-state:/state
+    depends_on:
+      gate: {condition: service_started}
+
+volumes:
+  demo-certs:
+  demo-files:
+  demo-mysql:
+  demo-redis:
+  demo-state:

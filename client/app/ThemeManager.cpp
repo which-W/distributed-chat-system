@@ -11,26 +11,20 @@ namespace {
 constexpr auto kThemeKey = "appearance/theme";
 }
 
-ThemeManager& ThemeManager::instance()
-{
+ThemeManager& ThemeManager::instance() {
     static ThemeManager manager;
     return manager;
 }
 
-ThemeManager::ThemeManager(QObject* parent)
-    : QObject(parent)
-{
-}
+ThemeManager::ThemeManager(QObject* parent) : QObject(parent) {}
 
-void ThemeManager::initialize()
-{
+void ThemeManager::initialize() {
     const bool isOffscreen = QGuiApplication::platformName() == QStringLiteral("offscreen");
     if (!isOffscreen) {
         eApp->init();
     }
-    eApp->setWindowDisplayMode(isOffscreen
-                                   ? ElaApplicationType::Normal
-                                   : ElaApplicationType::ElaMica);
+    eApp->setWindowDisplayMode(isOffscreen ? ElaApplicationType::Normal
+                                           : ElaApplicationType::ElaMica);
 
     const QColor accent(112, 92, 255);
     eTheme->setThemeColor(ElaThemeType::Dark, ElaThemeType::PrimaryNormal, accent);
@@ -42,18 +36,15 @@ void ThemeManager::initialize()
 
     const QSettings settings;
     const auto saved = settings.value(kThemeKey, static_cast<int>(ElaThemeType::Dark)).toInt();
-    setThemeMode(saved == static_cast<int>(ElaThemeType::Light)
-                     ? ElaThemeType::Light
-                     : ElaThemeType::Dark);
+    setThemeMode(saved == static_cast<int>(ElaThemeType::Light) ? ElaThemeType::Light
+                                                                : ElaThemeType::Dark);
 }
 
-ElaThemeType::ThemeMode ThemeManager::themeMode() const
-{
+ElaThemeType::ThemeMode ThemeManager::themeMode() const {
     return eTheme->getThemeMode();
 }
 
-void ThemeManager::setThemeMode(ElaThemeType::ThemeMode mode)
-{
+void ThemeManager::setThemeMode(ElaThemeType::ThemeMode mode) {
     if (eTheme->getThemeMode() != mode) {
         eTheme->setThemeMode(mode);
     }
@@ -62,9 +53,6 @@ void ThemeManager::setThemeMode(ElaThemeType::ThemeMode mode)
     emit themeChanged(mode);
 }
 
-void ThemeManager::toggleTheme()
-{
-    setThemeMode(themeMode() == ElaThemeType::Dark
-                     ? ElaThemeType::Light
-                     : ElaThemeType::Dark);
+void ThemeManager::toggleTheme() {
+    setThemeMode(themeMode() == ElaThemeType::Dark ? ElaThemeType::Light : ElaThemeType::Dark);
 }

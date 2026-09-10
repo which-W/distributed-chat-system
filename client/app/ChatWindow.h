@@ -9,18 +9,17 @@ class ElaLineEdit;
 class QStackedWidget;
 class QWidget;
 
-class ChatWindow final : public ElaWindow
-{
+class ChatWindow final : public ElaWindow {
     Q_OBJECT
 
-public:
+  public:
     explicit ChatWindow(QWidget* parent = nullptr);
 
-signals:
+  signals:
     void logoutRequested();
     void themeChanged(ElaThemeType::ThemeMode mode);
 
-private:
+  private:
     void showMessages();
     void showContacts();
     void showSettings();

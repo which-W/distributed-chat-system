@@ -1,19 +1,14 @@
 #pragma once
 
-#include <QObject>
 #include <QNetworkProxy>
+#include <QObject>
 #include <QString>
 
-class ProxyManager final : public QObject
-{
+class ProxyManager final : public QObject {
     Q_OBJECT
 
-public:
-    enum class Mode {
-        Direct,
-        System,
-        Socks5
-    };
+  public:
+    enum class Mode { Direct, System, Socks5 };
     Q_ENUM(Mode)
 
     static ProxyManager& instance();
@@ -29,10 +24,10 @@ public:
     static Mode modeFromString(const QString& value);
     static QString modeToString(Mode mode);
 
-signals:
+  signals:
     void proxyChanged();
 
-private:
+  private:
     explicit ProxyManager(QObject* parent = nullptr);
     void applyToApplication();
 
