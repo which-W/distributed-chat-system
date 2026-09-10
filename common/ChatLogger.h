@@ -33,7 +33,8 @@ class LogStream {
     LogStream(LogStream&& other) noexcept;
 
     template <typename T> LogStream& operator<<(const T& value) {
-        if (active_) buffer_ << value;
+        if (active_)
+            buffer_ << value;
         return *this;
     }
     LogStream& operator<<(std::ostream& (*manipulator)(std::ostream&));

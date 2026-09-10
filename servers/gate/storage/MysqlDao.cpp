@@ -307,13 +307,16 @@ bool MysqlDao::UpdatePwd(const std::string& name, const std::string& newpwd) {
     }
 }
 
-bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userInfo, bool* unavailable) {
-    if (unavailable) *unavailable = false;
+bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userInfo,
+                        bool* unavailable) {
+    if (unavailable)
+        *unavailable = false;
     auto con = pool_->getConnection();
     Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
     try {
         if (con == nullptr) {
-            if (unavailable) *unavailable = true;
+            if (unavailable)
+                *unavailable = true;
             return false;
         }
         // 准备SQL语句
@@ -359,7 +362,8 @@ bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserIn
         userInfo.pwd.clear();
         return true;
     } catch (sql::SQLException& e) {
-        if (unavailable) *unavailable = true;
+        if (unavailable)
+            *unavailable = true;
         chat::observability::stream(chat::observability::Level::Warn)
             << "SQLException: " << e.what();
         chat::observability::stream(chat::observability::Level::Warn)

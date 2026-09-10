@@ -14,7 +14,8 @@ class MysqlMgr : public Singleton<MysqlMgr> {
                 const std::string& icon);
     bool CheckEmail(const std::string& name, const std::string& email);
     bool UpdatePwd(const std::string& name, const std::string& pwd);
-    bool CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userinfo, bool* unavailable = nullptr);
+    bool CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userinfo,
+                  bool* unavailable = nullptr);
 
   private:
     MysqlMgr();

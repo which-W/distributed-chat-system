@@ -103,8 +103,6 @@ services:
   status:
     cpus: 0.5
     mem_limit: 256m
-    cpus: 0.5
-    mem_limit: 256m
     build: &server-build
       context: .
       dockerfile: deploy/docker/server.Dockerfile
@@ -121,8 +119,6 @@ services:
       redis: {condition: service_healthy}
 
   chatserver1:
-    cpus: 1.0
-    mem_limit: 512m
     cpus: 1.0
     mem_limit: 512m
     build: *server-build
@@ -143,8 +139,6 @@ services:
   chatserver2:
     cpus: 1.0
     mem_limit: 512m
-    cpus: 1.0
-    mem_limit: 512m
     build: *server-build
     command: ["/app/bin/chat_server"]
     environment:
@@ -161,8 +155,6 @@ services:
       status: {condition: service_started}
 
   gate:
-    cpus: 0.5
-    mem_limit: 256m
     cpus: 0.5
     mem_limit: 256m
     build: *server-build
@@ -200,8 +192,6 @@ services:
       gate: {condition: service_started}
 
   benchmark:
-    cpus: 1.0
-    mem_limit: 512m
     cpus: 1.0
     mem_limit: 512m
     build: *server-build

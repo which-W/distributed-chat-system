@@ -40,7 +40,7 @@ ok=0
 cleanup() {
   status=$?
   if [ "$status" -eq 0 ]; then ok=1; fi
-  if [ "$keep" -eq 1 ]; then
+  if [ "$keep" -eq 1 ] && [ "$ok" -eq 1 ]; then
     echo "Demo is running. Inspect Mailpit at http://127.0.0.1:8025 and reports in $reports"
   elif [ "$ok" -eq 1 ]; then
     compose down --volumes --remove-orphans

@@ -18,10 +18,13 @@ class DeliveryWindow {
     static constexpr int Capacity = 32;
     void reconcile(const std::vector<TextMessage>& pending) {
         std::set<Key> keys;
-        for (const auto& message : pending) keys.insert(key(message));
+        for (const auto& message : pending)
+            keys.insert(key(message));
         for (auto it = attempts_.begin(); it != attempts_.end();)
-            if (!keys.count(it->first)) it = attempts_.erase(it);
-            else ++it;
+            if (!keys.count(it->first))
+                it = attempts_.erase(it);
+            else
+                ++it;
     }
     bool due(const TextMessage& message, Clock::time_point now) const {
         auto it = attempts_.find(key(message));
@@ -35,11 +38,18 @@ class DeliveryWindow {
         attempt.count = std::min(attempt.count + 1, 4U);
         return retry;
     }
-    std::size_t size() const { return attempts_.size(); }
+    std::size_t size() const {
+        return attempts_.size();
+    }
 
   private:
-    static Key key(const TextMessage& message) { return {message.sender_uid, message.client_message_id}; }
-    struct Attempt { unsigned count = 0; Clock::time_point next; };
+    static Key key(const TextMessage& message) {
+        return {message.sender_uid, message.client_message_id};
+    }
+    struct Attempt {
+        unsigned count = 0;
+        Clock::time_point next;
+    };
     std::map<Key, Attempt> attempts_;
 };
 } // namespace chat::messages

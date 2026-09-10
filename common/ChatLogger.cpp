@@ -90,7 +90,8 @@ bool enabled(Level level) {
 
 void log(Level level, const std::string& event, const std::string& message,
          std::initializer_list<Field> fields) {
-    if (!enabled(level)) return;
+    if (!enabled(level))
+        return;
     std::shared_ptr<logsystem::Logger> current;
     {
         std::lock_guard<std::mutex> lock(logger_mutex);
@@ -103,7 +104,8 @@ void log(Level level, const std::string& event, const std::string& message,
     const auto after = current->droppedCount();
     if (after > before) {
         const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
+                             std::chrono::steady_clock::now().time_since_epoch())
+                             .count();
         auto next = next_overflow_notice_ms.load();
         if (now < next || !next_overflow_notice_ms.compare_exchange_strong(next, now + 10000))
             return;
@@ -176,7 +178,8 @@ LogStream::~LogStream() {
 }
 
 LogStream& LogStream::operator<<(std::ostream& (*manipulator)(std::ostream&)) {
-    if (active_) manipulator(buffer_);
+    if (active_)
+        manipulator(buffer_);
     return *this;
 }
 
