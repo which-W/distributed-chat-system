@@ -108,7 +108,7 @@ class ChatGrpcClient : public Singleton<ChatGrpcClient> {
     friend class Singleton<ChatGrpcClient>;
 
   public:
-    ~ChatGrpcClient(){};
+    ~ChatGrpcClient() {};
 
     AddFriendRsp NotifyAddFriend(std::string server_ip, const AddFriendReq& req);
     AuthFriendRsp NotifyAuthFriend(std::string server_ip, const AuthFriendReq& req);

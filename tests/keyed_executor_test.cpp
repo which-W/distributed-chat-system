@@ -10,8 +10,7 @@ void check(bool ok, const char* message) {
 int main() try {
     using namespace std::chrono_literals;
     std::atomic<int> ticks{0};
-    chat::runtime::KeyedExecutor executor(
-        2, 2, [&](std::size_t) { ++ticks; }, 5ms);
+    chat::runtime::KeyedExecutor executor(2, 2, [&](std::size_t) { ++ticks; }, 5ms);
     std::promise<void> entered, release, independent;
     auto barrier = release.get_future().share();
     std::vector<int> order;

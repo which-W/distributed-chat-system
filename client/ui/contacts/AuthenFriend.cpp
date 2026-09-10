@@ -401,7 +401,7 @@ void AuthenFriend::SlotApplySure() {
     QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
 
     // 发送tcp请求给chat server
-    emit TcpMgr::Getinstance()->sig_send_data(Req::ID_AUTH_FRIEND_REQ, jsonData);
+    emit TcpMgr::Getinstance() -> sig_send_data(Req::ID_AUTH_FRIEND_REQ, jsonData);
 
     this->hide();
     deleteLater();
