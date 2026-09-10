@@ -1,8 +1,8 @@
 #pragma once
 #include "CSession.h"
+#include "ChatGrpcClient.h"
 #include "DeliveryWindow.h"
 #include "KeyedExecutor.h"
-#include "ChatGrpcClient.h"
 #include "LogicWorker.h"
 #include "MysqlMgr.h"
 #include "RedisMgr.h"
@@ -40,7 +40,8 @@ class LogicSystem : public Singleton<LogicSystem> {
     void DealMsg(const std::shared_ptr<LogicNode>& message);
     void Tick(std::size_t shard);
     std::size_t SessionKey(const std::shared_ptr<CSession>& session) const;
-    void NotifyRecipient(int receiver_uid, const std::vector<chat::messages::TextMessage>& messages);
+    void NotifyRecipient(int receiver_uid,
+                         const std::vector<chat::messages::TextMessage>& messages);
     void RegisterCallBacks();
     void LoginChatCallback(std::shared_ptr<CSession> session, short msg_id, string msg_data);
     void SearchUserCallback(std::shared_ptr<CSession> session, short msg_id, string msg_data);

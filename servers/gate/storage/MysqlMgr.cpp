@@ -17,6 +17,7 @@ bool MysqlMgr::UpdatePwd(const std::string& name, const std::string& pwd) {
     return _Dao.UpdatePwd(name, pwd);
 }
 
-bool MysqlMgr::CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userinfo, bool* unavailable) {
+bool MysqlMgr::CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userinfo,
+                        bool* unavailable) {
     return _Dao.CheckPwd(email, pwd, userinfo, unavailable);
 }

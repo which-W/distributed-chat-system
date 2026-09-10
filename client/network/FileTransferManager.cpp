@@ -12,8 +12,8 @@ constexpr qint64 MaxFileBytes = 100LL * 1024LL * 1024LL;
 constexpr qint64 ChunkBytes = 32LL * 1024LL;
 
 void sendJson(Req id, const QJsonObject& value) {
-    emit TcpMgr::Getinstance() -> sig_send_data(
-                                   id, QJsonDocument(value).toJson(QJsonDocument::Compact));
+    emit TcpMgr::Getinstance()->sig_send_data(id,
+                                              QJsonDocument(value).toJson(QJsonDocument::Compact));
 }
 } // namespace
 

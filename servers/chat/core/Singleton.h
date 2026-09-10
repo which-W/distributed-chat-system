@@ -8,7 +8,7 @@ template <typename T> class Singleton {
     Singleton() = default;
     Singleton(const Singleton<T>&) = delete;
     Singleton& operator=(const Singleton<T>& st) = delete;
-    ~Singleton() {};
+    ~Singleton(){};
 
     static std::shared_ptr<T> _instance;
 

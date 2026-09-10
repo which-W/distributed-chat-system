@@ -20,7 +20,7 @@ jobs:
     env:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install build tools
@@ -33,7 +33,7 @@ jobs:
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
       - name: Restore vcpkg binary cache
         continue-on-error: true
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .vcpkg-binary-cache
           key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'cmake/triplets/x64-linux-release.cmake') }}-${{ github.run_id }}
@@ -44,7 +44,7 @@ jobs:
       - name: Save vcpkg binary cache
         if: always()
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: .vcpkg-binary-cache
           key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'cmake/triplets/x64-linux-release.cmake') }}-${{ github.run_id }}
@@ -56,21 +56,21 @@ jobs:
   windows-client:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install Qt
         shell: pwsh
         run: |
-          python -m pip install --disable-pip-version-check aqtinstall
-          python -m aqt install-qt windows desktop 6.6.3 win64_msvc2022_64 -O C:\Qt
+          python -m pip install --disable-pip-version-check aqtinstall==3.3.0
+          python -m aqt install-qt windows desktop 6.6.3 win64_msvc2019_64 -O C:\Qt
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
       - name: Configure
         shell: pwsh
-        run: cmake -S . -B build/ci-windows-client -G Ninja -DCHAT_BUILD_SERVERS=OFF -DCHAT_BUILD_CLIENT=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/Qt/6.6.3/msvc2022_64 -DCMAKE_CXX_COMPILER=cl
+        run: cmake -S . -B build/ci-windows-client -G Ninja -DCHAT_BUILD_SERVERS=OFF -DCHAT_BUILD_CLIENT=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/Qt/6.6.3/msvc2019_64 -DCMAKE_CXX_COMPILER=cl
       - name: Build
         shell: pwsh
         run: cmake --build build/ci-windows-client
@@ -84,8 +84,8 @@ jobs:
       run:
         working-directory: VarifyServer
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -98,7 +98,7 @@ jobs:
   formatting:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check C++ formatting
         run: |
           files=$(git ls-files '*.cpp' '*.h' | grep -Ev '^(third_party|build)/')
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Run two-node acceptance suite
@@ -133,7 +133,7 @@ jobs:
         run: docker compose --env-file build/demo/demo.env -f compose.demo.yaml logs --no-color > build/demo/services.jsonl || true
       - name: Upload reports and logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: distributed-chat-e2e-${{ github.run_id }}
           path: |

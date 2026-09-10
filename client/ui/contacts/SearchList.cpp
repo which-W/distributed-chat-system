@@ -124,7 +124,7 @@ void SearchList::slot_item_clicked(QListWidgetItem* item) {
         QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
 
         // 发送tcp请求给chat server
-        emit TcpMgr::Getinstance() -> sig_send_data(Req::ID_SEARCH_USER_REQ, jsonData);
+        emit TcpMgr::Getinstance()->sig_send_data(Req::ID_SEARCH_USER_REQ, jsonData);
         return;
     }
 
