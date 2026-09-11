@@ -101,6 +101,18 @@ install(FILES "${PROJECT_SOURCE_DIR}/third_party/ElaWidgetTools/LICENSE"
     DESTINATION licenses/ElaWidgetTools)
 
 if(BUILD_TESTING)
+    set(WORKSPACE_TEST_FILES ${CLIENT_FILES})
+    list(FILTER WORKSPACE_TEST_FILES EXCLUDE REGEX "/app/main\\.cpp$")
+    add_executable(chat_workspace_test tools/ChatWorkspaceTest.cpp ${WORKSPACE_TEST_FILES})
+    set_property(TARGET chat_workspace_test PROPERTY AUTOGEN_ORIGIN_DEPENDS OFF)
+    target_include_directories(chat_workspace_test PRIVATE
+        app core model network ui/auth ui/chat ui/common ui/contacts)
+    target_link_libraries(chat_workspace_test PRIVATE
+        Qt6::Sql Ela::WidgetTools Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network)
+    add_test(NAME chat_workspace COMMAND chat_workspace_test)
+    set_tests_properties(chat_workspace PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>"
+        TIMEOUT 30)
     add_executable(client_ui_smoke tools/UiSmoke.cpp)
     target_link_libraries(client_ui_smoke PRIVATE
         Ela::WidgetTools

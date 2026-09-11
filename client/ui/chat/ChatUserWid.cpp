@@ -1,4 +1,5 @@
 #include "ChatUserWid.h"
+#include "ChatGraphics.h"
 
 ChatUserWid::ChatUserWid(QWidget* parent) : ListItemBase(parent), ui(new Ui::ChatUserWidClass()) {
     ui->setupUi(this);
@@ -16,7 +17,7 @@ void ChatUserWid::SetInfo(std::shared_ptr<FriendInfo> friend_info) {
 
     // 设置图片自动缩放
     ui->icon_lb->setPixmap(
-        pixmap.scaled(ui->icon_lb->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
 
     ui->user_name_lb->setText(_user_info->_name);
@@ -30,7 +31,7 @@ void ChatUserWid::SetInfo(std::shared_ptr<UserInfo> user_info) {
 
     // 设置图片自动缩放
     ui->icon_lb->setPixmap(
-        pixmap.scaled(ui->icon_lb->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
 
     ui->user_name_lb->setText(_user_info->_name);

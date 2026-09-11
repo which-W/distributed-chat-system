@@ -1,7 +1,14 @@
 #include "ConUserItem.h"
+#include "ChatGraphics.h"
 
 ConUserItem::ConUserItem(QWidget* parent) : ListItemBase(parent), ui(new Ui::ConUserItemClass()) {
     ui->setupUi(this);
+    ui->horizontalLayout->setContentsMargins(12, 8, 12, 8);
+    ui->horizontalLayout->setSpacing(12);
+    ui->horizontalSpacer->changeSize(0, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
+    ui->horizontalSpacer_2->changeSize(0, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
+    ui->user_name_lb->setMinimumWidth(0);
+    ui->user_name_lb->setMaximumWidth(QWIDGETSIZE_MAX);
     SetItemType(ListItemType::CONTACT_USER_ITEM);
     ui->red_point->raise();
     ShowRedPoint(false);
@@ -23,7 +30,7 @@ void ConUserItem::SetInfo(std::shared_ptr<AuthInfo> auth_info) {
 
     // 设置图片自动缩放
     ui->icon_lb->setPixmap(
-        pixmap.scaled(ui->icon_lb->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
 
     ui->user_name_lb->setText(_info->_name);
@@ -37,7 +44,7 @@ void ConUserItem::SetInfo(int uid, QString name, QString icon) {
 
     // 设置图片自动缩放
     ui->icon_lb->setPixmap(
-        pixmap.scaled(ui->icon_lb->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
 
     ui->user_name_lb->setText(_info->_name);

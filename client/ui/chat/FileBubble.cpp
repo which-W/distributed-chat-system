@@ -10,12 +10,18 @@ FileBubble::FileBubble(const QJsonObject& metadata, ChatRole role, bool incoming
     auto* body = new QWidget(this);
     auto* layout = new QVBoxLayout(body);
     auto* title = new QLabel(metadata["name"].toString(), body);
+    title->setWordWrap(true);
+    setMinimumWidth(220);
+    setMaximumWidth(360);
+    if (role == ChatRole::Self)
+        body->setStyleSheet("QLabel { color: white; background: transparent; } QProgressBar { min-height: 6px; border: none; background: #73a6ff; } QProgressBar::chunk { background: white; }");
     const auto bytes = metadata["total_size"].toVariant().toLongLong();
     auto* size = new QLabel(QString::number(bytes / 1024.0 / 1024.0, 'f', 2) + " MB", body);
     progress_ = new QProgressBar(body);
     progress_->setRange(0, 100);
     progress_->setValue(0);
     status_ = new QLabel(incoming ? tr("等待下载") : tr("准备上传"), body);
+    status_->setWordWrap(true);
     action_ = new QPushButton(incoming ? tr("另存为") : tr("取消"), body);
     layout->addWidget(title);
     layout->addWidget(size);

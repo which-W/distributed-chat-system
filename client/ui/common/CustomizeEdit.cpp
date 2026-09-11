@@ -1,6 +1,6 @@
 #include "CustomizeEdit.h"
 
-CustomizeEdit::CustomizeEdit(QWidget* parent) : ElaLineEdit(parent), _max_len(0) {
+CustomizeEdit::CustomizeEdit(QWidget* parent) : QLineEdit(parent), _max_len(0) {
     connect(this, &QLineEdit::textChanged, this, &CustomizeEdit::limitTextLength);
 }
 

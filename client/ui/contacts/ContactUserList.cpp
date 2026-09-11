@@ -1,7 +1,7 @@
 #include "ContactUserList.h"
 
 ContactUserList::ContactUserList(QWidget* parent)
-    : _add_friend_item(nullptr), _load_pending(false) {
+    : QListWidget(parent), _add_friend_item(nullptr), _load_pending(false) {
     Q_UNUSED(parent);
     this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -65,9 +65,8 @@ bool ContactUserList::eventFilter(QObject* watched, QEvent* event) {
 
             _load_pending = true;
 
-            QTimer::singleShot(100, [this]() {
+            QTimer::singleShot(100, this, [this]() {
                 _load_pending = false;
-                QCoreApplication::quit(); // 完成后退出应用程序
             });
             // 滚动到底部，加载新的联系人
             qDebug() << "load more contact user";

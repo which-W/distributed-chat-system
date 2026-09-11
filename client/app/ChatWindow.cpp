@@ -10,6 +10,11 @@
 #include <QVBoxLayout>
 
 #include "ChatDialog.h"
+#include "ChatStyle.h"
+#include "ChatGraphics.h"
+#include <QLineEdit>
+#include <QAction>
+#include "ElaActionCommander.h"
 #include "ElaComboBox.h"
 #include "ElaIconButton.h"
 #include "ElaLineEdit.h"
@@ -22,6 +27,7 @@
 #include "usermgr.h"
 
 ChatWindow::ChatWindow(QWidget* parent) : ElaWindow(parent) {
+    ElaActionCommander::getInstance()->setIsMessageDisplayEnable(false);
     setWindowTitle(tr("Nebula Chat"));
     setWindowIcon(QIcon(":/new/prefix1/res/R-C.png"));
     resize(1280, 800);
@@ -70,10 +76,6 @@ ChatWindow::ChatWindow(QWidget* parent) : ElaWindow(parent) {
     workspace_->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
     workspace_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    QFile legacyStyle(QCoreApplication::applicationDirPath() + "/style/this_style.qss");
-    if (legacyStyle.open(QFile::ReadOnly)) {
-        workspace_->setStyleSheet(QString::fromUtf8(legacyStyle.readAll()));
-    }
 
     contentStack_->addWidget(workspace_);
     contentStack_->addWidget(createSettingsPage(contentStack_));
@@ -87,8 +89,7 @@ ChatWindow::ChatWindow(QWidget* parent) : ElaWindow(parent) {
     if (!icon.isEmpty()) {
         auto* avatar = new QLabel(rail);
         QPixmap pixmap(icon);
-        avatar->setPixmap(
-            pixmap.scaled(40, 40, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+        avatar->setPixmap(roundAvatar(pixmap, 40));
         avatar->setFixedSize(40, 40);
         avatar->setScaledContents(true);
         railLayout->insertWidget(0, avatar, 0, Qt::AlignHCenter);
@@ -229,6 +230,13 @@ void ChatWindow::selectRailButton(ElaIconButton* selected) {
 
 void ChatWindow::applyTheme(ElaThemeType::ThemeMode mode) {
     const bool dark = mode == ElaThemeType::Dark;
+    workspace_->setStyleSheet(chatStyle(dark));
+    const auto actions = workspace_->findChild<QLineEdit*>("search_line")->actions();
+    if (actions.size() == 2) {
+        const QColor muted(dark ? "#a2adbd" : "#788397");
+        actions[0]->setIcon(QIcon(chatGlyph("search", muted)));
+        actions[1]->setIcon(QIcon(chatGlyph("clear", muted)));
+    }
     themeButton_->setAwesome(dark ? ElaIconType::SunBright : ElaIconType::MoonStars);
     themeButton_->setToolTip(dark ? tr("Switch to light theme") : tr("Switch to dark theme"));
     setStyleSheet(

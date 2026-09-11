@@ -1,9 +1,73 @@
 #include "ChatPage.h"
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QHBoxLayout>
+#include <QMenu>
+#include "ChatGraphics.h"
 
 ChatPage::ChatPage(QWidget* parent) : QWidget(parent), ui(new Ui::ChatPageClass()) {
     ui->setupUi(this);
+    ui->title_lb->setText(tr("你的消息"));
+    auto* avatar = new QLabel(ui->title_wid);
+    avatar->setObjectName("conversationAvatar");
+    avatar->setFixedSize(44, 44);
+    avatar->hide();
+    ui->horizontalLayout_2->insertWidget(0, avatar);
+    ui->horizontalLayout_2->setSpacing(14);
+    ui->title_wid->setFixedHeight(72);
+    ui->verticalLayout_2->setContentsMargins(24, 8, 24, 8);
+    ui->verticalLayout->setStretch(1, 1);
+    // A single compact composer grows for multiline drafts.
+    auto* composer = new QWidget(this);
+    composer->setObjectName("composer");
+    auto* row = new QHBoxLayout(composer);
+    row->setContentsMargins(20, 14, 20, 18);
+    row->setSpacing(12);
+    row->addWidget(ui->file_lb);
+    row->addWidget(ui->emo_lb);
+    row->addWidget(ui->chatEdit, 1);
+    row->addWidget(ui->send_btn);
+    ui->tool_wid->hide();
+    ui->send_wid->hide();
+    ui->verticalLayout->addWidget(composer);
+    ui->chatEdit->setMinimumHeight(48);
+    ui->chatEdit->setMaximumHeight(120);
+    ui->chatEdit->setPlaceholderText(tr("输入消息…"));
+    ui->chatEdit->setToolTip(tr("Enter 发送，Shift+Enter 换行"));
+    ui->chatEdit->setEnabled(false);
+    ui->send_btn->setFixedSize(64, 40);
+    ui->send_btn->setEnabled(false);
+    ui->file_lb->setFixedSize(32, 32);
+    ui->file_lb->setText("+");
+    ui->file_lb->setAlignment(Qt::AlignCenter);
+    ui->file_lb->setToolTip(tr("发送文件"));
+    ui->emo_lb->setFixedSize(32, 32);
+    ui->emo_lb->setPixmap(chatGlyph("smile", QColor("#0866ff"), 28));
+    ui->emo_lb->setAlignment(Qt::AlignCenter);
+    ui->emo_lb->setToolTip(tr("表情"));
+    connect(ui->chatEdit, &QTextEdit::textChanged, this, [this]() {
+        const int h = qBound(48, int(ui->chatEdit->document()->size().height()) + 18, 120);
+        ui->chatEdit->setFixedHeight(h);
+        ui->send_btn->setEnabled(_user_info && !ui->chatEdit->toPlainText().trimmed().isEmpty());
+    });
+    connect(ui->emo_lb, &ClickLabel::clicked, this, [this]() {
+        ui->emo_lb->ResetNormalState();
+        if (!_user_info) return;
+        QMenu menu(this);
+        for (const auto& emoji : {"😀", "😊", "❤️", "👍", "🎉", "🙏"}) {
+            auto* action = menu.addAction(QString::fromUtf8(emoji));
+            connect(action, &QAction::triggered, this, [this, action]() {
+                ui->chatEdit->insertPlainText(action->text());
+                ui->chatEdit->setFocus();
+            });
+        }
+        menu.exec(ui->emo_lb->mapToGlobal(QPoint(0, -menu.sizeHint().height())));
+    });
+    auto* empty = new QLabel(tr("选择一位朋友，开始聊天\n点击左上角 + 查找并添加新朋友"), ui->chat_data_list);
+    empty->setObjectName("chatEmptyState");
+    empty->setAlignment(Qt::AlignCenter);
+    ui->chat_data_list->layout()->addWidget(empty);
+    ui->chat_data_list->findChild<QScrollArea*>()->hide();
     // 设置按钮样式
     ui->send_btn->SetState("normal", "hover", "press");
 
@@ -56,6 +120,12 @@ void ChatPage::paintEvent(QPaintEvent* event) {
 
 void ChatPage::SetUserInfo(std::shared_ptr<UserInfo> user_info) {
     _user_info = user_info;
+    auto* avatar = findChild<QLabel*>("conversationAvatar");
+    avatar->setPixmap(roundAvatar(QPixmap(user_info->_icon), 44));
+    avatar->show();
+    if (auto* empty = findChild<QLabel*>("chatEmptyState")) empty->hide();
+    ui->chat_data_list->findChild<QScrollArea*>()->show();
+    ui->chatEdit->setEnabled(true);
     // 设置ui界面
     ui->title_lb->setText(_user_info->_name);
     _file_bubbles.clear();

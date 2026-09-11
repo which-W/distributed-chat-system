@@ -16,25 +16,20 @@ ChatView::ChatView(QWidget* parent) : QWidget(parent), isAppended(false) {
     w->setAutoFillBackground(true);
 
     QVBoxLayout* pVLayout_1 = new QVBoxLayout();
+    pVLayout_1->setContentsMargins(20, 18, 20, 18);
+    pVLayout_1->setSpacing(12);
     pVLayout_1->addWidget(new QWidget(), 100000);
     w->setLayout(pVLayout_1);
     m_pScrollArea->setWidget(w);
 
     // 滚动条相关设置
-    m_pScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_pScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_pScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     QScrollBar* pVScrollBar = m_pScrollArea->verticalScrollBar();
     connect(pVScrollBar, &QScrollBar::rangeChanged, this, &ChatView::onVScrollBarMoved);
 
-    // 手动重新布局滚动条（非标准方法）
-    // 把垂直ScrollBar放到上边 而不是原来的并排
-    QHBoxLayout* pHLayout_2 = new QHBoxLayout();
-    pHLayout_2->addWidget(pVScrollBar, 0, Qt::AlignRight);
-    pHLayout_2->setContentsMargins(0, 0, 0, 0);
-    m_pScrollArea->setLayout(pHLayout_2);
-    pVScrollBar->setHidden(true);
     // 其它设置
     m_pScrollArea->setWidgetResizable(true); // 允许内容自适应大小
-    m_pScrollArea->installEventFilter(this); // 安装事件过滤器
     initStyleSheet();                        // 初始化样式表
 }
 
@@ -120,7 +115,7 @@ void ChatView::onVScrollBarMoved(int min, int max) {
         QScrollBar* pVScrollBar = m_pScrollArea->verticalScrollBar();
         pVScrollBar->setSliderPosition(pVScrollBar->maximum());
         // 500毫秒内可能调用多次
-        QTimer::singleShot(500, [this]() { isAppended = false; });
+        QTimer::singleShot(500, this, [this]() { isAppended = false; });
     }
 }
 

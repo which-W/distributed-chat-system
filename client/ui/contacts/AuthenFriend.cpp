@@ -1,4 +1,5 @@
 #include "AuthenFriend.h"
+#include "DialogStyle.h"
 
 AuthenFriend::AuthenFriend(QWidget* parent)
     : QDialog(parent), ui(new Ui::AuthenFriendClass), _label_point(2, 6) {
@@ -7,25 +8,27 @@ AuthenFriend::AuthenFriend(QWidget* parent)
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
     this->setObjectName("AuthenFriend");
     this->setModal(true);
+    setAttribute(Qt::WA_DeleteOnClose);
+    styleFriendDialog(this, tr("接受好友申请"));
     ui->lb_edit->setPlaceholderText(tr("搜索、添加标签"));
-    ui->other_name_ed->setPlaceholderText("小飞棍来了");
+    ui->other_name_ed->setPlaceholderText(tr("设置好友备注"));
+    ui->other_name_ed->setFixedHeight(40);
+    ui->apply_lb->hide();
+    ui->line->hide();
+    ui->scrollArea->setMinimumHeight(260);
+    ui->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    resize(420, 440);
 
     ui->lb_edit->SetMaxLength(21);
     ui->lb_edit->move(2, 2);
-    ui->lb_edit->setFixedHeight(20);
+    ui->lb_edit->setFixedHeight(30);
+    ui->grid_wid->setMinimumHeight(38);
     ui->lb_edit->setMaxLength(10);
     // ui->input_wid->hide();
 
     _tip_cur_point = QPoint(5, 5);
 
-    _tip_data = {tr("情人"),
-                 tr("仇人"),
-                 tr("死人"),
-                 tr("python好友"),
-                 tr("C++大师"),
-                 tr("好基友"),
-                 tr("一生不分离的最好的朋友"),
-                 tr("好基友")};
+    _tip_data = {tr("朋友"), tr("同学"), tr("同事"), tr("家人")};
 
     connect(ui->more_lb, &ClickOnceLabel::clicked, this, &AuthenFriend::ShowMoreLabel);
     InitTipLbs();
@@ -41,6 +44,7 @@ AuthenFriend::AuthenFriend(QWidget* parent)
     ui->scrollArea->verticalScrollBar()->setHidden(true);
     ui->scrollArea->installEventFilter(this);
     ui->sure_btn->SetState("normal", "hover", "press");
+    ui->sure_btn->setText(tr("接受"));
     ui->cancel_btn->SetState("normal", "hover", "press");
     // 连接确认和取消按钮的槽函数
     connect(ui->cancel_btn, &QPushButton::clicked, this, &AuthenFriend::SlotApplyCancel);

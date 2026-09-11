@@ -5,29 +5,50 @@ ChatDialog::ChatDialog(QWidget* parent)
       _state(ChatUIMode::ChatMode), _b_loading(false) {
     ui->setupUi(this);
     ui->search_btn->SetState("normal", "hover", "press");
-    ui->search_line->setMaxLength(15);
+    ui->search_line->setMaxLength(64);
+    ui->search_line->setClearButtonEnabled(false);
+    ui->search_line->setFixedHeight(40);
+    ui->search_btn->setText("+");
+    ui->search_btn->setFixedSize(40, 40);
+    ui->search_btn->setToolTip(tr("添加朋友"));
+    connect(ui->search_line, &QLineEdit::returnPressed, ui->search_list, &SearchList::search);
+    connect(ui->search_btn, &QPushButton::clicked, this, [this]() {
+        ShowSearch(true);
+        ui->search_line->setFocus();
+        if (!ui->search_line->text().trimmed().isEmpty()) ui->search_list->search();
+    });
+    auto* heading = new QLabel(tr("聊天"), ui->chat_user_win);
+    heading->setObjectName("sectionTitle");
+    ui->verticalLayout_3->insertWidget(0, heading);
+    ui->chat_user_win->setFixedWidth(320);
+    ui->search_win->setMinimumWidth(0);
+    ui->chat_search_list->setMinimumWidth(0);
+    ui->horizontalLayout->setStretch(2, 1);
+    connect(ui->friend_apply_page, &ApplyFriendPage::sig_show_search, this, [this](bool) {
+        ShowSearch(true);
+        ui->search_line->setFocus();
+    });
     // 设置搜索按钮的图标和样式
     QAction* searchAction = new QAction(ui->search_line);
     searchAction->setIcon(QIcon(":/res/search.png"));
     ui->search_line->addAction(searchAction, QLineEdit::LeadingPosition);
-    ui->search_line->setPlaceholderText(QStringLiteral("搜索"));
+    ui->search_line->setPlaceholderText(tr("搜索 UID 或用户名"));
     // 设置搜索按钮的触发事件
     QAction* clearAction = new QAction(ui->search_line);
-    clearAction->setIcon(QIcon(":/res/transparent.png"));
+    clearAction->setIcon(QIcon(":/res/delete.png"));
+    clearAction->setVisible(false);
     ui->search_line->addAction(clearAction, QLineEdit::TrailingPosition);
     // 设置搜索按钮的样式
     connect(ui->search_line, &QLineEdit::textChanged, [this, clearAction](const QString& text) {
+        clearAction->setVisible(!text.isEmpty());
         if (!text.isEmpty()) {
-            clearAction->setIcon(QIcon(":/res/delete.png"));
             ShowSearch(true);
         } else {
-            clearAction->setIcon(QIcon(":/res/transparent.png"));
             ShowSearch(false);
         }
     });
     connect(clearAction, &QAction::triggered, [this, clearAction]() {
         ui->search_line->clear();
-        clearAction->setIcon(QIcon(":/res/transparent.png"));
         ui->search_line->clearFocus();
         // 清除按钮被按下则不显示搜索框
         ShowSearch(false);
@@ -391,6 +412,8 @@ void ChatDialog::slot_side_chat() {
     ClearLabelState(ui->chat_bar);
     ui->chat_data_stacked->setCurrentWidget(ui->Chat_Page);
     _state = ChatUIMode::ChatMode;
+    findChild<QLabel*>("sectionTitle")->setText(tr("聊天"));
+    ui->search_line->clear();
     ShowSearch(false);
 }
 
@@ -406,6 +429,8 @@ void ChatDialog::slot_side_contact() {
     }
 
     _state = ChatUIMode::ConTactMode;
+    findChild<QLabel*>("sectionTitle")->setText(tr("联系人"));
+    ui->search_line->clear();
     ShowSearch(false);
 }
 
@@ -526,13 +551,9 @@ void ChatDialog::slot_loading_contact_user() {
     }
 
     _b_loading = true;
-    Loadingdlg* loadingDialog = new Loadingdlg(this);
-    loadingDialog->setModal(true);
-    loadingDialog->show();
     qDebug() << "add new data to list.....";
     LoadMoreConWid();
     // 加载完成后关闭对话框
-    loadingDialog->deleteLater();
 
     _b_loading = false;
 }

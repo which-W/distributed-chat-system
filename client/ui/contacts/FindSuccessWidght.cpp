@@ -1,4 +1,5 @@
 #include "FindSuccessWidght.h"
+#include "DialogStyle.h"
 
 FindSuccessWidght::FindSuccessWidght(QWidget* parent)
     : QDialog(parent), _parent(parent), ui(new Ui::FindSuccessWidghtClass()) {
@@ -17,6 +18,7 @@ FindSuccessWidght::FindSuccessWidght(QWidget* parent)
     ui->head_lb->setPixmap(head_pix);
     ui->add_friend_btn->SetState("normal", "hover", "press");
     this->setModal(true);
+    styleFriendDialog(this, tr("找到朋友"));
 }
 
 FindSuccessWidght::~FindSuccessWidght() {
@@ -25,6 +27,9 @@ FindSuccessWidght::~FindSuccessWidght() {
 
 void FindSuccessWidght::SetSearchInfo(std::shared_ptr<SearchInfo> si) {
     ui->name_lb->setText(si->_name);
+    ui->head_lb->setPixmap(QPixmap(si->_icon).scaled(45, 45, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    ui->name_lb->setMaximumWidth(QWIDGETSIZE_MAX);
+    ui->name_lb->setToolTip(tr("UID: %1").arg(si->_uid));
     _si = si;
 }
 
