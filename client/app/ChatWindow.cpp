@@ -80,6 +80,8 @@ ChatWindow::ChatWindow(QWidget* parent) : ElaWindow(parent) {
     shellLayout->addWidget(rail);
     shellLayout->addWidget(contentStack_, 1);
     addCentralWidget(shell);
+    // Index 0 is ElaWindow's built-in navigation page; our workspace is index 1.
+    setCurrentStackIndex(1);
 
     const QString icon = UserMgr::Getinstance()->GetIcon();
     if (!icon.isEmpty()) {
