@@ -1,12 +1,15 @@
 #include "ApplyFriend.h"
+#include "DialogStyle.h"
 
 ApplyFriend::ApplyFriend(QWidget* parent)
-    : QDialog(), ui(new Ui::ApplyFriendClass), _label_point(2, 6) {
+    : QDialog(parent), ui(new Ui::ApplyFriendClass), _label_point(2, 6) {
     ui->setupUi(this);
     // 隐藏对话框标题栏
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
     this->setObjectName("ApplyFriend");
     this->setModal(true);
+    setAttribute(Qt::WA_DeleteOnClose);
+    styleFriendDialog(this, tr("添加朋友"));
 
     ui->name_ed->setPlaceholderText(tr("添加人名称"));
     ui->lb_edit->setPlaceholderText(tr("搜索、添加标签"));
@@ -17,18 +20,12 @@ ApplyFriend::ApplyFriend(QWidget* parent)
 
     ui->lb_edit->SetMaxLength(21);
     ui->lb_edit->move(2, 2);
-    ui->lb_edit->setFixedHeight(20);
+    ui->lb_edit->setFixedHeight(30);
+    ui->grid_widght->setMinimumHeight(38);
     ui->lb_edit->setMaxLength(10);
     _tip_cur_point = QPoint(5, 5);
 
-    _tip_data = {tr("情人"),
-                 tr("仇人"),
-                 tr("死人"),
-                 tr("python好友"),
-                 tr("C++大师"),
-                 tr("好基友"),
-                 tr("一生不分离的最好的朋友"),
-                 tr("好基友")};
+    _tip_data = {tr("朋友"), tr("同学"), tr("同事"), tr("家人")};
     InitTipLbs();
     // 链接输入标签回车事件
     connect(ui->lb_edit, &CustomizeEdit::returnPressed, this, &ApplyFriend::SlotLabelEnter);
@@ -46,6 +43,16 @@ ApplyFriend::ApplyFriend(QWidget* parent)
     // 连接确认和取消按钮的槽函数
     connect(ui->cancel_btn, &QPushButton::clicked, this, &ApplyFriend::SlotApplyCancel);
     connect(ui->sure_btn, &QPushButton::clicked, this, &ApplyFriend::SlotApplySure);
+    ui->apply_lb->hide();
+    ui->line->hide();
+    ui->name_ed->setFixedHeight(40);
+    ui->other_name_ed->setFixedHeight(40);
+    ui->scrollArea->setMinimumHeight(280);
+    ui->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    ui->name_lb->setText(tr("你的名字"));
+    ui->other_name_lb->setText(tr("好友备注"));
+    setMinimumHeight(420);
+    resize(420, 480);
 }
 
 ApplyFriend::~ApplyFriend() {

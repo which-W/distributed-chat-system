@@ -8,11 +8,13 @@ TextBuble::TextBuble(ChatRole role, const QString& text, QWidget* parent)
     m_pTextEdit->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_pTextEdit->installEventFilter(this);
     QFont font("Microsoft YaHei");
-    font.setPointSize(8);
+    font.setPixelSize(14);
     m_pTextEdit->setFont(font);
     setPlainText(text);
     setWidget(m_pTextEdit);
     initStyleSheet();
+    if (role == ChatRole::Self)
+        m_pTextEdit->setStyleSheet("QTextEdit { color: white; background: transparent; border: none; padding: 0; }");
 }
 
 bool TextBuble::eventFilter(QObject* o, QEvent* e) {
@@ -58,5 +60,5 @@ void TextBuble::adjustTextHeight() {
 }
 
 void TextBuble::initStyleSheet() {
-    m_pTextEdit->setStyleSheet("QTextEdit{background:transparent;border:none}");
+    m_pTextEdit->setStyleSheet("QTextEdit{background:transparent;border:none;padding:0}");
 }

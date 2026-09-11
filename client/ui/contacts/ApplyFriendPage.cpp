@@ -3,9 +3,27 @@
 ApplyFriendPage::ApplyFriendPage(QWidget* parent)
     : QWidget(parent), ui(new Ui::ApplyFriendPageClass()) {
     ui->setupUi(this);
+    ui->friend_apply_wid->setMinimumHeight(72);
+    auto* add = new QPushButton(tr("添加朋友"), this);
+    add->setObjectName("addFriendButton");
+    ui->horizontalLayout->addWidget(add);
+    ui->horizontalLayout->setContentsMargins(20, 12, 20, 12);
+    connect(add, &QPushButton::clicked, this, [this]() { emit sig_show_search(true); });
+    auto* empty = new QLabel(tr("暂无好友申请\n点击“添加朋友”，通过 UID 或用户名找到对方"), this);
+    empty->setObjectName("friendEmptyState");
+    empty->setAlignment(Qt::AlignCenter);
+    ui->verticalLayout->addWidget(empty, 1);
+    auto updateEmpty = [this, empty]() {
+        const bool isEmpty = ui->apply_friend_list->count() == 0;
+        empty->setVisible(isEmpty);
+        ui->apply_friend_list->parentWidget()->setVisible(!isEmpty);
+    };
+    connect(ui->apply_friend_list->model(), &QAbstractItemModel::rowsInserted, this, updateEmpty);
+    connect(ui->apply_friend_list->model(), &QAbstractItemModel::rowsRemoved, this, updateEmpty);
     connect(ui->apply_friend_list, &ApplyFriendList::sig_show_search, this,
             &ApplyFriendPage::sig_show_search);
     loadApplyList();
+    updateEmpty();
     // 接受tcp传递的authrsp信号处理
     connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_auth_rsp, this,
             &ApplyFriendPage::slot_auth_rsp);
@@ -26,7 +44,7 @@ void ApplyFriendPage::AddNewApply(std::shared_ptr<AddFriendApply> apply) {
     QListWidgetItem* item = new QListWidgetItem;
     // qDebug()<<"chat_user_wid sizeHint is " << chat_user_wid->sizeHint();
     item->setSizeHint(apply_item->sizeHint());
-    item->setFlags(item->flags() & ~Qt::ItemIsEnabled & ~Qt::ItemIsSelectable);
+    item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
     ui->apply_friend_list->insertItem(0, item);
     ui->apply_friend_list->setItemWidget(item, apply_item);
     apply_item->ShowAddBtn(true);
@@ -60,7 +78,7 @@ void ApplyFriendPage::loadApplyList() {
         QListWidgetItem* item = new QListWidgetItem;
         // qDebug()<<"chat_user_wid sizeHint is " << chat_user_wid->sizeHint();
         item->setSizeHint(apply_item->sizeHint());
-        item->setFlags(item->flags() & ~Qt::ItemIsEnabled & ~Qt::ItemIsSelectable);
+        item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
         ui->apply_friend_list->insertItem(0, item);
         ui->apply_friend_list->setItemWidget(item, apply_item);
         if (apply->_status) {

@@ -26,16 +26,16 @@ void ThemeManager::initialize() {
     eApp->setWindowDisplayMode(isOffscreen ? ElaApplicationType::Normal
                                            : ElaApplicationType::ElaMica);
 
-    const QColor accent(112, 92, 255);
+    const QColor accent(8, 102, 255);
     eTheme->setThemeColor(ElaThemeType::Dark, ElaThemeType::PrimaryNormal, accent);
-    eTheme->setThemeColor(ElaThemeType::Dark, ElaThemeType::PrimaryHover, QColor(132, 116, 255));
-    eTheme->setThemeColor(ElaThemeType::Dark, ElaThemeType::PrimaryPress, QColor(91, 72, 224));
-    eTheme->setThemeColor(ElaThemeType::Light, ElaThemeType::PrimaryNormal, QColor(93, 72, 225));
-    eTheme->setThemeColor(ElaThemeType::Light, ElaThemeType::PrimaryHover, QColor(112, 92, 240));
-    eTheme->setThemeColor(ElaThemeType::Light, ElaThemeType::PrimaryPress, QColor(75, 56, 190));
+    eTheme->setThemeColor(ElaThemeType::Dark, ElaThemeType::PrimaryHover, QColor(36, 120, 255));
+    eTheme->setThemeColor(ElaThemeType::Dark, ElaThemeType::PrimaryPress, QColor(0, 84, 214));
+    eTheme->setThemeColor(ElaThemeType::Light, ElaThemeType::PrimaryNormal, accent);
+    eTheme->setThemeColor(ElaThemeType::Light, ElaThemeType::PrimaryHover, QColor(36, 120, 255));
+    eTheme->setThemeColor(ElaThemeType::Light, ElaThemeType::PrimaryPress, QColor(0, 84, 214));
 
     const QSettings settings;
-    const auto saved = settings.value(kThemeKey, static_cast<int>(ElaThemeType::Dark)).toInt();
+    const auto saved = settings.value(kThemeKey, static_cast<int>(ElaThemeType::Light)).toInt();
     setThemeMode(saved == static_cast<int>(ElaThemeType::Light) ? ElaThemeType::Light
                                                                 : ElaThemeType::Dark);
 }

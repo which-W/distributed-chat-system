@@ -1,4 +1,5 @@
 #include "ChatItemBase.h"
+#include "ChatGraphics.h"
 
 ChatItemBase::ChatItemBase(ChatRole role, QWidget* parent) : QWidget(parent), m_role(role) {
     // 基本消息框组件初始化
@@ -12,7 +13,7 @@ ChatItemBase::ChatItemBase(ChatRole role, QWidget* parent) : QWidget(parent), m_
     // 图标设置
     m_pIconLabel = new QLabel();
     m_pIconLabel->setScaledContents(true);
-    m_pIconLabel->setFixedSize(50, 50);
+    m_pIconLabel->setFixedSize(36, 36);
     // 聊天气泡组件
     m_pBubble = new QWidget();
     // 创建主布局
@@ -50,7 +51,7 @@ void ChatItemBase::setUserName(const QString& name) {
 }
 
 void ChatItemBase::setUserIcon(const QPixmap& icon) {
-    m_pIconLabel->setPixmap(icon);
+    m_pIconLabel->setPixmap(roundAvatar(icon, 36));
 }
 
 void ChatItemBase::setWidget(QWidget* w) {

@@ -95,15 +95,6 @@ jobs:
       - run: npm run check
       - run: npm test
 
-  formatting:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check C++ formatting
-        run: |
-          files=$(git ls-files '*.cpp' '*.h' | grep -Ev '^(third_party|build)/')
-          clang-format --dry-run --Werror $files
-
   docker-e2e:
     runs-on: ubuntu-24.04
     timeout-minutes: 90

@@ -1,4 +1,6 @@
 #include "SearchList.h"
+#include <QTimer>
+#include <QLabel>
 
 SearchList::SearchList(QWidget* parent)
     : QListWidget(parent), _find_dlg(nullptr), _search_edit(nullptr), _send_pending(false) {
@@ -55,16 +57,37 @@ void SearchList::SetSearchEdit(QWidget* edit) {
 }
 
 void SearchList::waitPending(bool pending) {
-    if (pending) {
-        _loadingDialog = new Loadingdlg(this);
-        _loadingDialog->setModal(true);
-        _loadingDialog->show();
-        _send_pending = pending;
-    } else {
-        _loadingDialog->hide();
-        _loadingDialog->deleteLater();
-        _send_pending = pending;
+    _send_pending = pending;
+    if (!_searchTimer) {
+        _searchTimer = new QTimer(this);
+        _searchTimer->setSingleShot(true);
+        connect(_searchTimer, &QTimer::timeout, this, [this]() {
+            waitPending(false);
+            if (auto* label = findChild<QLabel*>("message_tip"))
+                label->setText(tr("搜索超时，点击重试"));
+        });
     }
+    if (auto* label = findChild<QLabel*>("message_tip"))
+        label->setText(pending ? tr("正在查找…") : tr("查找 UID / 用户名"));
+    setCursor(pending ? Qt::BusyCursor : Qt::PointingHandCursor);
+    if (pending) _searchTimer->start(10000);
+    else _searchTimer->stop();
+}
+
+void SearchList::search() {
+    auto* edit = qobject_cast<QLineEdit*>(_search_edit);
+    if (!edit || _send_pending) return;
+    const QString query = edit->text().trimmed();
+    if (query.isEmpty()) {
+        edit->setFocus();
+        if (auto* label = findChild<QLabel*>("message_tip"))
+            label->setText(tr("请先输入 UID 或用户名"));
+        return;
+    }
+    CloseFindDlg();
+    waitPending(true);
+    emit TcpMgr::Getinstance()->sig_send_data(Req::ID_SEARCH_USER_REQ,
+        QJsonDocument(QJsonObject{{"uid", query}}).toJson(QJsonDocument::Compact));
 }
 
 void SearchList::addTipItem() {
@@ -109,22 +132,7 @@ void SearchList::slot_item_clicked(QListWidgetItem* item) {
 
     if (itemType == ListItemType::ADD_USER_TIP_ITEM) {
 
-        auto search_edit = dynamic_cast<CustomizeEdit*>(_search_edit);
-        if (!search_edit) {
-            qDebug() << "search edit is nullptr";
-            return;
-        }
-        waitPending(true);
-        auto uid_str = search_edit->text();
-        // 此处发送请求给server
-        QJsonObject jsonObj;
-        jsonObj["uid"] = uid_str;
-
-        QJsonDocument doc(jsonObj);
-        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
-
-        // 发送tcp请求给chat server
-        emit TcpMgr::Getinstance() -> sig_send_data(Req::ID_SEARCH_USER_REQ, jsonData);
+        search();
         return;
     }
 
@@ -133,6 +141,7 @@ void SearchList::slot_item_clicked(QListWidgetItem* item) {
 }
 
 void SearchList::slot_user_search(std::shared_ptr<SearchInfo> si) {
+    if (!_send_pending) return;
     waitPending(false);
     if (!si) {
         _find_dlg = std::make_shared<FindFailWidget>(this);
@@ -140,7 +149,8 @@ void SearchList::slot_user_search(std::shared_ptr<SearchInfo> si) {
         // 如果是自己，暂且先直接返回，以后看逻辑扩充
         auto self_uid = UserMgr::Getinstance()->GetUid();
         if (si->_uid == self_uid) {
-
+            if (auto* label = findChild<QLabel*>("message_tip"))
+                label->setText(tr("这是你自己的账号"));
             return;
         }
         // 此处分两种情况，一种是搜多到已经是自己的朋友了，一种是未添加好友
@@ -157,5 +167,7 @@ void SearchList::slot_user_search(std::shared_ptr<SearchInfo> si) {
         std::dynamic_pointer_cast<FindSuccessWidght>(_find_dlg)->SetSearchInfo(si);
     }
 
+    _find_dlg->adjustSize();
+    _find_dlg->move(window()->mapToGlobal(window()->rect().center()) - _find_dlg->rect().center());
     _find_dlg->show();
 }

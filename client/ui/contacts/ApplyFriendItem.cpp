@@ -1,14 +1,15 @@
 #include "ApplyFriendItem.h"
+#include "ChatGraphics.h"
 
 ApplyFriendItem::ApplyFriendItem(QWidget* parent)
     : ListItemBase(parent), ui(new Ui::ApplyFriendItem()) {
     ui->setupUi(this);
     SetItemType(ListItemType::APPLY_FRIEND_ITEM);
     ui->addBtn->SetState("normal", "hover", "press");
+    ui->addBtn->setText(tr("接受"));
     ui->addBtn->hide();
     connect(ui->addBtn, &ClickedBtn::clicked,
             [this]() { emit this->sig_auth_friend(_apply_info); });
-    connect(ui->addBtn, &ClickedBtn::click, this, &ApplyFriendItem::slot_ShowAddBtn);
 }
 
 ApplyFriendItem::~ApplyFriendItem() {
@@ -22,7 +23,7 @@ void ApplyFriendItem::SetInfo(std::shared_ptr<ApplyInfo> apply_info) {
 
     // 设置图片自动缩放
     ui->icon_lb->setPixmap(
-        pixmap.scaled(ui->icon_lb->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
 
     ui->user_name_lb->setText(_apply_info->_name);

@@ -50,9 +50,9 @@ class ChatDialog : public QWidget {
     bool _b_loading;
     QListWidgetItem* _loadingitem;
     QList<StateWidget*> _lb_group;
-    QWidget* _last_widget;
+    QWidget* _last_widget{nullptr};
     QMap<int, QListWidgetItem*> _chat_items_added;
-    int _cur_chat_uid;
+    int _cur_chat_uid{0};
   public slots:
     void slot_loading_chat_user();
     void slot_side_chat();

@@ -20,6 +20,7 @@ class SearchList : public QListWidget {
     SearchList(QWidget* parent = nullptr);
     void CloseFindDlg();
     void SetSearchEdit(QWidget* edit);
+    void search();
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -30,7 +31,7 @@ class SearchList : public QListWidget {
     void addTipItem();
     std::shared_ptr<QDialog> _find_dlg;
     QWidget* _search_edit;
-    Loadingdlg* _loadingDialog;
+    QTimer* _searchTimer{nullptr};
     UserMgr* _user_mgr;
   private slots:
     void slot_item_clicked(QListWidgetItem* item);

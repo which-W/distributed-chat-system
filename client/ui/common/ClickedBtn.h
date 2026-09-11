@@ -1,8 +1,8 @@
 #pragma once
-#include "ElaPushButton.h"
+#include <QPushButton>
 #include "global.h"
 #include <QEnterEvent>
-class ClickedBtn : public ElaPushButton {
+class ClickedBtn : public QPushButton {
     Q_OBJECT
   public:
     ClickedBtn(QWidget* parent = nullptr);
