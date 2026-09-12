@@ -130,6 +130,27 @@ ChatDialog::ChatDialog(QWidget* parent)
 
     connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_text_chat_msg, this,
             &ChatDialog::slot_chat_msg_changed);
+    connect(FileTransferManager::Getinstance().get(), &FileTransferManager::transferAvailable,
+            this, [this](const QJsonObject& file) {
+        const int sender = file["fromuid"].toInt();
+        auto model = UserMgr::Getinstance();
+        if (file["touid"].toInt() != model->GetUid()) return;
+        const auto friendInfo = model->GetFriendById(sender);
+        if (!friendInfo) return;
+        friendInfo->_last_msg = tr("[文件] %1").arg(file["name"].toString());
+        auto* item = _chat_items_added.value(sender, nullptr);
+        if (!item) {
+            auto* row = new ChatUserWid;
+            row->SetInfo(friendInfo);
+            item = new QListWidgetItem;
+            item->setSizeHint(row->sizeHint());
+            ui->chat_search_list->insertItem(0, item);
+            ui->chat_search_list->setItemWidget(item, row);
+            _chat_items_added.insert(sender, item);
+        }
+        auto* row = qobject_cast<ChatUserWid*>(ui->chat_search_list->itemWidget(item));
+        if (row) row->updateFileSummary(file["name"].toString());
+    });
 }
 
 ChatDialog::~ChatDialog() {
@@ -358,6 +379,16 @@ void ChatDialog::LoadMoreConWid() {
     auto friend_list = UserMgr::Getinstance()->GetConListPerPage();
     if (friend_list.empty() == false) {
         for (auto& friend_ele : friend_list) {
+            bool present = false;
+            for (int row = 0; row < ui->contact_list->count(); ++row) {
+                auto* existing = qobject_cast<ConUserItem*>(
+                    ui->contact_list->itemWidget(ui->contact_list->item(row)));
+                if (existing && existing->GetInfo() && existing->GetInfo()->_uid == friend_ele->_uid) {
+                    present = true;
+                    break;
+                }
+            }
+            if (present) continue;
             auto* chat_user_wid = new ConUserItem();
             chat_user_wid->SetInfo(friend_ele->_uid, friend_ele->_name, friend_ele->_icon);
             QListWidgetItem* item = new QListWidgetItem;

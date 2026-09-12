@@ -27,6 +27,12 @@ ApplyFriendPage::ApplyFriendPage(QWidget* parent)
     // 接受tcp传递的authrsp信号处理
     connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_auth_rsp, this,
             &ApplyFriendPage::slot_auth_rsp);
+    connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_friend_snapshot, this, [this, updateEmpty]() {
+        _unauth_items.clear();
+        ui->apply_friend_list->clear();
+        loadApplyList();
+        updateEmpty();
+    });
 }
 
 ApplyFriendPage::~ApplyFriendPage() {
@@ -34,12 +40,9 @@ ApplyFriendPage::~ApplyFriendPage() {
 }
 
 void ApplyFriendPage::AddNewApply(std::shared_ptr<AddFriendApply> apply) {
-    // 先模拟头像随机，以后头像资源增加资源服务器后再显示
-    int randomValue = QRandomGenerator::global()->bounded(100); // 生成0到99之间的随机整数
-    int head_i = randomValue % heads.size();
     auto* apply_item = new ApplyFriendItem();
     auto apply_info = std::make_shared<ApplyInfo>(apply->_from_uid, apply->_name, apply->_desc,
-                                                  heads[head_i], apply->_name, 0, 0);
+                                                  apply->_icon, apply->_nick, apply->_sex, 0);
     apply_item->SetInfo(apply_info);
     QListWidgetItem* item = new QListWidgetItem;
     // qDebug()<<"chat_user_wid sizeHint is " << chat_user_wid->sizeHint();
@@ -53,6 +56,7 @@ void ApplyFriendPage::AddNewApply(std::shared_ptr<AddFriendApply> apply) {
     connect(apply_item, &ApplyFriendItem::sig_auth_friend,
             [this](std::shared_ptr<ApplyInfo> apply_info) {
                 auto* authFriend = new AuthenFriend(this);
+                authFriend->setAttribute(Qt::WA_DeleteOnClose);
                 authFriend->setModal(true);
                 authFriend->SetApplyInfo(apply_info);
                 authFriend->show();
@@ -70,16 +74,13 @@ void ApplyFriendPage::loadApplyList() {
     // 添加好友申请
     auto apply_list = UserMgr::Getinstance()->GetApplyList();
     for (auto& apply : apply_list) {
-        int randomValue = QRandomGenerator::global()->bounded(100); // 生成0到99之间的随机整数
-        int head_i = randomValue % heads.size();
         auto* apply_item = new ApplyFriendItem();
-        apply->SetIcon(heads[head_i]);
         apply_item->SetInfo(apply);
         QListWidgetItem* item = new QListWidgetItem;
         // qDebug()<<"chat_user_wid sizeHint is " << chat_user_wid->sizeHint();
         item->setSizeHint(apply_item->sizeHint());
         item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
-        ui->apply_friend_list->insertItem(0, item);
+        ui->apply_friend_list->addItem(item);
         ui->apply_friend_list->setItemWidget(item, apply_item);
         if (apply->_status) {
             apply_item->ShowAddBtn(false);
@@ -93,6 +94,7 @@ void ApplyFriendPage::loadApplyList() {
         connect(apply_item, &ApplyFriendItem::sig_auth_friend,
                 [this](std::shared_ptr<ApplyInfo> apply_info) {
                     auto* authFriend = new AuthenFriend(this);
+                    authFriend->setAttribute(Qt::WA_DeleteOnClose);
                     authFriend->setModal(true);
                     authFriend->SetApplyInfo(apply_info);
                     authFriend->show();
@@ -129,6 +131,8 @@ void ApplyFriendPage::loadApplyList() {
 
 void ApplyFriendPage::slot_auth_rsp(std::shared_ptr<AuthRsp> auth_rsp) {
     auto uid = auth_rsp->_uid;
+    for (auto& apply : UserMgr::Getinstance()->GetApplyList())
+        if (apply->_uid == uid) apply->_status = 1;
     auto find_iter = _unauth_items.find(uid);
     if (find_iter == _unauth_items.end()) {
         return;

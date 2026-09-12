@@ -51,6 +51,12 @@ ChatWindow::ChatWindow(QWidget* parent) : ElaWindow(parent) {
 
     messagesButton_ = new ElaIconButton(ElaIconType::Messages, 19, 48, 48, rail);
     contactsButton_ = new ElaIconButton(ElaIconType::AddressBook, 19, 48, 48, rail);
+    friendBadge_ = new QLabel(contactsButton_);
+    friendBadge_->setObjectName("friendRequestBadge");
+    friendBadge_->setGeometry(29, 0, 20, 20);
+    friendBadge_->setAlignment(Qt::AlignCenter);
+    friendBadge_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    friendBadge_->setStyleSheet("background:#ef4444;color:white;border-radius:10px;font-size:11px;font-weight:600;");
     settingsButton_ = new ElaIconButton(ElaIconType::GearComplex, 19, 48, 48, rail);
     messagesButton_->setToolTip(tr("Messages"));
     contactsButton_->setToolTip(tr("Contacts"));
@@ -114,6 +120,15 @@ ChatWindow::ChatWindow(QWidget* parent) : ElaWindow(parent) {
             });
 
     showMessages();
+    auto tcp = TcpMgr::Getinstance();
+    connect(tcp.get(), &TcpMgr::sig_friend_apply, this, [this](std::shared_ptr<AddFriendApply> apply) {
+        updateFriendBadge();
+        ElaMessageBar::information(ElaMessageBarType::TopRight, tr("新的好友邀请"),
+            tr("%1 邀请你成为好友，请到联系人查看。 ").arg(apply->_name), 5000, this);
+    });
+    connect(tcp.get(), &TcpMgr::sig_friend_snapshot, this, &ChatWindow::updateFriendBadge);
+    connect(tcp.get(), &TcpMgr::sig_auth_rsp, this, [this]() { updateFriendBadge(); });
+    updateFriendBadge();
     applyTheme(ThemeManager::instance().themeMode());
 }
 
@@ -214,7 +229,18 @@ void ChatWindow::showMessages() {
 void ChatWindow::showContacts() {
     contentStack_->setCurrentWidget(workspace_);
     workspace_->slot_side_contact();
+    if (!friendBadge_->isHidden()) workspace_->slot_switch_apply_friend_page();
+    TcpMgr::Getinstance()->refreshFriends();
     selectRailButton(contactsButton_);
+}
+
+void ChatWindow::updateFriendBadge() {
+    int count = 0;
+    for (const auto& apply : UserMgr::Getinstance()->GetApplyList())
+        if (apply->_status == 0) ++count;
+    friendBadge_->setText(count > 99 ? "99+" : QString::number(count));
+    friendBadge_->setVisible(count > 0);
+    contactsButton_->setToolTip(count ? tr("联系人 · %1 个好友邀请").arg(count) : tr("联系人"));
 }
 
 void ChatWindow::showSettings() {

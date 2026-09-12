@@ -34,6 +34,11 @@ inline QPixmap chatGlyph(const QString& name, const QColor& color, int size = 24
         p.drawEllipse(QRectF(3, 3, 18, 18));
         p.drawPoint(QPointF(8, 9)); p.drawPoint(QPointF(16, 9));
         p.drawArc(QRectF(7, 9, 10, 8), 200 * 16, 140 * 16);
+    } else if (name == "person-add") {
+        p.drawEllipse(QRectF(6, 3, 7, 7));
+        p.drawArc(QRectF(3, 12, 13, 12), 0, 180 * 16);
+        p.drawLine(QPointF(19, 12), QPointF(19, 20));
+        p.drawLine(QPointF(15, 16), QPointF(23, 16));
     } else if (name == "search") {
         p.drawEllipse(QRectF(3, 3, 12, 12));
         p.drawLine(QPointF(14, 14), QPointF(21, 21));

@@ -4,6 +4,7 @@
 #include <QHBoxLayout>
 #include <QMenu>
 #include "ChatGraphics.h"
+#include "ElaMessageBar.h"
 
 ChatPage::ChatPage(QWidget* parent) : QWidget(parent), ui(new Ui::ChatPageClass()) {
     ui->setupUi(this);
@@ -97,13 +98,19 @@ ChatPage::ChatPage(QWidget* parent) : QWidget(parent), ui(new Ui::ChatPageClass(
             });
     connect(manager.get(), &FileTransferManager::transferFailed, this,
             [this](const QString& id, const QString& reason) {
-                if (_file_bubbles.contains(id))
-                    _file_bubbles[id]->setFailed(reason);
+                  if (_file_bubbles.contains(id))
+                      _file_bubbles[id]->setFailed(reason);
+                  else if (id.isEmpty())
+                      ElaMessageBar::warning(ElaMessageBarType::TopRight, tr("文件未发送"), reason, 5000, window());
             });
     connect(manager.get(), &FileTransferManager::transferAvailable, this,
             [this](const QJsonObject& item) {
-                if (_user_info && item["fromuid"].toInt() == _user_info->_uid)
+                if (!_user_info) return;
+                const int self = UserMgr::Getinstance()->GetUid();
+                if (item["fromuid"].toInt() == _user_info->_uid && item["touid"].toInt() == self)
                     appendFileBubble(item, ChatRole::Other, true);
+                else if (item["fromuid"].toInt() == self && item["touid"].toInt() == _user_info->_uid)
+                    appendFileBubble(item, ChatRole::Self, false);
             });
 }
 
@@ -137,6 +144,7 @@ void ChatPage::SetUserInfo(std::shared_ptr<UserInfo> user_info) {
         const bool incoming = file["fromuid"].toInt() == user_info->_uid;
         appendFileBubble(file, incoming ? ChatRole::Other : ChatRole::Self, incoming);
     }
+    TcpMgr::Getinstance()->refreshFriends();
 }
 
 void ChatPage::appendFileBubble(const QJsonObject& metadata, ChatRole role, bool incoming) {
@@ -153,6 +161,8 @@ void ChatPage::appendFileBubble(const QJsonObject& metadata, ChatRole role, bool
         item->setUserIcon(QPixmap(_user_info ? _user_info->_icon : QString()));
     }
     auto* bubble = new FileBubble(metadata, role, incoming, this);
+    const auto localPath = FileTransferManager::Getinstance()->localPathForTransfer(id);
+    if (!localPath.isEmpty() || (!incoming && metadata["completed"].toBool())) bubble->setFinished(localPath);
     item->setWidget(bubble);
     ui->chat_data_list->appendChatItem(item);
     _file_bubbles[id] = bubble;
@@ -182,6 +192,7 @@ void ChatPage::chooseFile(QString, ClickLbState) {
         return;
     metadata["id"] = local;
     appendFileBubble(metadata, ChatRole::Self, false);
+    if (_file_bubbles.contains(local)) _file_bubbles[local]->setLocalPreview(path);
 }
 
 void ChatPage::AppendChatMsg(std::shared_ptr<TextChatData> msg) {

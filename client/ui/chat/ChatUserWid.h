@@ -26,6 +26,7 @@ class ChatUserWid : public ListItemBase {
     void SetInfo(std::shared_ptr<UserInfo> user_info);
     std::shared_ptr<UserInfo> GetUserInfo();
     void updateLastMsg(std::vector<std::shared_ptr<TextChatData>> msgs);
+    void updateFileSummary(const QString& name);
 
   private:
     Ui::ChatUserWidClass* ui;

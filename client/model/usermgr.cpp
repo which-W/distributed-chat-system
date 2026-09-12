@@ -57,7 +57,7 @@ void UserMgr::AppendApplyList(QJsonArray array) {
         auto uid = value["uid"].toInt();
         auto status = value["status"].toInt();
         auto info = std::make_shared<ApplyInfo>(uid, name, desc, icon, nick, sex, status);
-        _apply_list.push_back(info);
+        AddApplyList(info);
     }
 }
 
@@ -73,12 +73,22 @@ void UserMgr::AppendFriendList(QJsonArray array) {
         auto back = value["back"].toString();
 
         auto info = std::make_shared<FriendInfo>(uid, name, nick, icon, sex, desc, back);
-        _friend_list.push_back(info);
-        _friend_map.insert(uid, info);
+        if (!_friend_map.contains(uid)) {
+            _friend_list.push_back(info);
+            _friend_map.insert(uid, info);
+        } else {
+            _friend_map[uid]->_back = back;
+        }
     }
 }
 
 void UserMgr::AddApplyList(std::shared_ptr<ApplyInfo> app) {
+    for (auto& existing : _apply_list) {
+        if (existing->_uid == app->_uid) {
+            *existing = *app;
+            return;
+        }
+    }
     _apply_list.push_back(app);
 }
 
@@ -109,11 +119,13 @@ bool UserMgr::CheckFriendById(int uid) {
 
 void UserMgr::AddFriend(std::shared_ptr<AuthRsp> auth_rsp) {
     auto friend_info = std::make_shared<FriendInfo>(auth_rsp);
+    if (!_friend_map.contains(friend_info->_uid)) _friend_list.push_back(friend_info);
     _friend_map[friend_info->_uid] = friend_info;
 }
 
 void UserMgr::AddFriend(std::shared_ptr<AuthInfo> auth_info) {
     auto friend_info = std::make_shared<FriendInfo>(auth_info);
+    if (!_friend_map.contains(friend_info->_uid)) _friend_list.push_back(friend_info);
     _friend_map[friend_info->_uid] = friend_info;
 }
 

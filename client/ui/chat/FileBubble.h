@@ -17,11 +17,20 @@ class FileBubble : public BubbleFrame {
     void setProgress(qint64 current, qint64 total);
     void setFinished(const QString& localPath);
     void setFailed(const QString& reason);
+    void setLocalPreview(const QString& path);
   signals:
     void downloadRequested(const QJsonObject& metadata);
     void cancelRequested(const QString& id);
 
   private:
+    void applyTheme();
+    void showPreview();
+    QPushButton* preview_;
+    QWidget* card_;
+    QString localPath_;
+    bool finished_{false};
+    bool imageReady_{false};
+    bool self_;
     QJsonObject metadata_;
     QLabel* status_;
     QProgressBar* progress_;

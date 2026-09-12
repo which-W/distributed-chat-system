@@ -1,49 +1,21 @@
 #include "FindSuccessWidght.h"
-#include "DialogStyle.h"
-
+#include "ApplyFriend.h"
 FindSuccessWidght::FindSuccessWidght(QWidget* parent)
-    : QDialog(parent), _parent(parent), ui(new Ui::FindSuccessWidghtClass()) {
-    ui->setupUi(this);
-    // 设置对话框标题
-    setWindowTitle(tr("添加"));
-    // 隐藏对话框标题栏
-    setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
-    this->setObjectName("FindSuccessWidghtClass");
-    // 获取当前应用程序的路径
-    QString app_path = QCoreApplication::applicationDirPath();
-    QString pix_path = QDir::toNativeSeparators(app_path + QDir::separator() + "static" +
-                                                QDir::separator() + "head_1.jpg");
-    QPixmap head_pix(pix_path);
-    head_pix = head_pix.scaled(ui->head_lb->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    ui->head_lb->setPixmap(head_pix);
-    ui->add_friend_btn->SetState("normal", "hover", "press");
-    this->setModal(true);
-    styleFriendDialog(this, tr("找到朋友"));
+    : FriendDialog(tr("找到朋友"), tr("确认对方的资料，再发送好友申请。"), parent) {
+    description_ = addHint(QString());
+    auto* add = addActions(tr("添加为好友"));
+    add->setObjectName("add_friend_btn");
+    connect(add, &QPushButton::clicked, this, [this]() {
+        if (!info_) return;
+        hide();
+        auto* dialog = new ApplyFriend(parentWidget());
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->SetSearchInfo(info_);
+        dialog->show();
+    });
 }
-
-FindSuccessWidght::~FindSuccessWidght() {
-    delete ui;
-}
-
-void FindSuccessWidght::SetSearchInfo(std::shared_ptr<SearchInfo> si) {
-    ui->name_lb->setText(si->_name);
-    ui->head_lb->setPixmap(QPixmap(si->_icon).scaled(45, 45, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    ui->name_lb->setMaximumWidth(QWIDGETSIZE_MAX);
-    ui->name_lb->setToolTip(tr("UID: %1").arg(si->_uid));
-    _si = si;
-}
-
-void FindSuccessWidght::on_add_friend_btn_clicked() {
-    this->hide();
-    auto applyfriend = new ApplyFriend(_parent);
-    // 显示前先调整大小，然后居中
-    applyfriend->adjustSize(); // 确保对话框有正确的尺寸
-    // 居中显示
-    QRect parentRect = this->geometry();
-    int x = parentRect.x() + (parentRect.width() - applyfriend->width()) / 2;
-    int y = parentRect.y() + (parentRect.height() - applyfriend->height()) / 2;
-    applyfriend->move(x, y);
-    applyfriend->SetSearchInfo(_si);
-    applyfriend->setModal(true);
-    applyfriend->show();
+void FindSuccessWidght::SetSearchInfo(std::shared_ptr<SearchInfo> info) {
+    info_ = std::move(info);
+    setProfile(info_->_uid, info_->_name, info_->_icon);
+    description_->setText(info_->_desc.isEmpty() ? tr("对方还没有填写个人简介。") : info_->_desc);
 }

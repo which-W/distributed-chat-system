@@ -18,18 +18,31 @@ void sendJson(Req id, const QJsonObject& value) {
 } // namespace
 
 FileTransferManager::FileTransferManager() {
+    uploadAckTimer_.setParent(this);
+    uploadAckTimer_.setObjectName("uploadAckTimer");
+    uploadAckTimer_.setSingleShot(true);
+    uploadAckTimer_.setInterval(30000);
+    connect(&uploadAckTimer_, &QTimer::timeout, this, [this]() {
+        failUpload(tr("上传超时：服务器未确认，请检查连接后重新发送。"));
+    });
     hashTimer_.setInterval(0);
     connect(&hashTimer_, &QTimer::timeout, this, &FileTransferManager::hashUploadStep);
     connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_file_frame, this,
             &FileTransferManager::handleFrame);
     connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_file_available, this,
             [this](const QJsonObject& metadata) {
+                const auto user = UserMgr::Getinstance()->GetUserInfo();
+                if (!user || (metadata["fromuid"].toInt() != user->_uid &&
+                              metadata["touid"].toInt() != user->_uid)) return;
                 const auto id = metadata["id"].toString();
+                if (id.isEmpty()) return;
                 for (const auto& old : available_)
                     if (old["id"].toString() == id)
                         return;
-                available_.append(metadata);
-                emit transferAvailable(metadata);
+                auto complete = metadata;
+                complete["completed"] = true;
+                available_.append(complete);
+                emit transferAvailable(complete);
             });
     connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_connection_state, this,
             [this](const QString&, bool connected) {
@@ -51,6 +64,9 @@ QString FileTransferManager::startUpload(const QString& path, int receiverUid) {
         return {};
     }
     upload_.localToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    upload_.id.clear();
+    upload_.sha256.clear();
+    upload_.offset = 0;
     upload_.name = info.fileName();
     upload_.receiverUid = receiverUid;
     upload_.total = info.size();
@@ -73,6 +89,7 @@ void FileTransferManager::hashUploadStep() {
 }
 
 void FileTransferManager::sendUploadInit() {
+    uploadAckTimer_.start();
     QJsonObject request{{"touid", upload_.receiverUid},
                         {"name", upload_.name},
                         {"mime", upload_.mime},
@@ -85,9 +102,10 @@ void FileTransferManager::sendUploadInit() {
 
 void FileTransferManager::sendNextUploadChunk() {
     if (!upload_.file.seek(upload_.offset)) {
-        emit transferFailed(upload_.id, tr("无法定位上传文件"));
+        failUpload(tr("无法定位上传文件"));
         return;
     }
+    uploadAckTimer_.start();
     const QByteArray data = upload_.file.read(ChunkBytes);
     if (data.isEmpty()) {
         sendJson(Req::ID_UPLOAD_FILE_FINISH_REQ, QJsonObject{{"id", upload_.id}});
@@ -137,6 +155,7 @@ void FileTransferManager::cancel(const QString& transferId) {
         sendJson(Req::ID_FILE_TRANSFER_CANCEL, QJsonObject{{"id", remoteId}});
     }
     if (upload_.id == transferId || upload_.localToken == transferId) {
+        uploadAckTimer_.stop();
         upload_.file.close();
         upload_.localToken.clear();
         upload_.id.clear();
@@ -165,8 +184,34 @@ void FileTransferManager::cancel(const QString& transferId) {
     emit transferFailed(transferId, tr("传输已取消"));
 }
 
+void FileTransferManager::failUpload(const QString& reason) {
+    const auto token = upload_.id.isEmpty() ? upload_.localToken : upload_.id;
+    uploadAckTimer_.stop();
+    hashTimer_.stop();
+    upload_.file.close();
+    upload_.id.clear();
+    upload_.localToken.clear();
+    upload_.sha256.clear();
+    upload_.hash.reset();
+    upload_.offset = 0;
+    emit transferFailed(token, reason);
+}
+
 void FileTransferManager::handleFrame(Req id, const QJsonObject& value) {
+    const bool uploading = id == Req::ID_UPLOAD_FILE_RSP || id == Req::ID_UPLOAD_FILE_CHUNK_RSP ||
+                           id == Req::ID_UPLOAD_FILE_FINISH_RSP;
+    if (uploading) {
+        if (!upload_.file.isOpen()) return;
+        if (!upload_.id.isEmpty() && value.contains("id") && value["id"].toString() != upload_.id) return;
+        uploadAckTimer_.stop();
+    }
     if (value["error"].toInt() != 0) {
+        if (uploading) {
+            failUpload(tr("服务器拒绝上传（错误码 %1），请检查连接和文件后重试。").arg(value["error"].toInt()));
+            return;
+        }
+        download_.file.close();
+        download_.metadata = {};
         emit transferFailed(value["id"].toString(), tr("服务器拒绝文件传输"));
         return;
     }
@@ -185,6 +230,8 @@ void FileTransferManager::handleFrame(Req id, const QJsonObject& value) {
     }
     if (id == Req::ID_UPLOAD_FILE_FINISH_RSP) {
         const auto idValue = upload_.id;
+        const auto localPath = upload_.file.fileName();
+        localPaths_[idValue] = localPath;
         // 缓存服务端确认的可信元数据，切换会话后仍能恢复已发送附件气泡。
         bool known = false;
         for (const auto& item : available_)
@@ -192,8 +239,11 @@ void FileTransferManager::handleFrame(Req id, const QJsonObject& value) {
                 known = true;
                 break;
             }
-        if (!known)
-            available_.append(value);
+        if (!known) {
+            auto complete = value;
+            complete["completed"] = true;
+            available_.append(complete);
+        }
         upload_.file.close();
         upload_.localToken.clear();
         upload_.id.clear();
@@ -204,7 +254,7 @@ void FileTransferManager::handleFrame(Req id, const QJsonObject& value) {
         upload_.total = 0;
         upload_.offset = 0;
         upload_.hash.reset();
-        emit transferFinished(idValue, {});
+        emit transferFinished(idValue, localPath);
         return;
     }
     if (id != Req::ID_DOWNLOAD_FILE_CHUNK)
@@ -232,6 +282,7 @@ void FileTransferManager::handleFrame(Req id, const QJsonObject& value) {
         }
         sendJson(Req::ID_DOWNLOAD_FILE_DONE, QJsonObject{{"id", idValue}});
         const auto path = download_.targetPath;
+        localPaths_[idValue] = path;
         download_.metadata = {};
         download_.targetPath.clear();
         download_.partPath.clear();
@@ -263,8 +314,11 @@ void FileTransferManager::resumeActiveTransfers() {
 
 QList<QJsonObject> FileTransferManager::availableForPeer(int peerUid) const {
     QList<QJsonObject> result;
+    const auto user = UserMgr::Getinstance()->GetUserInfo();
+    if (!user) return result;
     for (const auto& item : available_) {
-        if (item["fromuid"].toInt() == peerUid || item["touid"].toInt() == peerUid)
+        if ((item["fromuid"].toInt() == peerUid && item["touid"].toInt() == user->_uid) ||
+            (item["touid"].toInt() == peerUid && item["fromuid"].toInt() == user->_uid))
             result.append(item);
     }
     return result;

@@ -26,8 +26,11 @@ void ApplyFriendItem::SetInfo(std::shared_ptr<ApplyInfo> apply_info) {
         roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
 
+    ui->user_name_lb->setTextFormat(Qt::PlainText);
     ui->user_name_lb->setText(_apply_info->_name);
-    QString _msg = _apply_info->_desc;
+    ui->user_chat_lb->setTextFormat(Qt::PlainText);
+    QString _msg = _apply_info->_desc.isEmpty()
+        ? tr("UID %1 · 请求添加你为好友").arg(_apply_info->_uid) : _apply_info->_desc;
     QByteArray msgBytes = _msg.toUtf8();
     QString displayMsg = _msg;
     int maxBytes = 50;

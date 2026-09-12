@@ -7,6 +7,9 @@
 #include <QDebug>
 #include <QFontDatabase>
 #include <QEventLoop>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QDataStream>
 #include <cstdio>
 #include "ChatWindow.h"
 #include "ChatDialog.h"
@@ -19,9 +22,14 @@
 #include "ThemeManager.h"
 #include "ElaTheme.h"
 #include "usermgr.h"
+#include "FriendInfoPage.h"
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
+    qInstallMessageHandler([](QtMsgType type, const QMessageLogContext&, const QString& message) {
+        if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
+            fprintf(stderr, "%s\n", message.toUtf8().constData());
+    });
     QFontDatabase::addApplicationFont("C:/Windows/Fonts/msyh.ttc");
     QFontDatabase::addApplicationFont("C:/Windows/Fonts/segoeui.ttf");
     auto settle = []() { QEventLoop loop; QTimer::singleShot(350, &loop, &QEventLoop::quit); loop.exec(); };
@@ -87,7 +95,7 @@ int main(int argc, char** argv) {
     page->AppendChatMsg(std::make_shared<TextChatData>("b", QStringLiteral("在做毕业设计，进展还不错～"), 1, 2));
     page->AppendChatMsg(std::make_shared<TextChatData>("c", QStringLiteral("有时间一起聊聊细节吗？"), 2, 1));
     emit FileTransferManager::Getinstance()->transferAvailable(QJsonObject{
-        {"id", "preview-file"}, {"fromuid", 2}, {"name", QStringLiteral("项目界面设计说明与文件传输测试.pdf")}, {"total_size", 204800}});
+        {"id", "preview-file"}, {"fromuid", 2}, {"touid", 1}, {"name", QStringLiteral("项目界面设计说明与文件传输测试.pdf")}, {"total_size", 204800}});
     workspace->addChatUserList();
     workspace->SetSelectChatItem(2);
     workspace->slot_side_chat();
@@ -114,6 +122,47 @@ int main(int argc, char** argv) {
         window.grab().save(QString("ui-preview/contacts-%1.png").arg(mode == ElaThemeType::Light ? "light" : "dark"));
         workspace->slot_side_chat();
     }
+    // Preview must decode a local image and remain available after completion.
+    QImage sample(640, 360, QImage::Format_RGB32);
+    sample.fill(QColor("#3278f6"));
+    {
+        QPainter painter(&sample);
+        painter.setBrush(QColor("#adcfff"));
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(400, 30, 130, 130);
+        painter.setBrush(QColor("#153c83"));
+        painter.drawPolygon(QPolygon{QPoint(0,360), QPoint(220,100), QPoint(460,360)});
+        painter.setBrush(QColor("#e2edff"));
+        painter.drawPolygon(QPolygon{QPoint(250,360), QPoint(470,170), QPoint(640,360)});
+    }
+    const auto imagePath = QDir::current().absoluteFilePath("ui-preview/preview-fixture.png");
+    check(sample.save(imagePath), "cannot write image preview fixture");
+    FileBubble imageBubble({{"id", "image-fixture"}, {"name", "旅行照片.png"}, {"total_size", 40960}}, ChatRole::Self, false);
+    imageBubble.setLocalPreview(imagePath);
+    imageBubble.setFinished(imagePath);
+    imageBubble.resize(360, imageBubble.sizeHint().height());
+    imageBubble.show();
+    settle();
+    auto* thumbnail = imageBubble.findChild<QPushButton*>("imageThumbnail");
+    check(thumbnail && !thumbnail->isHidden() && !thumbnail->icon().isNull(), "completed image must show a thumbnail");
+    check(imageBubble.findChild<QProgressBar*>()->isHidden(), "completed attachment must hide progress");
+    thumbnail->click();
+    settle();
+    auto* imageDialog = imageBubble.findChild<QDialog*>("imagePreviewDialog");
+    check(imageDialog && imageDialog->isVisible(), "thumbnail click must open image preview");
+    if (imageDialog) imageDialog->close();
+    for (auto mode : {ElaThemeType::Light, ElaThemeType::Dark}) {
+        ThemeManager::instance().setThemeMode(mode);
+        settle();
+        imageBubble.grab().save(QString("ui-preview/image-card-%1.png").arg(mode == ElaThemeType::Light ? "light" : "dark"));
+        workspace->slot_side_contact();
+        workspace->slot_switch_friend_info_page(friendInfo);
+        settle();
+        window.grab().save(QString("ui-preview/profile-%1.png").arg(mode == ElaThemeType::Light ? "light" : "dark"));
+    }
+    imageBubble.setLocalPreview(imagePath + ".missing");
+    check(thumbnail->isHidden(), "unreadable image must fall back to file card");
+    imageBubble.hide();
     ApplyFriend dialog(workspace);
     dialog.SetSearchInfo(std::make_shared<SearchInfo>(20, "Alex", "Alex", "", 0, ""));
     dialog.show();
@@ -121,6 +170,176 @@ int main(int argc, char** argv) {
     app.processEvents();
     dialog.grab().save("ui-preview/add-friend.png");
     dialog.hide();
+    // Exercise real framed TCP input, including recovery without a live push.
+    QTcpServer server;
+    check(server.listen(QHostAddress::LocalHost, 0), "cannot start protocol fixture");
+    QTcpSocket* peer = nullptr;
+    QByteArray received;
+    QJsonObject lastRequest;
+    int lastId = 0;
+    auto sendFrame = [&](Req id, const QJsonObject& value) {
+        if (!peer) { check(false, "missing protocol connection"); return; }
+        const auto payload = QJsonDocument(value).toJson(QJsonDocument::Compact);
+        QByteArray frame;
+        QDataStream out(&frame, QIODevice::WriteOnly);
+        out << quint16(id) << quint16(payload.size());
+        frame += payload;
+        peer->write(frame);
+    };
+    QObject::connect(&server, &QTcpServer::newConnection, &app, [&]() {
+        peer = server.nextPendingConnection();
+        QObject::connect(peer, &QTcpSocket::readyRead, &app, [&]() {
+            received += peer->readAll();
+            while (received.size() >= 4) {
+                QDataStream in(received);
+                quint16 id, length;
+                in >> id >> length;
+                if (received.size() < length + 4) return;
+                lastId = id;
+                lastRequest = QJsonDocument::fromJson(received.mid(4, length)).object();
+                received.remove(0, length + 4);
+                if (id == Req::ID_CHAT_LOGIN)
+                    sendFrame(Req::ID_CHAT_LOGIN_RSP, QJsonObject{{"error", 0}, {"uid", 1}, {"name", "Tester"}});
+            }
+        });
+    });
+    auto tcp = TcpMgr::Getinstance();
+    const auto stateConnection = QObject::connect(tcp.get(), &TcpMgr::sig_connection_state, &app,
+        [](const QString& message, bool connected) { if (!connected) fprintf(stderr, "Connection: %s\n", message.toUtf8().constData()); });
+    const auto loginConnection = QObject::connect(tcp.get(), &TcpMgr::sig_con_success, &app, [&](bool ok) {
+        if (ok) tcp->slot_send_data(Req::ID_CHAT_LOGIN, QByteArrayLiteral("{\"uid\":1,\"token\":\"fixture\"}"));
+    });
+    ServerInfo endpoint;
+    endpoint.Host = "127.0.0.1";
+    endpoint.Port = QString::number(server.serverPort());
+    endpoint.Transport = "insecure";
+    endpoint.AllowInsecure = true;
+    endpoint.Uid = 1;
+    tcp->slot_tcp_connect(endpoint);
+    settle();
+    settle();
+    dialog.show();
+    auto* sendButton = dialog.findChild<QPushButton*>("dialogPrimary");
+    sendButton->click();
+    settle();
+    check(lastId == Req::ID_ADD_FRIEND_REQ && lastRequest["touid"].toInt() == 20,
+          "friend dialog must send the selected UID through TCP");
+    check(!lastRequest["request_id"].toString().isEmpty(), "friend request must have a correlation ID");
+    sendFrame(Req::ID_ADD_FRIEND_RSP, {{"error", 1}, {"request_id", lastRequest["request_id"]}});
+    settle();
+    check(dialog.isVisible() && sendButton->isEnabled(), "server failure must keep invitation retryable");
+    sendButton->click();
+    settle();
+    sendFrame(Req::ID_ADD_FRIEND_RSP, {{"error", 0}, {"request_id", "stale-response"}});
+    settle();
+    check(sendButton->text() == QStringLiteral("正在发送…"), "stale reply must not complete a newer request");
+    sendFrame(Req::ID_ADD_FRIEND_RSP, {{"error", 0}, {"request_id", lastRequest["request_id"]}});
+    settle();
+    check(!sendButton->isEnabled() && sendButton->text() == QStringLiteral("申请已发送"),
+          "confirmed invitation must show success and prevent duplicate submission");
+    dialog.hide();
+    const QJsonObject application{{"uid", 31}, {"name", "Morgan"}, {"nick", "Morgan"}, {"status", 0}, {"icon", ":/res/head_1.jpg"}};
+    const QJsonObject snapshot{{"apply_list", QJsonArray{application}}};
+    sendFrame(Req::ID_HEARTBEAT_RSP, snapshot);
+    settle();
+    const auto applicationCount = user->GetApplyList().size();
+    sendFrame(Req::ID_HEARTBEAT_RSP, snapshot);
+    settle();
+    check(user->isAlreadyApply(31) && user->GetApplyList().size() == applicationCount,
+          "durable snapshot must restore missed invitation without duplicates");
+    check(!window.findChild<QLabel*>("friendRequestBadge")->isHidden(), "recovered request must have a visible navigation badge");
+    AuthenFriend acceptDialog(workspace);
+    acceptDialog.SetApplyInfo(std::make_shared<ApplyInfo>(31, "Morgan", "", ":/res/head_1.jpg", "Morgan", 0, 0));
+    acceptDialog.show();
+    acceptDialog.findChild<QPushButton*>("dialogPrimary")->click();
+    settle();
+    check(lastId == Req::ID_AUTH_FRIEND_REQ && lastRequest["touid"].toInt() == 31,
+          "acceptance must address the applicant UID");
+    sendFrame(Req::ID_AUTH_FRIEND_RSP, {{"error", 0}, {"uid", 31}, {"name", "Morgan"},
+        {"request_id", lastRequest["request_id"]}});
+    settle();
+    check(user->CheckFriendById(31), "acceptance must add the friend to the model");
+    workspace->LoadMoreConWid();
+    int matchingContacts = 0;
+    auto* contacts = workspace->findChild<ContactUserList*>();
+    for (int row = 0; row < contacts->count(); ++row) {
+        auto* item = qobject_cast<ConUserItem*>(contacts->itemWidget(contacts->item(row)));
+        if (item && item->GetInfo() && item->GetInfo()->_uid == 31) ++matchingContacts;
+    }
+    check(matchingContacts == 1, "pagination after accepting must not duplicate a contact");
+    for (const auto& item : user->GetApplyList())
+        if (item->_uid == 31) check(item->_status == 1, "accepted invitation must leave pending state");
+    acceptDialog.hide();
+    // Receive through the actual wire parser while a different conversation is open.
+    page->SetUserInfo(friendInfo);
+    const QJsonObject incomingFile{{"id", "wire-incoming-file"}, {"fromuid", 31}, {"touid", 1},
+        {"name", "received.png"}, {"mime", "image/png"}, {"total_size", 512}, {"error", 0}};
+    sendFrame(Req::ID_NOTIFY_FILE_REQ, incomingFile);
+    settle();
+    auto findFile = [&](const QString& id) -> FileBubble* {
+        for (auto* bubble : page->findChildren<FileBubble*>())
+            if (bubble->transferId() == id) return bubble;
+        return nullptr;
+    };
+    check(!findFile("wire-incoming-file"), "incoming file must not appear in another conversation");
+    check(user->GetFriendById(31)->_last_msg.contains("received.png"), "file notification must update conversation summary");
+    page->SetUserInfo(std::make_shared<UserInfo>(user->GetFriendById(31)));
+    settle();
+    check(findFile("wire-incoming-file"), "switching to sender must restore incoming file");
+    auto missedFile = incomingFile;
+    missedFile["id"] = "wire-missed-file";
+    auto sentFile = incomingFile;
+    sentFile["id"] = "wire-sent-file";
+    sentFile["fromuid"] = 1;
+    sentFile["touid"] = 31;
+    const QJsonObject fileSnapshot{{"pending_files", QJsonArray{missedFile, sentFile}}};
+    sendFrame(Req::ID_HEARTBEAT_RSP, fileSnapshot);
+    settle();
+    check(findFile("wire-missed-file"), "heartbeat must recover a lost attachment notification");
+    auto* restoredSent = findFile("wire-sent-file");
+    check(restoredSent && restoredSent->findChild<QProgressBar*>()->isHidden(), "sent attachment must recover as completed");
+    const int fileCount = page->findChildren<FileBubble*>().size();
+    sendFrame(Req::ID_HEARTBEAT_RSP, fileSnapshot);
+    settle();
+    check(page->findChildren<FileBubble*>().size() == fileCount, "repeated snapshots must not duplicate attachments");
+    auto transfers = FileTransferManager::Getinstance();
+    QString failedTransfer;
+    const auto failedConnection = QObject::connect(transfers.get(), &FileTransferManager::transferFailed,
+        &app, [&](const QString& id, const QString&) { failedTransfer = id; });
+    const auto rejectedUpload = transfers->startUpload(imagePath, 31);
+    settle();
+    check(!rejectedUpload.isEmpty() && lastId == Req::ID_UPLOAD_FILE_REQ, "new upload must send initialization");
+    sendFrame(Req::ID_UPLOAD_FILE_RSP, {{"error", 1}});
+    settle();
+    check(failedTransfer == rejectedUpload, "ID-less initialization failure must identify the local bubble");
+    const auto retryUpload = transfers->startUpload(imagePath, 31);
+    settle();
+    check(!retryUpload.isEmpty(), "rejected upload must release the slot for a new file");
+    auto* uploadTimer = transfers->findChild<QTimer*>("uploadAckTimer");
+    check(uploadTimer && uploadTimer->isActive(), "upload must have a response deadline");
+    if (uploadTimer) QMetaObject::invokeMethod(uploadTimer, "timeout", Qt::DirectConnection);
+    check(failedTransfer == retryUpload, "unacknowledged upload must fail with the correct local token");
+    const auto nextUpload = transfers->startUpload(imagePath, 31);
+    check(!nextUpload.isEmpty(), "timeout must not block the next upload");
+    transfers->cancel(nextUpload);
+    QObject::disconnect(failedConnection);
+    for (auto mode : {ElaThemeType::Light, ElaThemeType::Dark}) {
+        eTheme->setThemeMode(mode);
+        emit ThemeManager::instance().themeChanged(mode);
+        FindSuccessWidght found(workspace);
+        found.SetSearchInfo(std::make_shared<SearchInfo>(31, "Morgan", "Morgan", "", 0, ":/res/head_1.jpg"));
+        found.show();
+        settle();
+        found.grab().save(QString("ui-preview/found-friend-%1.png").arg(mode == ElaThemeType::Light ? "light" : "dark"));
+        found.hide();
+        dialog.show();
+        settle();
+        dialog.grab().save(QString("ui-preview/add-friend-%1.png").arg(mode == ElaThemeType::Light ? "light" : "dark"));
+        dialog.hide();
+    }
+    QObject::disconnect(loginConnection);
+    QObject::disconnect(stateConnection);
+    tcp->slot_disconnect();
     qInfo() << "Workspace checks failed:" << failures;
     return failures ? 1 : 0;
 }

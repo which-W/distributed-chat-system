@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QNetworkProxy>
 #include <QStandardPaths>
+#include <QUuid>
 
 TcpMgr::TcpMgr()
     : _socket(nullptr), _host(""), _transport("tls"), _tls_server_name(""), _port(0),
@@ -10,6 +11,21 @@ TcpMgr::TcpMgr()
       _manual_disconnect(false), _retry_attempt(0), _missed_heartbeats(0), _b_recv_pending(false),
       _message_id(0), _message_len(0) {
     _retry_timer.setSingleShot(true);
+    _friend_timer.setSingleShot(true);
+    _friend_timer.setInterval(10000);
+    connect(&_friend_timer, &QTimer::timeout, this, [this]() {
+        const int peer = _friend_peer;
+        _friend_peer = 0;
+        emit sig_friend_operation(_friend_request, peer, false,
+            tr("服务器尚未确认，请刷新「新的朋友」或重试；请勿重复点击。"));
+    });
+    connect(&_socket, &QAbstractSocket::disconnected, this, [this]() {
+        if (!_friend_peer) return;
+        const int peer = _friend_peer;
+        _friend_peer = 0;
+        _friend_timer.stop();
+        emit sig_friend_operation(_friend_request, peer, false, tr("连接已断开，请连接恢复后重试。"));
+    });
     _heartbeat_timer.setInterval(30000);
     _outbox_timer.setInterval(1000);
     connect(&_outbox_timer, &QTimer::timeout, this, &TcpMgr::flushOutbox);
@@ -176,12 +192,40 @@ TcpMgr::TcpMgr()
             _socket.abort();
             return;
         }
-        slot_send_data(Req::ID_HEART_BEAT_REQ, QByteArrayLiteral("{}"));
+        refreshFriends();
     });
 
     connect(this, &TcpMgr::sig_send_data, this, &TcpMgr::slot_send_data);
     // 注册消息
     initHandlers();
+}
+
+void TcpMgr::refreshFriends() {
+    if (_authenticated)
+        slot_send_data(Req::ID_HEART_BEAT_REQ, QByteArrayLiteral("{\"sync_friends\":true}"));
+}
+
+void TcpMgr::mergeFriendSnapshot(const QJsonObject& response) {
+    auto model = UserMgr::Getinstance();
+    for (const auto& value : response["apply_list"].toArray()) {
+        const auto item = value.toObject();
+        if (item["uid"].toInt() <= 0) continue;
+        if (!model->isAlreadyApply(item["uid"].toInt()) && item["status"].toInt() == 0) {
+            emit sig_friend_apply(std::make_shared<AddFriendApply>(
+                item["uid"].toInt(), item["name"].toString(), item["desc"].toString(),
+                item["icon"].toString(), item["nick"].toString(), item["sex"].toInt()));
+        }
+    }
+    model->AppendApplyList(response["apply_list"].toArray());
+    for (const auto& value : response["friend_list"].toArray()) {
+        const auto item = value.toObject();
+        const int uid = item["uid"].toInt();
+        if (uid > 0 && !model->CheckFriendById(uid))
+            emit sig_add_auth_friend(std::make_shared<AuthInfo>(uid, item["name"].toString(),
+                item["nick"].toString(), item["icon"].toString(), item["sex"].toInt()));
+    }
+    model->AppendFriendList(response["friend_list"].toArray());
+    if (response.contains("apply_list") || response.contains("friend_list")) emit sig_friend_snapshot();
 }
 
 void TcpMgr::initHandlers() {
@@ -245,7 +289,9 @@ void TcpMgr::initHandlers() {
 
         UserMgr::Getinstance()->SetUserInfo(user_info);
         UserMgr::Getinstance()->SetToken(jsonObj["token"].toString());
-        if (jsonObj.contains("apply_list")) {
+        if (_reconnecting) {
+            mergeFriendSnapshot(jsonObj);
+        } else if (jsonObj.contains("apply_list")) {
             UserMgr::Getinstance()->AppendApplyList(jsonObj["apply_list"].toArray());
         }
 
@@ -316,6 +362,7 @@ void TcpMgr::initHandlers() {
     });
     // 添加用户申请回包
     _handlers.insert(Req::ID_ADD_FRIEND_RSP, [this](Req id, int len, QByteArray data) {
+        finishFriendOperation(Req::ID_ADD_FRIEND_REQ, QJsonDocument::fromJson(data).object());
         Q_UNUSED(len);
         qDebug() << "handle id is " << id;
         // 将QByteArray转换为QJsonDocument
@@ -425,6 +472,7 @@ void TcpMgr::initHandlers() {
     });
     // 收到认证响应数据包
     _handlers.insert(Req::ID_AUTH_FRIEND_RSP, [this](Req id, int len, QByteArray data) {
+        finishFriendOperation(Req::ID_AUTH_FRIEND_REQ, QJsonDocument::fromJson(data).object());
         Q_UNUSED(len);
         qDebug() << "handle id is " << id;
         // 将QByteArray转换为QJsonDocument
@@ -568,7 +616,13 @@ void TcpMgr::initHandlers() {
     });
 
     _handlers.insert(Req::ID_HEARTBEAT_RSP,
-                     [this](Req, int, QByteArray) { _missed_heartbeats = 0; });
+                     [this](Req, int, QByteArray data) {
+                         _missed_heartbeats = 0;
+                         mergeFriendSnapshot(QJsonDocument::fromJson(data).object());
+                         const auto snapshot = QJsonDocument::fromJson(data).object();
+                         for (const auto& file : snapshot["pending_files"].toArray())
+                             emit sig_file_available(file.toObject());
+                     });
     const Req fileResponses[] = {Req::ID_UPLOAD_FILE_RSP, Req::ID_UPLOAD_FILE_CHUNK_RSP,
                                  Req::ID_UPLOAD_FILE_FINISH_RSP, Req::ID_DOWNLOAD_FILE_CHUNK};
     for (const auto responseId : fileResponses) {
@@ -689,6 +743,53 @@ void TcpMgr::slot_send_data(Req reqId, QByteArray data) {
         return;
     }
     writeFrame(reqId, data);
+}
+
+void TcpMgr::submitFriendOperation(Req request, int peer, const QString& remark) {
+    if (request != Req::ID_ADD_FRIEND_REQ && request != Req::ID_AUTH_FRIEND_REQ) return;
+    if (!_authenticated || _socket.state() != QAbstractSocket::ConnectedState ||
+        (_use_tls && !_socket.isEncrypted())) {
+        emit sig_friend_operation(request, peer, false, tr("尚未连接聊天服务器，请连接恢复后重试。"));
+        return;
+    }
+    if (_friend_peer) {
+        emit sig_friend_operation(request, peer, false, tr("另一条好友请求正在处理中，请稍后重试。"));
+        return;
+    }
+    if (peer <= 0 || peer == UserMgr::Getinstance()->GetUid() ||
+        remark.toUtf8().size() > 192) {
+        emit sig_friend_operation(request, peer, false, tr("好友请求内容无效。"));
+        return;
+    }
+    _friend_peer = peer;
+    _friend_request = request;
+    _friend_request_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QJsonObject payload{{"touid", peer}, {"request_id", _friend_request_id}};
+    if (request == Req::ID_ADD_FRIEND_REQ) {
+        payload["uid"] = UserMgr::Getinstance()->GetUid();
+        payload["applyname"] = UserMgr::Getinstance()->GetName();
+        payload["bakname"] = remark;
+    } else {
+        payload["fromuid"] = UserMgr::Getinstance()->GetUid();
+        payload["back"] = remark;
+    }
+    _friend_timer.start();
+    writeFrame(request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+}
+
+void TcpMgr::finishFriendOperation(Req request, const QJsonObject& response) {
+    if (!_friend_peer || request != _friend_request) return;
+    if (response.contains("request_id") && response["request_id"].toString() != _friend_request_id) return;
+    const int peer = _friend_peer;
+    _friend_peer = 0;
+    _friend_timer.stop();
+    const bool ok = response["error"].isDouble() && response["error"].toInt(-1) == ErrorCode::ERR_OK;
+    QString message;
+    if (!ok) message = tr("操作未完成（错误码 %1），请刷新好友列表后重试。").arg(response["error"].toInt(-1));
+    else if (request == Req::ID_AUTH_FRIEND_REQ) message = tr("已成为好友，可以开始聊天了。");
+    else if (response["notification_pending"].toBool()) message = tr("申请已保存。实时通知暂未送达，对方可在「新的朋友」中刷新查看。");
+    else message = tr("申请已发送，等待对方接受。");
+    emit sig_friend_operation(request, peer, ok, message);
 }
 
 bool TcpMgr::enqueueText(const QJsonObject& message) {

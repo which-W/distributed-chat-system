@@ -8,6 +8,7 @@ class ElaComboBox;
 class ElaLineEdit;
 class QStackedWidget;
 class QWidget;
+class QLabel;
 
 class ChatWindow final : public ElaWindow {
     Q_OBJECT
@@ -22,6 +23,7 @@ class ChatWindow final : public ElaWindow {
   private:
     void showMessages();
     void showContacts();
+    void updateFriendBadge();
     void showSettings();
     void selectRailButton(ElaIconButton* selected);
     void applyTheme(ElaThemeType::ThemeMode mode);
@@ -33,6 +35,7 @@ class ChatWindow final : public ElaWindow {
     QStackedWidget* contentStack_{nullptr};
     ElaIconButton* messagesButton_{nullptr};
     ElaIconButton* contactsButton_{nullptr};
+    QLabel* friendBadge_{nullptr};
     ElaIconButton* settingsButton_{nullptr};
     ElaIconButton* themeButton_{nullptr};
     ElaComboBox* proxyMode_{nullptr};

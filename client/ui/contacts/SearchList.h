@@ -14,6 +14,7 @@
 #include <QWheelEvent>
 #include <QWidget>
 #include <memory>
+#include <QLineEdit>
 class SearchList : public QListWidget {
     Q_OBJECT
   public:
