@@ -1,0 +1,148 @@
+name: deepecho-production
+
+x-runtime: &runtime
+  restart: unless-stopped
+  logging:
+    driver: local
+    options: {max-size: "5m", max-file: "3"}
+
+x-chat-environment: &chat-environment
+  CHAT_REDIS_HOST: redis
+  CHAT_REDIS_PORT: "6379"
+  CHAT_REDIS_USER: default
+  CHAT_REDIS_PASSWORD: ${PROD_REDIS_PASSWORD:?set PROD_REDIS_PASSWORD}
+  CHAT_MYSQL_HOST: mysql
+  CHAT_MYSQL_PORT: "3306"
+  CHAT_MYSQL_USER: chat
+  CHAT_MYSQL_PASSWORD: ${PROD_MYSQL_PASSWORD:?set PROD_MYSQL_PASSWORD}
+  CHAT_MYSQL_SCHEMA: wgt
+  CHAT_GATE_STATUS_TOKEN: ${PROD_GATE_STATUS_TOKEN:?set PROD_GATE_STATUS_TOKEN}
+  CHAT_GATE_VARIFY_TOKEN: ${PROD_GATE_VARIFY_TOKEN:?set PROD_GATE_VARIFY_TOKEN}
+  CHAT_PEER_RPC_TOKEN: ${PROD_PEER_TOKEN:?set PROD_PEER_TOKEN}
+  CHAT_FILE_STORAGE_ROOT: /data/files
+  CHAT_FILE_STORAGE_KEY: ${PROD_FILE_KEY:?set PROD_FILE_KEY}
+  CHAT_LOG_LEVEL: info
+  CHAT_LOG_CONSOLE: "true"
+  CHAT_LOG_FILE_ENABLED: "false"
+
+services:
+  mysql:
+    <<: *runtime
+    image: mysql:8.4
+    mem_limit: 384m
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --innodb-log-buffer-size=8M
+      - --max-connections=40
+      - --performance-schema=OFF
+      - --temptable-max-ram=16M
+      - --tmp-table-size=8M
+      - --max-heap-table-size=8M
+    environment:
+      MYSQL_DATABASE: wgt
+      MYSQL_USER: chat
+      MYSQL_PASSWORD: ${PROD_MYSQL_PASSWORD:?set PROD_MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${PROD_MYSQL_ROOT_PASSWORD:?set PROD_MYSQL_ROOT_PASSWORD}
+    volumes:
+      - production-mysql:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -uchat -D wgt -e 'SELECT 1' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  redis:
+    <<: *runtime
+    image: redis:7.4-alpine
+    mem_limit: 64m
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "24mb", "--maxmemory-policy", "noeviction", "--requirepass", "${PROD_REDIS_PASSWORD:?set PROD_REDIS_PASSWORD}"]
+    volumes: ["production-redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${PROD_REDIS_PASSWORD:?set PROD_REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  varify:
+    <<: *runtime
+    image: ${PROD_VARIFY_IMAGE:?set PROD_VARIFY_IMAGE}
+    mem_limit: 128m
+    environment:
+      NODE_OPTIONS: --max-old-space-size=64
+      CHAT_LOG_LEVEL: info
+      CHAT_GATE_VARIFY_TOKEN: ${PROD_GATE_VARIFY_TOKEN:?set PROD_GATE_VARIFY_TOKEN}
+      VARIFY_BIND_ADDRESS: 0.0.0.0:5000
+      VARIFY_GRPC_TLS_MODE: mtls
+      VARIFY_GRPC_CA_CERT: /certs/ca.crt
+      VARIFY_GRPC_CERT: /certs/varify.crt
+      VARIFY_GRPC_KEY: /certs/varify.key
+      VARIFY_REDIS_HOST: redis
+      VARIFY_REDIS_PORT: "6379"
+      VARIFY_REDIS_PASSWORD: ${PROD_REDIS_PASSWORD:?set PROD_REDIS_PASSWORD}
+      VARIFY_EMAIL_USER: ${PROD_EMAIL_USER:?set PROD_EMAIL_USER}
+      VARIFY_EMAIL_PASSWORD: ${PROD_EMAIL_PASSWORD:?set PROD_EMAIL_PASSWORD}
+      VARIFY_SMTP_HOST: ${PROD_SMTP_HOST:?set PROD_SMTP_HOST}
+      VARIFY_SMTP_PORT: ${PROD_SMTP_PORT:-465}
+      VARIFY_SMTP_SECURE: ${PROD_SMTP_SECURE:-true}
+    volumes: ["./run/production/certs:/certs:ro"]
+    depends_on:
+      redis: {condition: service_healthy}
+
+  status:
+    <<: *runtime
+    image: ${PROD_SERVER_IMAGE:?set PROD_SERVER_IMAGE}
+    mem_limit: 64m
+    command: ["/app/bin/status_server"]
+    environment:
+      <<: *chat-environment
+      CHAT_CONFIG_FILE: /config/status.ini
+    volumes:
+      - ./deploy/production/status.ini:/config/status.ini:ro
+      - ./run/production/certs:/certs:ro
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  chatserver1:
+    <<: *runtime
+    image: ${PROD_SERVER_IMAGE:?set PROD_SERVER_IMAGE}
+    mem_limit: 192m
+    command: ["/app/bin/chat_server"]
+    environment:
+      <<: *chat-environment
+      CHAT_CONFIG_FILE: /config/chat.ini
+    volumes:
+      - ./deploy/production/chat.ini:/config/chat.ini:ro
+      - ./run/production/certs:/certs:ro
+      - production-files:/data/files
+    ports: ["127.0.0.1:18989:8989"]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      status: {condition: service_started}
+
+  gate:
+    <<: *runtime
+    image: ${PROD_SERVER_IMAGE:?set PROD_SERVER_IMAGE}
+    mem_limit: 96m
+    command: ["/app/bin/gate_server"]
+    environment:
+      <<: *chat-environment
+      CHAT_CONFIG_FILE: /config/gate.ini
+    volumes:
+      - ./deploy/production/gate.ini:/config/gate.ini:ro
+      - ./run/production/certs:/certs:ro
+    ports: ["127.0.0.1:18080:8080"]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      varify: {condition: service_started}
+      status: {condition: service_started}
+      chatserver1: {condition: service_started}
+
+volumes:
+  production-mysql:
+  production-redis:
+  production-files:
