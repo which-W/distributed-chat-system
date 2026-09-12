@@ -6,5 +6,7 @@ out
 **/node_modules
 *.log
 .env
+.env.production
+run
 certs
 file-storage
