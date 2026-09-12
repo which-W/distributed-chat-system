@@ -1,29 +1,18 @@
 #pragma once
-
-#include "ui_FriendInfoPage.h"
 #include "usermgr.h"
 #include <QWidget>
+#include <QLabel>
 #include <memory>
-
-QT_BEGIN_NAMESPACE
-namespace Ui {
-class FriendInfoPage;
-};
-QT_END_NAMESPACE
-
 class FriendInfoPage : public QWidget {
     Q_OBJECT
-
-  public:
+public:
     explicit FriendInfoPage(QWidget* parent = nullptr);
-    ~FriendInfoPage();
-    void SetInfo(std::shared_ptr<UserInfo> ui);
-  private slots:
-    void on_msg_chat_clicked();
-
-  private:
-    Ui::FriendInfoPage* ui;
-    std::shared_ptr<UserInfo> _user_info;
-  signals:
+    ~FriendInfoPage() override = default;
+    void SetInfo(std::shared_ptr<UserInfo> user);
+signals:
     void sig_jump_chat_item(std::shared_ptr<UserInfo> si);
+private:
+    void applyTheme();
+    QLabel *avatar_, *name_, *uid_, *nick_, *remark_;
+    std::shared_ptr<UserInfo> _user_info;
 };

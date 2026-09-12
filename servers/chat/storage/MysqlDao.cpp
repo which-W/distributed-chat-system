@@ -425,6 +425,7 @@ std::shared_ptr<UserInfo> MysqlDao::GetUser(std::string name) {
             user_ptr->desc = res->getString("desc");
             user_ptr->sex = res->getInt("sex");
             user_ptr->uid = res->getInt("uid");
+            user_ptr->icon = res->getString("icon");
             break;
         }
         return user_ptr;
@@ -452,9 +453,9 @@ bool MysqlDao::GetApplyList(int touid, std::vector<std::shared_ptr<ApplyInfo>>& 
         // 准备SQL语句, 根据起始id和限制条数返回列表
         std::unique_ptr<sql::PreparedStatement> pstmt(
             con->_con->prepareStatement("select apply.from_uid, apply.status, user.name, "
-                                        "user.nick, user.sex from friend_apply as apply join user "
+                                        "user.nick, user.sex, user.icon from friend_apply as apply join user "
                                         "on apply.from_uid = user.uid where apply.to_uid = ? "
-                                        "and apply.id > ? order by apply.id ASC LIMIT ? "));
+                                        "and apply.id > ? order by apply.status ASC, apply.id DESC LIMIT ? "));
 
         pstmt->setInt(1, touid); // 将uid替换为你要查询的uid
         pstmt->setInt(2, begin); // 起始id
@@ -468,7 +469,7 @@ bool MysqlDao::GetApplyList(int touid, std::vector<std::shared_ptr<ApplyInfo>>& 
             auto status = res->getInt("status");
             auto nick = res->getString("nick");
             auto sex = res->getInt("sex");
-            auto apply_ptr = std::make_shared<ApplyInfo>(uid, name, "", "", nick, sex, status);
+            auto apply_ptr = std::make_shared<ApplyInfo>(uid, name, "", res->getString("icon"), nick, sex, status);
             applyList.push_back(apply_ptr);
         }
         return true;
@@ -512,7 +513,7 @@ bool MysqlDao::GetFriendList(int self_id, std::vector<std::shared_ptr<UserInfo>>
                 continue;
             }
 
-            user_info->back = user_info->name;
+            user_info->back = back.length() == 0 ? user_info->name : std::string(back);
             user_info_list.push_back(user_info);
         }
         return true;
@@ -801,10 +802,11 @@ std::vector<chat::files::TransferRecord> MysqlDao::GetPendingFileTransfers(int r
     Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
     try {
         std::unique_ptr<sql::PreparedStatement> statement(
-            con->_con->prepareStatement("SELECT id FROM file_transfer WHERE receiver_uid=? AND "
+            con->_con->prepareStatement("SELECT id FROM file_transfer WHERE (receiver_uid=? OR sender_uid=?) AND "
                                         "status IN('available','downloaded') "
                                         "AND expires_at>NOW() ORDER BY created_at DESC LIMIT 200"));
         statement->setInt(1, receiver_uid);
+        statement->setInt(2, receiver_uid);
         std::unique_ptr<sql::ResultSet> rows(statement->executeQuery());
         std::vector<std::string> ids;
         while (rows->next())

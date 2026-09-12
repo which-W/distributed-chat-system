@@ -1,6 +1,23 @@
 #include "ConUserItem.h"
 #include "ChatGraphics.h"
 
+namespace {
+QPixmap invitationIcon() {
+    QPixmap icon(80, 80);
+    icon.setDevicePixelRatio(2);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.scale(40.0 / 24, 40.0 / 24);
+    painter.setPen(QPen(QColor("#0866ff"), 1.8, Qt::SolidLine, Qt::RoundCap));
+    painter.drawEllipse(QRectF(6, 3, 7, 7));
+    painter.drawArc(QRectF(3, 12, 13, 12), 0, 180 * 16);
+    painter.drawLine(QPointF(19, 12), QPointF(19, 20));
+    painter.drawLine(QPointF(15, 16), QPointF(23, 16));
+    return icon;
+}
+}
+
 ConUserItem::ConUserItem(QWidget* parent) : ListItemBase(parent), ui(new Ui::ConUserItemClass()) {
     ui->setupUi(this);
     ui->horizontalLayout->setContentsMargins(12, 8, 12, 8);
@@ -40,7 +57,7 @@ void ConUserItem::SetInfo(int uid, QString name, QString icon) {
     _info = std::make_shared<UserInfo>(uid, name, name, icon, 0);
 
     // 加载图片
-    QPixmap pixmap(_info->_icon);
+    QPixmap pixmap = uid == 0 ? invitationIcon() : QPixmap(_info->_icon);
 
     // 设置图片自动缩放
     ui->icon_lb->setPixmap(

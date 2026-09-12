@@ -15,6 +15,8 @@ class TcpMgr : public QObject,
   public:
     ~TcpMgr() = default;
     bool enqueueText(const QJsonObject& message);
+    void refreshFriends();
+    void submitFriendOperation(Req request, int peer, const QString& remark);
 
   private:
     friend class Singleton<TcpMgr>;
@@ -40,6 +42,12 @@ class TcpMgr : public QObject,
     quint16 _message_len;
     MessageStore _messages;
     QTimer _outbox_timer;
+    QTimer _friend_timer;
+    QString _friend_request_id;
+    int _friend_peer{0};
+    Req _friend_request{Req::ID_ADD_FRIEND_REQ};
+    void finishFriendOperation(Req request, const QJsonObject& response);
+    void mergeFriendSnapshot(const QJsonObject& response);
     void flushOutbox();
     void writeFrame(Req reqId, const QByteArray& data);
     void initHandlers();
@@ -61,6 +69,8 @@ class TcpMgr : public QObject,
     void sig_swich_chatdlg();
     void sig_user_search(std::shared_ptr<SearchInfo> si);
     void sig_friend_apply(std::shared_ptr<AddFriendApply>);
+    void sig_friend_snapshot();
+    void sig_friend_operation(int request, int peer, bool success, const QString& message);
     void sig_add_auth_friend(std::shared_ptr<AuthInfo>);
     void sig_auth_rsp(std::shared_ptr<AuthRsp>);
     void sig_text_chat_msg(std::shared_ptr<TextChatMsg>);

@@ -42,6 +42,13 @@ std::shared_ptr<UserInfo> ChatUserWid::GetUserInfo() {
     return _user_info;
 }
 
+void ChatUserWid::updateFileSummary(const QString& name) {
+    _user_info->_last_msg = tr("[文件] %1").arg(name);
+    ui->user_data_lb->setTextFormat(Qt::PlainText);
+    ui->user_data_lb->setText(_user_info->_last_msg);
+    ui->user_data_lb->setToolTip(_user_info->_last_msg);
+}
+
 void ChatUserWid::updateLastMsg(std::vector<std::shared_ptr<TextChatData>> msgs) {
     QString last_msg = "";
     for (auto& msg : msgs) {

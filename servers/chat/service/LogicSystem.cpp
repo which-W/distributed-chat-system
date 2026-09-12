@@ -383,6 +383,9 @@ void LogicSystem::AddFriendCallback(std::shared_ptr<CSession> session, short msg
 
     Json::Value rtvalue;
     rtvalue["error"] = ErrorCodes::ERROR_CODE_OK;
+    rtvalue["touid"] = touid;
+    if (root["request_id"].isString() && root["request_id"].asString().size() <= 64)
+        rtvalue["request_id"] = root["request_id"];
     Defer defer([this, &rtvalue, session]() {
         std::string return_str = rtvalue.toStyledString();
         session->Send(return_str, ID_ADD_FRIEND_RSP);
@@ -392,7 +395,10 @@ void LogicSystem::AddFriendCallback(std::shared_ptr<CSession> session, short msg
         return;
     }
 
-    if (!MysqlMgr::GetInstance()->AddFriendApply(uid, touid)) {
+    const auto relation = MysqlMgr::GetInstance()->CheckFriendRelation(uid, touid);
+    if (!relation.has_value()) { rtvalue["error"] = ErrorCodes::RPC_ERROR; return; }
+    if (*relation) { rtvalue["error"] = ErrorCodes::UidInvalid; return; }
+    if (!MysqlMgr::GetInstance()->GetUser(touid) || !MysqlMgr::GetInstance()->AddFriendApply(uid, touid)) {
         rtvalue["error"] = ErrorCodes::UidInvalid;
         return;
     }
@@ -432,7 +438,8 @@ void LogicSystem::AddFriendCallback(std::shared_ptr<CSession> session, short msg
                 notify["nick"] = apply_info->nick;
             }
             std::string return_str = notify.toStyledString();
-            session->Send(return_str, ID_NOTIFY_ADD_FRIEND_REQ);
+            if (!session->Send(return_str, ID_NOTIFY_ADD_FRIEND_REQ))
+                rtvalue["notification_pending"] = true;
         }
 
         return;
@@ -450,7 +457,10 @@ void LogicSystem::AddFriendCallback(std::shared_ptr<CSession> session, short msg
     }
 
     // 发送通知
-    ChatGrpcClient::GetInstance()->NotifyAddFriend(ip_str, add_req);
+    const auto delivery = ChatGrpcClient::GetInstance()->NotifyAddFriend(ip_str, add_req);
+    // The application is durable even if the best-effort live notification fails.
+    if (delivery.error() != ErrorCodes::ERROR_CODE_OK)
+        rtvalue["notification_pending"] = true;
 
     return;
 }
@@ -474,6 +484,9 @@ void LogicSystem::AuthFriendCallback(std::shared_ptr<CSession> session, short ms
     Json::Value rtvalue;
     rtvalue["error"] = ErrorCodes::ERROR_CODE_OK;
     auto user_info = std::make_shared<UserInfo>();
+    rtvalue["uid"] = touid;
+    if (root["request_id"].isString() && root["request_id"].asString().size() <= 64)
+        rtvalue["request_id"] = root["request_id"];
 
     std::string base_key = USER_BASE_INFO + std::to_string(touid);
     bool b_info = GetBaseInfo(base_key, touid, user_info);
@@ -497,7 +510,10 @@ void LogicSystem::AuthFriendCallback(std::shared_ptr<CSession> session, short ms
     }
 
     // 申请状态与双向好友记录必须在同一事务内提交，同时保留原有业务错误码。
-    const auto acceptance = MysqlMgr::GetInstance()->AddFriend(uid, touid, back_name);
+    const auto relation = MysqlMgr::GetInstance()->CheckFriendRelation(uid, touid);
+    if (!relation.has_value()) { rtvalue["error"] = ErrorCodes::RPC_ERROR; return; }
+    const auto acceptance = *relation ? chat::storage::FriendAcceptanceResult::Success
+                                      : MysqlMgr::GetInstance()->AddFriend(uid, touid, back_name);
     if (acceptance == chat::storage::FriendAcceptanceResult::PendingMissing) {
         rtvalue["error"] = ErrorCodes::UidInvalid;
         return;
@@ -815,7 +831,7 @@ void LogicSystem::GetUserByUid(std::string uid_str, Json::Value& rtvalue) {
 
 bool LogicSystem::GetFriendApplyInfo(int to_uid, std::vector<std::shared_ptr<ApplyInfo>>& list) {
     // 从mysql获取好友申请列表
-    return MysqlMgr::GetInstance()->GetApplyList(to_uid, list, 0, 10);
+    return MysqlMgr::GetInstance()->GetApplyList(to_uid, list, 0, 50);
 }
 
 bool LogicSystem::GetFriendList(int self_id, std::vector<std::shared_ptr<UserInfo>>& user_list) {
@@ -848,6 +864,11 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue) {
         rtvalue["nick"] = nick;
         rtvalue["desc"] = desc;
         rtvalue["sex"] = sex;
+        rtvalue["icon"] = root["icon"];
+        if (!root.isMember("icon")) {
+            const auto profile = MysqlMgr::GetInstance()->GetUser(uid);
+            if (profile) rtvalue["icon"] = profile->icon;
+        }
         return;
     }
 
@@ -868,6 +889,7 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue) {
     redis_root["nick"] = user_info->nick;
     redis_root["desc"] = user_info->desc;
     redis_root["sex"] = user_info->sex;
+    redis_root["icon"] = user_info->icon;
 
     RedisMgr::GetInstance()->Set(base_key, redis_root.toStyledString());
 
@@ -877,6 +899,7 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue) {
     rtvalue["nick"] = user_info->nick;
     rtvalue["desc"] = user_info->desc;
     rtvalue["sex"] = user_info->sex;
+    rtvalue["icon"] = user_info->icon;
 }
 
 void LogicSystem::RegisterCallBacks() {
@@ -904,11 +927,72 @@ void LogicSystem::RegisterCallBacks() {
 }
 
 void LogicSystem::HeartbeatCallback(std::shared_ptr<CSession> session, short, string msg_data) {
-    if (msg_data.empty()) {
-        msg_data = "{}";
-    }
     session->TouchActivity();
-    session->Send(msg_data, ID_HEARTBEAT_RSP);
+    Json::Value request;
+    Json::Reader reader;
+    if (!reader.parse(msg_data, request) || !request.isObject() || !request["sync_friends"].isBool() ||
+        !request["sync_friends"].asBool()) {
+        session->Send("{}", ID_HEARTBEAT_RSP);
+        return;
+    }
+    // Durable recovery also covers missed cross-server notifications. Send small
+    // batches so a large address book cannot overflow the 16-bit frame length.
+    Json::Value snapshot;
+    snapshot["apply_list"] = Json::Value(Json::arrayValue);
+    snapshot["friend_list"] = Json::Value(Json::arrayValue);
+    snapshot["pending_files"] = Json::Value(Json::arrayValue);
+    auto flush = [&]() {
+        session->Send(snapshot.toStyledString(), ID_HEARTBEAT_RSP);
+        snapshot["apply_list"].clear();
+        snapshot["friend_list"].clear();
+        snapshot["pending_files"].clear();
+    };
+    std::vector<std::shared_ptr<ApplyInfo>> applications;
+    if (GetFriendApplyInfo(session->GetUserId(), applications)) {
+        for (const auto& apply : applications) {
+            Json::Value item;
+            item["uid"] = apply->_uid;
+            item["name"] = apply->_name;
+            item["nick"] = apply->_nick;
+            item["icon"] = apply->_icon;
+            item["sex"] = apply->_sex;
+            item["desc"] = apply->_desc;
+            item["status"] = apply->_status;
+            if (snapshot.toStyledString().size() + item.toStyledString().size() > 12 * 1024) flush();
+            snapshot["apply_list"].append(item);
+            if (snapshot["apply_list"].size() == 20) flush();
+        }
+    }
+    std::vector<std::shared_ptr<UserInfo>> friends;
+    if (GetFriendList(session->GetUserId(), friends)) {
+        for (const auto& peer : friends) {
+            Json::Value item;
+            item["uid"] = peer->uid;
+            item["name"] = peer->name;
+            item["nick"] = peer->nick;
+            item["icon"] = peer->icon;
+            item["sex"] = peer->sex;
+            item["desc"] = peer->desc;
+            item["back"] = peer->back;
+            if (snapshot.toStyledString().size() + item.toStyledString().size() > 12 * 1024) flush();
+            snapshot["friend_list"].append(item);
+            if (snapshot["friend_list"].size() == 20) flush();
+        }
+    }
+    for (const auto& file : MysqlMgr::GetInstance()->GetPendingFileTransfers(session->GetUserId())) {
+        Json::Value item;
+        item["id"] = file.id;
+        item["fromuid"] = file.sender_uid;
+        item["touid"] = file.receiver_uid;
+        item["name"] = file.original_name;
+        item["mime"] = file.mime_type;
+        item["total_size"] = Json::UInt64(file.total_size);
+        item["sha256"] = file.sha256;
+        if (snapshot.toStyledString().size() + item.toStyledString().size() > 12 * 1024) flush();
+        snapshot["pending_files"].append(item);
+        if (snapshot["pending_files"].size() == 20) flush();
+    }
+    flush();
 }
 
 LogicSystem::~LogicSystem() {

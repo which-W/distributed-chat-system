@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QTimer>
+#include <QHash>
 
 class FileTransferManager : public QObject, public Singleton<FileTransferManager> {
     Q_OBJECT
@@ -19,6 +20,7 @@ class FileTransferManager : public QObject, public Singleton<FileTransferManager
     void startDownload(const QJsonObject& metadata, const QString& savePath);
     void cancel(const QString& transferId);
     QList<QJsonObject> availableForPeer(int peerUid) const;
+    QString localPathForTransfer(const QString& id) const { return localPaths_.value(id); }
 
   signals:
     void transferAvailable(const QJsonObject& metadata);
@@ -35,6 +37,8 @@ class FileTransferManager : public QObject, public Singleton<FileTransferManager
     void sendNextUploadChunk();
     void requestDownloadChunk();
     void resumeActiveTransfers();
+    void failUpload(const QString& reason);
+    QTimer uploadAckTimer_;
 
     struct UploadState {
         // 服务端只确认已持久化的 offset，断线后以响应值为续传起点。
@@ -58,4 +62,5 @@ class FileTransferManager : public QObject, public Singleton<FileTransferManager
     } download_;
     QTimer hashTimer_;
     QList<QJsonObject> available_;
+    QHash<QString, QString> localPaths_;
 };
