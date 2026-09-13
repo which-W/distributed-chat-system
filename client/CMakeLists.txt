@@ -117,6 +117,10 @@ if(BUILD_TESTING)
     target_link_libraries(chat_workspace_test PRIVATE
         Qt6::Sql Ela::WidgetTools Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network)
     add_test(NAME chat_workspace COMMAND chat_workspace_test)
+    add_test(NAME client_auth COMMAND chat_workspace_test --auth-only)
+    set_tests_properties(client_auth PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>"
+        TIMEOUT 30)
     set_tests_properties(chat_workspace PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>"
         TIMEOUT 30)

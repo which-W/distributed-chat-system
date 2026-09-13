@@ -277,7 +277,7 @@ void TcpMgr::initHandlers() {
                 false);
             _manual_disconnect = true;
             _socket.abort();
-            emit sig_login_failed(ErrorCode::ERR_FAIL);
+            emit sig_login_failed(ErrorCode::ERR_LOCAL_STORAGE);
             return;
         }
         auto name = jsonObj["name"].toString();

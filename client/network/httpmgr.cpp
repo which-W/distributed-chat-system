@@ -45,41 +45,13 @@ void Httpmgr::PostHttpRequest(const QString& url, const QJsonObject& jsonObj, Re
 }
 
 void Httpmgr::slot_http_finished(Req id, QString res, ErrorCode error, Modules mod) {
-    // 处理 HTTP 请求完成的逻辑
+    // HTTP 完成仅代表传输结果；业务成功由各页面解析响应后判断。
     if (mod == Modules::MOD_REGISTER) {
-        if (error == ERR_OK) {
-            // 处理注册成功的逻辑
-            qDebug() << "Registration successful:" << res;
-            emit sig_reg_mod_finish(id, res, error);
-        } else {
-            // 处理注册失败的逻辑
-            qDebug() << "Registration failed with error code:" << error;
-        }
-    } else {
-        qDebug() << "Unhandled module in slot_http_finished:" << mod;
-    }
-
-    if (mod == Modules::RESETMOD) {
-        if (error == ErrorCode::ERR_OK) {
-            // 处理重置成功的逻辑
-            qDebug() << "Reset successful:" << res;
-            emit sig_reset_mod_finish(id, res, error);
-        } else {
-            // 处理重置失败的逻辑
-            qDebug() << "Reset failed with error code:" << error;
-        }
-    } else {
-        qDebug() << "Unhandled module in slot_http_finished:" << mod;
-    }
-
-    if (mod == Modules::LODINMOD) {
-        if (error == ErrorCode::ERR_OK) {
-            qDebug() << "Login successful";
-            emit sig_login_finish(id, res, error);
-        } else {
-            // 处理重置失败的逻辑
-            qDebug() << "Login fail error code:" << error;
-        }
+        emit sig_reg_mod_finish(id, res, error);
+    } else if (mod == Modules::RESETMOD) {
+        emit sig_reset_mod_finish(id, res, error);
+    } else if (mod == Modules::LODINMOD) {
+        emit sig_login_finish(id, res, error);
     } else {
         qDebug() << "Unhandled module in slot_http_finished:" << mod;
     }

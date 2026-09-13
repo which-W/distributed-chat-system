@@ -23,6 +23,9 @@
 #include "ElaTheme.h"
 #include "usermgr.h"
 #include "FriendInfoPage.h"
+#include "RegisterDialog.h"
+#include "LoginDialog.h"
+#include <QStackedWidget>
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
@@ -48,6 +51,33 @@ int main(int argc, char** argv) {
     auto check = [&failures](bool ok, const char* message) {
         if (!ok) { fprintf(stderr, "%s\n", message); ++failures; }
     };
+    {
+        RegisterDialog registration;
+        auto* pages = registration.findChild<QStackedWidget*>("stackedWidget");
+        auto* form = pages->currentWidget();
+        registration.slot_req_mod_finished(Req::ID_GET_VERIFT_CODE, "{\"error\":0}", ERR_OK);
+        check(pages->currentWidget() == form, "verification response must not complete registration");
+        registration.slot_req_mod_finished(Req::ID_REQ_USER, "{}", ERR_OK);
+        check(pages->currentWidget() == form, "missing error must not complete registration");
+        registration.slot_req_mod_finished(Req::ID_REQ_USER, "{\"error\":1004}", ERR_OK);
+        check(pages->currentWidget() == form, "rejected code must not complete registration");
+        registration.slot_req_mod_finished(Req::ID_REQ_USER, "{\"error\":0}", ERR_OK);
+        check(pages->currentWidget() != form, "successful registration must show completion page");
+
+        LoginDialog login;
+        auto* button = login.findChild<QPushButton*>("login_button");
+        button->setEnabled(false);
+        Httpmgr::Getinstance()->slot_http_finished(Req::ID_LOGIN_USER, {}, ERR_NETWORK, Modules::LODINMOD);
+        check(button->isEnabled(), "HTTP network failure must reach login and re-enable retry");
+        button->setEnabled(false);
+        login.slot_login_mod_finish(Req::ID_LOGIN_USER, "{}", ERR_OK);
+        check(button->isEnabled(), "malformed login response must allow retry");
+        button->setEnabled(false);
+        login.slot_login_failed(ERR_LOCAL_STORAGE);
+        check(button->isEnabled(), "local database failure must allow retry");
+    }
+    if (app.arguments().contains("--auth-only"))
+        return failures ? 1 : 0;
     window.show();
     QDir().mkpath("ui-preview");
     settle();

@@ -80,19 +80,30 @@ void RegisterDialog::showTip(QString str, bool b_ok) {
 
 void RegisterDialog::initHandlers() {
     _handlers.insert(ID_GET_VERIFT_CODE, [this](const QJsonObject& jsonObj) {
-        if (jsonObj.contains("error") && jsonObj["error"].toInt() == ErrorCode::ERR_OK) {
-            showTip(tr("注册成功"), true);
+        if (jsonObj["error"].toInt(-1) == ErrorCode::ERR_OK) {
+            showTip(tr("验证码已发送，请查收邮箱后填写验证码"), true);
         } else {
-            showTip(tr("未知参数失败，请重试"), false);
+            showTip(tr("验证码发送失败（错误码 %1），请稍后重试")
+                        .arg(jsonObj["error"].toInt(-1)), false);
         }
-        auto emial = jsonObj["email"].toString();
-        showTip(tr("验证码已发送到邮箱"), true);
     });
 
     _handlers.insert(Req::ID_REQ_USER, [this](QJsonObject jsonObj) {
-        int error = jsonObj["error"].toInt();
+        int error = jsonObj["error"].toInt(-1);
         if (error != ErrorCode::ERR_OK) {
-            showTip(tr("用户或密码错误"), false);
+            QString message;
+            switch (error) {
+            case 1003: message = tr("验证码已过期或不存在，请重新获取"); break;
+            case 1004: message = tr("验证码校验失败，请检查或重新获取验证码"); break;
+            case 1005:
+                message = tr("用户名或邮箱已存在，或服务端保存账户失败；请尝试登录，仍失败请联系管理员");
+                break;
+            case 1009: message = tr("密码应为10～128个字符，且不能包含空白字符"); break;
+            case 1001: message = tr("注册请求格式错误，请更新客户端后重试"); break;
+            case 1002: message = tr("注册服务暂不可用，请稍后重试"); break;
+            default: message = tr("注册失败（错误码 %1），请稍后重试").arg(error); break;
+            }
+            showTip(message, false);
             return;
         }
         auto email = jsonObj["email"].toString();
@@ -102,9 +113,10 @@ void RegisterDialog::initHandlers() {
 }
 
 void RegisterDialog::slot_req_mod_finished(Req id, QString res, ErrorCode error) {
-    if (error == ERR_OK) {
-        showTip(tr("注册成功"), true);
-    } else {
+    const auto handler = _handlers.constFind(id);
+    if (handler == _handlers.constEnd())
+        return;
+    if (error != ERR_OK) {
         showTip(tr("网络请求错误"), false);
         return;
     }
@@ -115,7 +127,11 @@ void RegisterDialog::slot_req_mod_finished(Req id, QString res, ErrorCode error)
         return;
     }
     // 创建json对象,并调用对应的处理函数
-    _handlers[id](jsonDoc.object());
+    if (!jsonDoc.object()["error"].isDouble()) {
+        showTip(tr("服务器返回数据错误"), false);
+        return;
+    }
+    handler.value()(jsonDoc.object());
     return;
 }
 
@@ -183,6 +199,8 @@ void RegisterDialog::togglePasswordconfirmVisibility() {
 
 void RegisterDialog::changeRegisterWidgepage() {
     _timer->stop();
+    _counter = 5;
+    ui->show_tip->setText(tr("在 %1 s后将返回登录页面").arg(_counter));
     ui->stackedWidget->setCurrentWidget(ui->page2);
     _timer->start(1000);
 }
@@ -225,10 +243,7 @@ bool RegisterDialog::checkPassValid() {
         AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为10~128"));
         return false;
     }
-    // 创建一个正则表达式对象，按照上述密码要求
-    // 这个正则表达式解释：
-    // ^[a-zA-Z0-9!@#$%^&*]{6,15}$ 密码长度至少6，可以是字母、数字和特定的特殊字符
-    QRegularExpression regExp("^[^\\s]{10,128}$");
+    QRegularExpression regExp("\\A[^\\s]{10,128}\\z", QRegularExpression::UseUnicodePropertiesOption);
     bool match = regExp.match(pass).hasMatch();
     if (!match) {
         // 提示字符非法

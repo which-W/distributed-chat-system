@@ -77,8 +77,12 @@ void LoginDialog::slot_login_btn() {
 }
 
 void LoginDialog::slot_login_mod_finish(Req id, QString res, ErrorCode err) {
+    const auto handler = _handlers.constFind(id);
+    if (handler == _handlers.constEnd())
+        return;
     if (err != ErrorCode::ERR_OK) {
         showTip(tr("网络请求错误"), false);
+        Enablebtn(true);
         return;
     }
     // 解析 JSON 字符串,res需转化为QByteArray
@@ -86,21 +90,27 @@ void LoginDialog::slot_login_mod_finish(Req id, QString res, ErrorCode err) {
     // json解析错误
     if (jsonDoc.isNull()) {
         showTip(tr("json解析错误"), false);
+        Enablebtn(true);
         return;
     }
     // json解析错误
     if (!jsonDoc.isObject()) {
         showTip(tr("json解析错误"), false);
+        Enablebtn(true);
         return;
     }
     // 调用对应的逻辑,根据id回调。
-    _handlers[id](jsonDoc.object());
+    if (!jsonDoc.object()["error"].isDouble()) {
+        showTip(tr("服务器返回数据异常"), false);
+        Enablebtn(true);
+        return;
+    }
+    handler.value()(jsonDoc.object());
     return;
 }
 
 void LoginDialog::slot_tcp_con_finish(bool bsuccess) {
     if (bsuccess) {
-        showTip(tr("聊天服务连接成功，正在登录..."), true);
         QJsonObject jsonObj;
         jsonObj["uid"] = _uid;
         jsonObj["token"] = _token;
@@ -118,7 +128,10 @@ void LoginDialog::slot_login_failed(int err) {
     qDebug() << "Login failed, error code: " << err;
     switch (err) {
     case ErrorCode::ERR_FAIL:
-        showTip(tr("登录失败，请检查用户名或密码"), false);
+        showTip(tr("聊天会话认证失败，请重新登录"), false);
+        break;
+    case ErrorCode::ERR_LOCAL_STORAGE:
+        showTip(tr("无法打开本地聊天数据库，请检查电脑磁盘空间、目录权限及 SQLite 驱动"), false);
         break;
     case ErrorCode::ERR_NETWORK:
         showTip(tr("网络异常，请稍后再试"), false);
@@ -127,7 +140,7 @@ void LoginDialog::slot_login_failed(int err) {
         showTip(tr("服务器返回数据异常"), false);
         break;
     default:
-        showTip(tr("未知错误，请稍后再试"), false);
+        showTip(tr("聊天服务登录失败（错误码 %1），请重新登录或联系管理员").arg(err), false);
         break;
     }
     Enablebtn(true);
@@ -136,9 +149,14 @@ void LoginDialog::slot_login_failed(int err) {
 void LoginDialog::initHttpHandlers() {
     // 注册获取登录回包逻辑
     _handlers.insert(Req::ID_LOGIN_USER, [this](QJsonObject jsonObj) {
-        int error = jsonObj["error"].toInt();
+        int error = jsonObj["error"].toInt(-1);
         if (error != ErrorCode::ERR_OK) {
-            showTip(tr("账号或者密码错误"), false);
+            if (error == 1009 || error == 1006)
+                showTip(tr("邮箱或密码错误"), false);
+            else if (error == 1002 || jsonObj["retryable"].toBool())
+                showTip(tr("登录服务暂不可用，请稍后重试"), false);
+            else
+                showTip(tr("登录失败（错误码 %1），请稍后重试").arg(error), false);
             Enablebtn(true);
             return;
         }
@@ -222,20 +240,18 @@ bool LoginDialog::checkEmailValid() {
 bool LoginDialog::checkPassValid() {
     auto pass = ui->psw_line_edit->text();
 
-    if (pass.length() < 6 || pass.length() > 15) {
+    if (pass.toUcs4().size() < 10 || pass.toUcs4().size() > 128) {
         // 提示长度不准确
-        AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为6~15"));
+        AddTipErr(TipErr::TIP_PWD_ERR, tr("密码长度应为10～128个字符"));
         return false;
     }
 
-    // 创建一个正则表达式对象，按照上述密码要求
-    // 这个正则表达式解释：
-    // ^[a-zA-Z0-9!@#$%^&*]{6,15}$ 密码长度至少6，可以是字母、数字和特定的特殊字符
-    QRegularExpression regExp("^[a-zA-Z0-9!@#$%^&*.]{6,15}$");
+    // 与注册及服务端保持一致：按 Unicode 码点计数，禁止 Unicode 空白。
+    QRegularExpression regExp("\\A[^\\s]{10,128}\\z", QRegularExpression::UseUnicodePropertiesOption);
     bool match = regExp.match(pass).hasMatch();
     if (!match) {
         // 提示字符非法
-        AddTipErr(TipErr::TIP_PWD_ERR, tr("不能包含非法字符"));
+        AddTipErr(TipErr::TIP_PWD_ERR, tr("密码不能包含空白字符"));
         return false;
         ;
     }
