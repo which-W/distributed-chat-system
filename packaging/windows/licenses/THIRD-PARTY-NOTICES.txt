@@ -1,0 +1,19 @@
+NebulaChat Windows client
+
+NebulaChat: Apache License 2.0; see NebulaChat.txt.
+ElaWidgetTools: see ElaWidgetTools.txt and the repository's pinned submodule.
+
+Qt 6.6.3 is dynamically linked. Qt's applicable open-source license texts are
+included in Qt/. The LGPL-3.0-only license supplements GPL-3.0-only.
+These files were obtained from the Qt 6.6.3 qtbase source tree:
+https://github.com/qt/qtbase/tree/v6.6.3/LICENSES
+Qt source, including third-party component notices:
+https://download.qt.io/archive/qt/6.6/6.6.3/single/
+Qt third-party component information:
+https://doc.qt.io/qt-6.6/licenses-used-in-qt.html
+
+Microsoft Visual C++ runtime DLLs are redistributed from the installed MSVC
+redistributable directory. Their applicable Microsoft license terms apply.
+
+If the Qt SDK or dependencies are changed, update the bundled license texts,
+source references, and third-party notices to match the shipped binaries.
