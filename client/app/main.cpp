@@ -5,11 +5,25 @@
 #include <QUrl>
 #include <QtWidgets/QApplication>
 #include <qdebug.h>
+#ifdef Q_OS_WIN
+#include <QScopeGuard>
+#include <qt_windows.h>
+#endif
 
 int main(int argc, char* argv[]) {
     QApplication a(argc, argv);
+#ifdef Q_OS_WIN
+    // The installer asks the user to exit instead of interrupting database writes.
+    const HANDLE installMutex = CreateMutexW(nullptr, FALSE, L"NebulaChatClientRunning");
+    const auto closeInstallMutex = qScopeGuard([installMutex] {
+        if (installMutex) CloseHandle(installMutex);
+    });
+#endif
     QCoreApplication::setOrganizationName("NebulaChat");
     QCoreApplication::setApplicationName("NebulaChatClient");
+#ifdef CHAT_CLIENT_VERSION
+    QCoreApplication::setApplicationVersion(QStringLiteral(CHAT_CLIENT_VERSION));
+#endif
     ThemeManager::instance().initialize();
 
     QString fileName = "config.ini";
