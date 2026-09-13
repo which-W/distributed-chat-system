@@ -65,6 +65,7 @@ enum ErrorCode {
     ERR_FAIL = 1,    // 失败
     ERR_NETWORK = 2, // 网络错误
     ERR_JSON = 3,    // json解析错误
+    ERR_LOCAL_STORAGE = 4, // 本地消息存储不可用
 };
 
 enum TipErr {
