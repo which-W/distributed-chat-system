@@ -45,6 +45,11 @@ file(GLOB_RECURSE CLIENT_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/*.qrc")
 
 add_executable(chat_client WIN32 ${CLIENT_FILES})
+target_compile_definitions(chat_client PRIVATE CHAT_CLIENT_VERSION="${PROJECT_VERSION}")
+if(WIN32)
+    configure_file(packaging/version.rc.in "${CMAKE_CURRENT_BINARY_DIR}/version.rc" @ONLY)
+    target_sources(chat_client PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/version.rc")
+endif()
 set_property(TARGET chat_client PROPERTY AUTOGEN_ORIGIN_DEPENDS OFF)
 add_executable(chat_tls_probe tools/TlsProbe.cpp)
 add_executable(message_store_test tools/MessageStoreTest.cpp model/MessageStore.cpp)
@@ -84,6 +89,8 @@ if(WIN32)
         HINTS "${QT_BIN_DIR}"
         NO_DEFAULT_PATH
         REQUIRED)
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/package-$<CONFIG>.txt"
+        CONTENT "version=${PROJECT_VERSION}\nexe=$<TARGET_FILE:chat_client>\nela=$<TARGET_FILE:ElaWidgetTools>\nwindeployqt=${WINDEPLOYQT_EXECUTABLE}\n")
     add_custom_command(TARGET chat_client POST_BUILD
         COMMAND "${WINDEPLOYQT_EXECUTABLE}"
             --release --no-translations "$<TARGET_FILE:chat_client>"

@@ -270,6 +270,11 @@ node VarifyServer/server.js
 
 这套配置只保护 gRPC 链路。对公网开放的 Gate HTTP 和客户端到 Chat 的自定义 TCP 协议仍需要单独加密：Gate 建议放在 Nginx/Caddy 后终止 HTTPS；聊天 TCP 应增加 TLS（或先限制在可信 VPN/专网内）。
 
+## Windows 客户端安装包
+
+离线 EXE 安装包、手动覆盖升级、发布配置与打包命令见
+[客户端安装包文档](docs/client-installer.md)。默认发布网关为 `https://api.deepecho.top`。
+
 ## 部署端口
 
 需要开放或映射的默认端口：
