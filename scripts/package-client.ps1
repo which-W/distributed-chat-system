@@ -53,6 +53,10 @@ if (-not $StageOnly) {
     if (-not $IsccPath) {
         $isccCommand = Get-Command ISCC.exe -ErrorAction SilentlyContinue
         if ($isccCommand) { $IsccPath = $isccCommand.Source }
+        $localIscc = Join-Path $repoRoot 'build/tools/inno/ISCC.exe'
+        if (-not $IsccPath -and (Test-Path -LiteralPath $localIscc)) { $IsccPath = $localIscc }
+        $localIscc = Join-Path $repoRoot 'build/tools/inno/ISCC.exe'
+        if (-not $IsccPath -and (Test-Path -LiteralPath $localIscc)) { $IsccPath = $localIscc }
         foreach ($base in @(${env:ProgramFiles(x86)}, $env:ProgramFiles, $env:LOCALAPPDATA)) {
             if ($IsccPath -or -not $base) { continue }
             foreach ($suffix in @('Inno Setup 6/ISCC.exe', 'Programs/Inno Setup 6/ISCC.exe')) {
@@ -122,7 +126,8 @@ New-Item -ItemType Directory -Path $stagePath -Force | Out-Null
 Copy-Item -LiteralPath $metadata['exe'], $metadata['ela'] -Destination $stagePath
 Copy-Item -LiteralPath $configPath -Destination (Join-Path $stagePath 'config.ini')
 Copy-Item -LiteralPath (Join-Path $repoRoot 'client/resources/style') -Destination $stagePath -Recurse
-Invoke-Checked $metadata['windeployqt'] @('--release', '--no-translations', '--no-compiler-runtime', (Join-Path $stagePath 'chat_client.exe'))
+Invoke-Checked $metadata['windeployqt'] @('--release', '--no-translations', '--no-compiler-runtime',
+    '--exclude-plugins', 'qsqlmimer,qsqlodbc,qsqlpsql,qopensslbackend', (Join-Path $stagePath 'chat_client.exe'))
 Get-ChildItem -LiteralPath $VcRuntimeDir -Filter '*.dll' -File |
     Copy-Item -Destination $stagePath
 
@@ -130,6 +135,7 @@ $licenses = Join-Path $stagePath 'licenses'
 New-Item -ItemType Directory -Path $licenses | Out-Null
 Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination (Join-Path $licenses 'NebulaChat.txt')
 Copy-Item -LiteralPath (Join-Path $repoRoot 'third_party/ElaWidgetTools/LICENSE') -Destination (Join-Path $licenses 'ElaWidgetTools.txt')
+Copy-Item -Path (Join-Path $repoRoot 'packaging/windows/licenses/*') -Destination $licenses -Recurse
 # Qt ships license texts in its documentation directory, with exact layout varying by SDK.
 $qtRoot = Split-Path -Parent (Split-Path -Parent $metadata['windeployqt'])
 $qtLicenses = @(Get-ChildItem -LiteralPath (Join-Path $qtRoot 'doc') -Recurse -File -ErrorAction SilentlyContinue |
@@ -143,8 +149,6 @@ if ($qtLicenses.Count -gt 0) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
         Copy-Item -LiteralPath $license.FullName -Destination $destination
     }
-} else {
-    Write-Warning 'Qt license texts were not found in the SDK documentation; include the applicable notices before distribution.'
 }
 
 foreach ($required in @('chat_client.exe', 'ElaWidgetTools.dll', 'Qt6Core.dll', 'Qt6Network.dll',
