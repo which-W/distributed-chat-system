@@ -1,3 +1,4 @@
+#include "AvatarLoader.h"
 #include "ConUserItem.h"
 #include "ChatGraphics.h"
 
@@ -29,7 +30,7 @@ ConUserItem::ConUserItem(QWidget* parent) : ListItemBase(parent), ui(new Ui::Con
     SetItemType(ListItemType::CONTACT_USER_ITEM);
     ui->red_point->raise();
     ShowRedPoint(false);
-    // 安装点击事件（假设整个 item 可以点击）
+    // ??????????? item ?????
     this->installEventFilter(this);
 }
 
@@ -38,17 +39,18 @@ ConUserItem::~ConUserItem() {
 }
 
 QSize ConUserItem::sizeHint() const {
-    return QSize(250, 80); // 返回自定义的尺寸
+    return QSize(250, 80); // ????????
 }
 
 void ConUserItem::SetInfo(std::shared_ptr<AuthInfo> auth_info) {
     _info = std::make_shared<UserInfo>(auth_info);
     QPixmap pixmap(_info->_icon);
 
-    // 设置图片自动缩放
+    // ????????
     ui->icon_lb->setPixmap(
         roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
+    if (_info->_uid > 0) AvatarLoader::instance().bind(ui->icon_lb,_info->_uid,_info->_icon,48);
 
     ui->user_name_lb->setText(_info->_name);
 }
@@ -56,13 +58,14 @@ void ConUserItem::SetInfo(std::shared_ptr<AuthInfo> auth_info) {
 void ConUserItem::SetInfo(int uid, QString name, QString icon) {
     _info = std::make_shared<UserInfo>(uid, name, name, icon, 0);
 
-    // 加载图片
+    // ????
     QPixmap pixmap = uid == 0 ? invitationIcon() : QPixmap(_info->_icon);
 
-    // 设置图片自动缩放
+    // ????????
     ui->icon_lb->setPixmap(
         roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
+    if (_info->_uid > 0) AvatarLoader::instance().bind(ui->icon_lb,_info->_uid,_info->_icon,48);
 
     ui->user_name_lb->setText(_info->_name);
 }

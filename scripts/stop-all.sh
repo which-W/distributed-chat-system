@@ -4,7 +4,7 @@ set -eu
 BUILD_DIR=${1:-"$(pwd)/build/linux-server-release"}
 RUN_DIR="$BUILD_DIR/run"
 
-for name in gate_server chatserver2 chatserver1 status_server varify_server; do
+for name in resource2 resource1 gate_server chatserver2 chatserver1 status_server varify_server; do
     pid_file="$RUN_DIR/$name.pid"
     if [ ! -f "$pid_file" ]; then
         continue

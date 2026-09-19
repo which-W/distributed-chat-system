@@ -63,6 +63,8 @@ start_node_service
 start_cpp_service status_server "$PROJECT_DIR/config/status.ini" "$BIN_DIR/status_server"
 start_cpp_service chatserver1 "$PROJECT_DIR/config/chatserver1.ini" "$BIN_DIR/chat_server"
 start_cpp_service chatserver2 "$PROJECT_DIR/config/chatserver2.ini" "$BIN_DIR/chat_server"
+start_cpp_service resource1 "$PROJECT_DIR/config/resource1.ini" "$BIN_DIR/resource_server"
+start_cpp_service resource2 "$PROJECT_DIR/config/resource2.ini" "$BIN_DIR/resource_server"
 start_cpp_service gate_server "$PROJECT_DIR/config/gate.ini" "$BIN_DIR/gate_server"
 
 echo "logs: $LOG_DIR"

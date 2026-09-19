@@ -10,3 +10,6 @@ out
 run
 certs
 file-storage
+
+**/__pycache__
+**/*.pyc

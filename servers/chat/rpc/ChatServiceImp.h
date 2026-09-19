@@ -25,6 +25,7 @@ using message::TextChatMsgRsp;
 class ChatServiceImp final : public ChatService::Service {
   public:
     ~ChatServiceImp();
+    Status NotifyAvatarChanged(grpc::ServerContext*, const message::AvatarChangedReq*, message::AvatarChangedRsp*) override;
 
     ChatServiceImp();
     Status NotifyAddFriend(ServerContext* context, const AddFriendReq* request,

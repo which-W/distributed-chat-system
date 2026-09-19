@@ -63,6 +63,8 @@ class TcpMgr : public QObject,
     void slot_disconnect();
     void slot_reconnect_for_proxy();
   signals:
+    void sig_resource_token(const QJsonObject& value);
+    void sig_avatar_changed(const QJsonObject& value);
     void sig_con_success(bool bsuccess);
     void sig_send_data(Req reqId, QByteArray data);
     void sig_login_failed(int err);

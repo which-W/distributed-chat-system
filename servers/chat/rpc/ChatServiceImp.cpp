@@ -1,4 +1,5 @@
 #include "ChatServiceImp.h"
+#include "ResourceClient.h"
 #include "CSession.h"
 #include "ConfigMgr.h"
 #include "InternalRpcAuth.h"
@@ -216,10 +217,10 @@ Status ChatServiceImp::NotifyFileAvailable(::grpc::ServerContext* context,
         chat::internal_rpc::authorize(*context, ConfigMgr::Inst()["InternalRpc"]["PeerToken"]);
     if (!auth.ok())
         return auth;
-    const auto stored = MysqlMgr::GetInstance()->GetFileTransfer(request->id());
+    const auto stored = ResourceMetadata(request->id(), request->touid());
     if (!stored || stored->sender_uid != request->fromuid() ||
         stored->receiver_uid != request->touid() ||
-        stored->status != chat::files::TransferStatus::Available) {
+        (stored->status != chat::files::TransferStatus::Available && stored->status != chat::files::TransferStatus::Downloaded)) {
         return Status(grpc::StatusCode::PERMISSION_DENIED, "file notification is not available");
     }
     response->set_error(ErrorCodes::ERROR_CODE_OK);
@@ -244,4 +245,17 @@ Status ChatServiceImp::NotifyFileAvailable(::grpc::ServerContext* context,
 
 void ChatServiceImp::RegisterServer(std::shared_ptr<CServer> pServer) {
     _p_server = pServer;
+}
+Status ChatServiceImp::NotifyAvatarChanged(grpc::ServerContext* context, const message::AvatarChangedReq* request, message::AvatarChangedRsp*) {
+    auto auth=chat::internal_rpc::authorize(*context,ConfigMgr::Inst()["InternalRpc"]["PeerToken"]); if (!auth.ok()) return auth;
+    auto profile=MysqlMgr::GetInstance()->GetUser(request->uid()); if (!profile) return {grpc::StatusCode::NOT_FOUND,"user not found"};
+    auto redis=RedisMgr::GetInstance();
+    if (!redis->Del(USER_BASE_INFO+std::to_string(request->uid())) || !redis->Del(NAME_INFO+profile->name))
+        return {grpc::StatusCode::UNAVAILABLE,"cache invalidation failed"};
+    Json::Value v; v["uid"]=request->uid(); v["avatar_id"]=request->avatar_id(); v["version"]=Json::UInt64(request->version());
+    if (auto self=UserMgr::GetInstance()->GetSession(request->uid())) self->Send(v.toStyledString(),ID_AVATAR_CHANGED);
+    std::vector<std::shared_ptr<UserInfo>> friends;
+    if (!MysqlMgr::GetInstance()->GetFriendList(request->uid(),friends)) return {grpc::StatusCode::UNAVAILABLE,"friend lookup failed"};
+    for (auto& peer:friends) if (auto session=UserMgr::GetInstance()->GetSession(peer->uid)) session->Send(v.toStyledString(),ID_AVATAR_CHANGED);
+    return grpc::Status::OK;
 }

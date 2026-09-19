@@ -1,6 +1,7 @@
 #include "FileTransferManager.h"
 
 #include "TcpMgr.h"
+#include "ResourceHttp.h"
 
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -9,26 +10,32 @@
 
 namespace {
 constexpr qint64 MaxFileBytes = 100LL * 1024LL * 1024LL;
-constexpr qint64 ChunkBytes = 32LL * 1024LL;
+constexpr qint64 ChunkBytes = 256LL * 1024LL;
 
-void sendJson(Req id, const QJsonObject& value) {
-    emit TcpMgr::Getinstance() -> sig_send_data(
-                                   id, QJsonDocument(value).toJson(QJsonDocument::Compact));
-}
+
 } // namespace
 
 FileTransferManager::FileTransferManager() {
     uploadAckTimer_.setParent(this);
     uploadAckTimer_.setObjectName("uploadAckTimer");
     uploadAckTimer_.setSingleShot(true);
-    uploadAckTimer_.setInterval(30000);
+    uploadAckTimer_.setInterval(180000);
     connect(&uploadAckTimer_, &QTimer::timeout, this, [this]() {
         failUpload(tr("上传超时：服务器未确认，请检查连接后重新发送。"));
     });
+    connect(&ResourceHttp::instance(),&ResourceHttp::resetAccount,this,[this] {
+        // 先使上传、下载回调失效，再停止请求和计时器；文件路径与附件列表也属于账号状态。
+        ++uploadGeneration_; ++downloadGeneration_; uploadAckTimer_.stop(); hashTimer_.stop();
+        ResourceHttp::cancel(uploadRequest_); ResourceHttp::cancel(downloadRequest_);
+        uploadRequest_.reset(); downloadRequest_.reset();
+        upload_.file.close(); download_.file.close(); upload_.id.clear(); upload_.localToken.clear(); download_.metadata={};
+        upload_.name.clear(); upload_.mime.clear(); upload_.sha256.clear(); upload_.hash.reset();
+        upload_.receiverUid=0; upload_.total=0; upload_.offset=0;
+        download_.targetPath.clear(); download_.partPath.clear(); download_.offset=0;
+        available_.clear(); localPaths_.clear();
+    });
     hashTimer_.setInterval(0);
     connect(&hashTimer_, &QTimer::timeout, this, &FileTransferManager::hashUploadStep);
-    connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_file_frame, this,
-            &FileTransferManager::handleFrame);
     connect(TcpMgr::Getinstance().get(), &TcpMgr::sig_file_available, this,
             [this](const QJsonObject& metadata) {
                 const auto user = UserMgr::Getinstance()->GetUserInfo();
@@ -58,6 +65,7 @@ QString FileTransferManager::startUpload(const QString& path, int receiverUid) {
         emit transferFailed({}, tr("文件无效、超过 100 MB，或已有上传正在进行"));
         return {};
     }
+    ++uploadGeneration_;
     upload_.file.setFileName(path);
     if (!upload_.file.open(QIODevice::ReadOnly)) {
         emit transferFailed({}, tr("无法读取所选文件"));
@@ -95,9 +103,9 @@ void FileTransferManager::sendUploadInit() {
                         {"mime", upload_.mime},
                         {"total_size", upload_.total},
                         {"sha256", upload_.sha256}};
-    if (!upload_.id.isEmpty())
-        request["id"] = upload_.id;
-    sendJson(Req::ID_UPLOAD_FILE_REQ, request);
+    request["idempotency_key"] = upload_.localToken;
+    if (!upload_.id.isEmpty()) httpJson(Req::ID_UPLOAD_FILE_RSP,"GET","/uploads/"+upload_.id);
+    else httpJson(Req::ID_UPLOAD_FILE_RSP,"POST","/uploads",QJsonDocument(request).toJson(QJsonDocument::Compact));
 }
 
 void FileTransferManager::sendNextUploadChunk() {
@@ -108,13 +116,10 @@ void FileTransferManager::sendNextUploadChunk() {
     uploadAckTimer_.start();
     const QByteArray data = upload_.file.read(ChunkBytes);
     if (data.isEmpty()) {
-        sendJson(Req::ID_UPLOAD_FILE_FINISH_REQ, QJsonObject{{"id", upload_.id}});
+        httpJson(Req::ID_UPLOAD_FILE_FINISH_RSP,"POST","/uploads/"+upload_.id+"/complete");
         return;
     }
-    sendJson(Req::ID_UPLOAD_FILE_CHUNK_REQ,
-             QJsonObject{{"id", upload_.id},
-                         {"offset", upload_.offset},
-                         {"data", QString::fromLatin1(data.toBase64())}});
+    httpJson(Req::ID_UPLOAD_FILE_CHUNK_RSP,"PUT","/uploads/"+upload_.id+"/chunks?offset="+QString::number(upload_.offset),data);
 }
 
 void FileTransferManager::startDownload(const QJsonObject& metadata, const QString& savePath) {
@@ -122,6 +127,7 @@ void FileTransferManager::startDownload(const QJsonObject& metadata, const QStri
         emit transferFailed(metadata["id"].toString(), tr("已有下载正在进行"));
         return;
     }
+    ++downloadGeneration_;
     download_.metadata = metadata;
     download_.targetPath = savePath;
     download_.partPath = savePath + ".part";
@@ -132,7 +138,7 @@ void FileTransferManager::startDownload(const QJsonObject& metadata, const QStri
     }
     qint64 size = download_.file.size();
     if (size < 0 || size > metadata["total_size"].toVariant().toLongLong() ||
-        size % ChunkBytes != 0) {
+        size % (32*1024) != 0) {
         download_.file.resize(0);
         size = 0;
     }
@@ -142,8 +148,23 @@ void FileTransferManager::startDownload(const QJsonObject& metadata, const QStri
 }
 
 void FileTransferManager::requestDownloadChunk() {
-    sendJson(Req::ID_DOWNLOAD_FILE_REQ, QJsonObject{{"id", download_.metadata["id"].toString()},
-                                                    {"offset", download_.offset}});
+    // 重连续传可能替换尚未结束的 Range 请求，避免同一偏移有多个回调落盘。
+    ResourceHttp::cancel(downloadRequest_);
+    const auto id=download_.metadata["id"].toString();
+    const auto total=download_.metadata["total_size"].toVariant().toLongLong();
+    if (download_.offset==total) {
+        QJsonObject v=download_.metadata; v["complete"]=true; handleFrame(Req::ID_DOWNLOAD_FILE_CHUNK,v); return;
+    }
+    const auto generation=downloadGeneration_;
+    const auto offset=download_.offset;
+    downloadRequest_=ResourceHttp::instance().request("GET","/files/"+id+"/content",{},[this,generation,offset,id,total](int code,const QByteArray& body) {
+        if (generation!=downloadGeneration_ || download_.metadata["id"].toString()!=id) return;
+        if (code!=206 || body.isEmpty() || body.size()>qMin(ChunkBytes,total-offset)) {
+            download_.file.close(); download_.metadata={}; emit transferFailed(id,tr("下载失败或响应不完整")); return;
+        }
+        QJsonObject v=download_.metadata; v["offset"]=offset; v["next_offset"]=offset+body.size();
+        v["data"]=QString::fromLatin1(body.toBase64()); handleFrame(Req::ID_DOWNLOAD_FILE_CHUNK,v);
+    },{{"Range","bytes="+QByteArray::number(offset)+"-"+QByteArray::number(qMin(total-1,offset+ChunkBytes-1))}});
 }
 
 void FileTransferManager::cancel(const QString& transferId) {
@@ -151,10 +172,11 @@ void FileTransferManager::cancel(const QString& transferId) {
     QString remoteId = transferId;
     if (upload_.localToken == transferId)
         remoteId = upload_.id;
-    if (!remoteId.isEmpty()) {
-        sendJson(Req::ID_FILE_TRANSFER_CANCEL, QJsonObject{{"id", remoteId}});
-    }
+    if (!remoteId.isEmpty() && (upload_.id==remoteId))
+        ResourceHttp::instance().request("DELETE","/uploads/"+remoteId,{},[](int,const QByteArray&) {});
     if (upload_.id == transferId || upload_.localToken == transferId) {
+        ++uploadGeneration_;
+        ResourceHttp::cancel(uploadRequest_); uploadRequest_.reset();
         uploadAckTimer_.stop();
         upload_.file.close();
         upload_.localToken.clear();
@@ -169,22 +191,21 @@ void FileTransferManager::cancel(const QString& transferId) {
         hashTimer_.stop();
     }
     if (download_.metadata["id"].toString() == transferId) {
+        ++downloadGeneration_;
+        ResourceHttp::cancel(downloadRequest_); downloadRequest_.reset();
         download_.file.close();
         download_.metadata = {};
         download_.targetPath.clear();
         download_.partPath.clear();
         download_.offset = 0;
     }
-    for (auto iterator = available_.begin(); iterator != available_.end();) {
-        if ((*iterator)["id"].toString() == remoteId)
-            iterator = available_.erase(iterator);
-        else
-            ++iterator;
-    }
+    // 取消下载只关闭本地请求与文件，保留远端附件、已下载的 .part 和列表中的重试入口。
     emit transferFailed(transferId, tr("传输已取消"));
 }
 
 void FileTransferManager::failUpload(const QString& reason) {
+    ++uploadGeneration_;
+    ResourceHttp::cancel(uploadRequest_); uploadRequest_.reset();
     const auto token = upload_.id.isEmpty() ? upload_.localToken : upload_.id;
     uploadAckTimer_.stop();
     hashTimer_.stop();
@@ -280,7 +301,7 @@ void FileTransferManager::handleFrame(Req id, const QJsonObject& value) {
             download_.metadata = {};
             return;
         }
-        sendJson(Req::ID_DOWNLOAD_FILE_DONE, QJsonObject{{"id", idValue}});
+        ResourceHttp::instance().request("POST","/files/"+idValue+"/downloaded",{},[](int,const QByteArray&) {});
         const auto path = download_.targetPath;
         localPaths_[idValue] = path;
         download_.metadata = {};
@@ -322,4 +343,16 @@ QList<QJsonObject> FileTransferManager::availableForPeer(int peerUid) const {
             result.append(item);
     }
     return result;
+}
+void FileTransferManager::httpJson(Req response,const QByteArray& method,const QString& path,const QByteArray& body) {
+    // 上传初始化、分片和完成按顺序推进；重连替换请求时一并取消旧请求的排队或重试。
+    ResourceHttp::cancel(uploadRequest_);
+    const auto generation=uploadGeneration_;
+    uploadRequest_=ResourceHttp::instance().request(method,path,body,[this,response,generation](int code,const QByteArray& data) {
+        if (generation!=uploadGeneration_) return;
+        if (code==409 && response==Req::ID_UPLOAD_FILE_CHUNK_RSP && QJsonDocument::fromJson(data).object().contains("offset")) { sendUploadInit(); return; }
+        auto value=QJsonDocument::fromJson(data).object();
+        if (code>=400 || value.isEmpty()) { failUpload(tr("资源服务请求失败 (%1)").arg(code)); return; }
+        handleFrame(response,value);
+    },{{"Content-Type",method=="PUT" ? "application/octet-stream" : "application/json"}});
 }

@@ -110,7 +110,7 @@ sequenceDiagram
 
 ## 文件传输
 
-共享目录部署条件、不可变分片重试和系统同步顺序见 [附件恢复说明](FILE_RECOVERY.md)。数据库偏移更新失败会保留密文，后续续传重新核对状态。
+以下描述聊天文件分片处理链路。当前资源服务的部署与数据库迁移要求见 [生产部署指南](../deploy/production/README.md)。数据库偏移更新失败会保留密文，后续续传重新核对状态。
 
 ```mermaid
 sequenceDiagram

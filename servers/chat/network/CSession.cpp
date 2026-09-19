@@ -1,4 +1,6 @@
 #include "CSession.h"
+#include "ResourceToken.h"
+#include "RedisMgr.h"
 #include "CServer.h"
 #include "ChatLogger.h"
 #include "ConfigMgr.h"
@@ -380,6 +382,7 @@ void CSession::asyncReadLen(
 }
 
 void CSession::NotifyOffline(int uid) {
+    RedisMgr::GetInstance()->Del(chat::resources::sessionKey(GetSessionId()));
 
     Json::Value rtvalue;
     rtvalue["error"] = ErrorCodes::ERROR_CODE_OK;

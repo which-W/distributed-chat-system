@@ -1,4 +1,5 @@
 #include "ChatWindow.h"
+#include "AvatarLoader.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -95,7 +96,7 @@ ChatWindow::ChatWindow(QWidget* parent) : ElaWindow(parent) {
     if (!icon.isEmpty()) {
         auto* avatar = new QLabel(rail);
         QPixmap pixmap(icon);
-        avatar->setPixmap(roundAvatar(pixmap, 40));
+        AvatarLoader::instance().bind(avatar,UserMgr::Getinstance()->GetUid(),icon,40);
         avatar->setFixedSize(40, 40);
         avatar->setScaledContents(true);
         railLayout->insertWidget(0, avatar, 0, Qt::AlignHCenter);
@@ -139,6 +140,9 @@ QWidget* ChatWindow::createSettingsPage(QWidget* parent) {
     layout->setContentsMargins(48, 42, 48, 42);
     layout->setSpacing(14);
 
+    auto* avatarButton = new ElaPushButton(tr("更换头像"), page);
+    layout->addWidget(avatarButton);
+    connect(avatarButton,&QPushButton::clicked,page,[page] { AvatarLoader::instance().chooseAndUpload(page,UserMgr::Getinstance()->GetUid()); });
     auto* appearanceTitle = new ElaText(tr("Appearance"), page);
     appearanceTitle->setTextPixelSize(28);
     auto* appearanceDescription = new ElaText(

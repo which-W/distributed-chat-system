@@ -286,6 +286,9 @@ LogicSystem::LogicSystem() {
         root["user"] = userInfo.name;
         root["uid"] = userInfo.uid;
         root["token"] = reply.token();
+        const char* resource_url = std::getenv("CHAT_RESOURCE_BASE_URL");
+        root["resource_base_url"] = resource_url ? resource_url : "https://localhost/api/resources/v1";
+        root["resource_protocol_version"] = 1;
         root["host"] = reply.host();
         root["port"] = reply.port();
         root["transport"] = reply.transport();

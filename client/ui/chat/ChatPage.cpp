@@ -1,4 +1,5 @@
 #include "ChatPage.h"
+#include "AvatarLoader.h"
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -128,7 +129,7 @@ void ChatPage::paintEvent(QPaintEvent* event) {
 void ChatPage::SetUserInfo(std::shared_ptr<UserInfo> user_info) {
     _user_info = user_info;
     auto* avatar = findChild<QLabel*>("conversationAvatar");
-    avatar->setPixmap(roundAvatar(QPixmap(user_info->_icon), 44));
+    AvatarLoader::instance().bind(avatar,user_info->_uid,user_info->_icon,44);
     avatar->show();
     if (auto* empty = findChild<QLabel*>("chatEmptyState")) empty->hide();
     ui->chat_data_list->findChild<QScrollArea*>()->show();
@@ -155,10 +156,10 @@ void ChatPage::appendFileBubble(const QJsonObject& metadata, ChatRole role, bool
     auto self = UserMgr::Getinstance()->GetUserInfo();
     if (role == ChatRole::Self) {
         item->setUserName(self->_name);
-        item->setUserIcon(QPixmap(self->_icon));
+        item->setUserAvatar(self->_uid,self->_icon);
     } else {
         item->setUserName(_user_info ? _user_info->_name : QString());
-        item->setUserIcon(QPixmap(_user_info ? _user_info->_icon : QString()));
+        item->setUserAvatar(_user_info ? _user_info->_uid : 0,_user_info ? _user_info->_icon : QString());
     }
     auto* bubble = new FileBubble(metadata, role, incoming, this);
     const auto localPath = FileTransferManager::Getinstance()->localPathForTransfer(id);
@@ -204,7 +205,7 @@ void ChatPage::AppendChatMsg(std::shared_ptr<TextChatData> msg) {
         ChatItemBase* pChatItem = new ChatItemBase(role);
 
         pChatItem->setUserName(self_info->_name);
-        pChatItem->setUserIcon(QPixmap(self_info->_icon));
+        pChatItem->setUserAvatar(self_info->_uid,self_info->_icon);
         QWidget* pBubble = nullptr;
         pBubble = new TextBuble(role, msg->_msg_content);
         pChatItem->setWidget(pBubble);
@@ -217,7 +218,7 @@ void ChatPage::AppendChatMsg(std::shared_ptr<TextChatData> msg) {
             return;
         }
         pChatItem->setUserName(friend_info->_name);
-        pChatItem->setUserIcon(QPixmap(friend_info->_icon));
+        pChatItem->setUserAvatar(friend_info->_uid,friend_info->_icon);
         QWidget* pBubble = nullptr;
         pBubble = new TextBuble(role, msg->_msg_content);
         pChatItem->setWidget(pBubble);
@@ -254,7 +255,7 @@ void ChatPage::on_send_btn_clicked() {
         } else if (message.msgFlag == "image") {
             auto* item = new ChatItemBase(ChatRole::Self);
             item->setUserName(user->_name);
-            item->setUserIcon(QPixmap(user->_icon));
+            item->setUserAvatar(user->_uid,user->_icon);
             item->setWidget(new PictureBubble(QPixmap(message.content), ChatRole::Self, this));
             ui->chat_data_list->appendChatItem(item);
         }
@@ -273,7 +274,7 @@ void ChatPage::sendMessage() {
         QString type = msgList[i].msgFlag;
         ChatItemBase* pChatItem = new ChatItemBase(role);
         pChatItem->setUserName(userName);
-        pChatItem->setUserIcon(QPixmap(userIcon));
+        pChatItem->setUserAvatar(UserMgr::Getinstance()->GetUid(),userIcon);
         QWidget* pBubble = nullptr;
         if (type == "text") {
             pBubble = new TextBuble(role, msgList[i].content);

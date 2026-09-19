@@ -1,4 +1,5 @@
 #include "LoginDialog.h"
+#include "ResourceHttp.h"
 #include "ClickLabel.h"
 #include "ElaMessageBar.h"
 #include "TcpMgr.h"
@@ -114,6 +115,7 @@ void LoginDialog::slot_tcp_con_finish(bool bsuccess) {
         QJsonObject jsonObj;
         jsonObj["uid"] = _uid;
         jsonObj["token"] = _token;
+        jsonObj["resource_protocol_version"] = 1;
         QJsonDocument doc(jsonObj);
         QByteArray jsonData = doc.toJson(QJsonDocument::Indented);
         // 发送tcp请求给chat server
@@ -167,6 +169,8 @@ void LoginDialog::initHttpHandlers() {
         si.Host = jsonObj["host"].toString();
         si.Port = jsonObj["port"].toString();
         si.Token = jsonObj["token"].toString();
+        si.ResourceBaseUrl = jsonObj["resource_base_url"].toString();
+        ResourceHttp::instance().configure(si.ResourceBaseUrl,si.Uid);
         si.Transport = jsonObj["transport"].toString("insecure").toLower();
         si.TlsServerName = jsonObj["tls_server_name"].toString();
         si.AllowInsecure = allow_insecure_transport;

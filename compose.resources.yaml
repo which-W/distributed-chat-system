@@ -1,0 +1,66 @@
+# Overlay: docker compose -f compose.production.yaml -f compose.resources.yaml ...
+# Two containers validate process failover only. For two hosts, run one instance on each
+# and mount the same NFS export at /data/files. Do not publish the internal HTTP port.
+x-resource: &resource
+  restart: unless-stopped
+  image: ${PROD_SERVER_IMAGE:?set PROD_SERVER_IMAGE}
+  command: [/app/bin/resource_server]
+  mem_limit: 768m
+  environment: &resource-env
+    CHAT_CONFIG_FILE: /config/resource.ini
+    CHAT_RESOURCE_HOST: 0.0.0.0
+    CHAT_RESOURCE_HTTP_PORT: "8085"
+    CHAT_RESOURCE_RPC_PORT: "50065"
+    CHAT_RESOURCE_REQUIRE_NFS: "true"
+    CHAT_FILE_STORAGE_ROOT: /data/files
+    CHAT_FILE_STORAGE_KEY: ${PROD_FILE_KEY:?set PROD_FILE_KEY}
+    CHAT_MYSQL_HOST: mysql
+    CHAT_MYSQL_PORT: "3306"
+    CHAT_MYSQL_USER: chat
+    CHAT_MYSQL_PASSWORD: ${PROD_MYSQL_PASSWORD:?set PROD_MYSQL_PASSWORD}
+    CHAT_MYSQL_SCHEMA: wgt
+    CHAT_REDIS_HOST: redis
+    CHAT_REDIS_PORT: "6379"
+    CHAT_REDIS_PASSWORD: ${PROD_REDIS_PASSWORD:?set PROD_REDIS_PASSWORD}
+    CHAT_PEER_RPC_TOKEN: ${PROD_PEER_TOKEN:?set PROD_PEER_TOKEN}
+    CHAT_GRPC_TLS_MODE: mtls
+    CHAT_GRPC_CA_CERT: /certs/ca.crt
+    CHAT_GRPC_CERT: /certs/resource.crt
+    CHAT_GRPC_KEY: /certs/resource.key
+  volumes:
+    - ./deploy/resource-production.ini:/config/resource.ini:ro
+    - ./run/production/certs:/certs:ro
+    - resource-nfs:/data/files
+  healthcheck:
+    test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/health/ready', timeout=3)"]
+    interval: 10s
+    timeout: 4s
+    retries: 3
+services:
+  resource1:
+    <<: *resource
+  resource2:
+    <<: *resource
+  resource-edge:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    ports: ["${RESOURCE_HTTPS_PORT:-8443}:443"]
+    volumes:
+      - ./deploy/resource-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./run/production/certs:/certs:ro
+    depends_on:
+      resource1: {condition: service_healthy}
+      resource2: {condition: service_healthy}
+  chatserver1:
+    environment:
+      CHAT_RESOURCE_RPC_ENDPOINTS: resource1:50065,resource2:50065
+  gate:
+    environment:
+      CHAT_RESOURCE_BASE_URL: ${CHAT_RESOURCE_BASE_URL:?set HTTPS resource public URL}
+volumes:
+  resource-nfs:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${RESOURCE_NFS_HOST:?set RESOURCE_NFS_HOST},rw,nfsvers=4,hard,local_lock=none
+      device: ":${RESOURCE_NFS_EXPORT:?set RESOURCE_NFS_EXPORT}"

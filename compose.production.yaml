@@ -19,8 +19,6 @@ x-chat-environment: &chat-environment
   CHAT_GATE_STATUS_TOKEN: ${PROD_GATE_STATUS_TOKEN:?set PROD_GATE_STATUS_TOKEN}
   CHAT_GATE_VARIFY_TOKEN: ${PROD_GATE_VARIFY_TOKEN:?set PROD_GATE_VARIFY_TOKEN}
   CHAT_PEER_RPC_TOKEN: ${PROD_PEER_TOKEN:?set PROD_PEER_TOKEN}
-  CHAT_FILE_STORAGE_ROOT: /data/files
-  CHAT_FILE_STORAGE_KEY: ${PROD_FILE_KEY:?set PROD_FILE_KEY}
   CHAT_LOG_LEVEL: info
   CHAT_LOG_CONSOLE: "true"
   CHAT_LOG_FILE_ENABLED: "false"
@@ -46,6 +44,7 @@ services:
     volumes:
       - production-mysql:/var/lib/mysql
       - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./database/migrations/002_resources.sql:/docker-entrypoint-initdb.d/002-resources.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -uchat -D wgt -e 'SELECT 1' >/dev/null"]
       interval: 10s
@@ -113,15 +112,40 @@ services:
     environment:
       <<: *chat-environment
       CHAT_CONFIG_FILE: /config/chat.ini
+      CHAT_RESOURCE_RPC_ENDPOINTS: resource1:50065
     volumes:
       - ./deploy/production/chat.ini:/config/chat.ini:ro
       - ./run/production/certs:/certs:ro
-      - production-files:/data/files
     ports: ["127.0.0.1:18989:8989"]
     depends_on:
       mysql: {condition: service_healthy}
       redis: {condition: service_healthy}
       status: {condition: service_started}
+      resource1: {condition: service_healthy}
+
+  resource1:
+    <<: *runtime
+    image: ${PROD_SERVER_IMAGE:?set PROD_SERVER_IMAGE}
+    mem_limit: 768m
+    command: ["/app/bin/resource_server"]
+    environment:
+      <<: *chat-environment
+      CHAT_CONFIG_FILE: /config/resource.ini
+      CHAT_FILE_STORAGE_KEY: ${PROD_FILE_KEY:?set PROD_FILE_KEY}
+    volumes:
+      - ./deploy/production/resource.ini:/config/resource.ini:ro
+      - ./run/production/certs:/certs:ro
+      - production-files:/data/files
+    ports: ["127.0.0.1:18085:8085"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 4s
+      retries: 6
+      start_period: 30s
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
 
   gate:
     <<: *runtime
@@ -131,6 +155,7 @@ services:
     environment:
       <<: *chat-environment
       CHAT_CONFIG_FILE: /config/gate.ini
+      CHAT_RESOURCE_BASE_URL: ${PROD_RESOURCE_BASE_URL:-https://api.deepecho.top/api/resources/v1}
     volumes:
       - ./deploy/production/gate.ini:/config/gate.ini:ro
       - ./run/production/certs:/certs:ro

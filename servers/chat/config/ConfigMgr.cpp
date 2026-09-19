@@ -33,6 +33,12 @@ ConfigMgr::ConfigMgr() {
             _config_map[section]._section_datas[key] = value;
         }
     };
+    override_value("Resource", "Host", "CHAT_RESOURCE_HOST");
+    override_value("Resource", "HttpPort", "CHAT_RESOURCE_HTTP_PORT");
+    override_value("Resource", "RpcPort", "CHAT_RESOURCE_RPC_PORT");
+    override_value("Resource", "RequireNfs", "CHAT_RESOURCE_REQUIRE_NFS");
+    override_value("Resource", "PublicUrl", "CHAT_RESOURCE_BASE_URL");
+    override_value("Resource", "Endpoints", "CHAT_RESOURCE_RPC_ENDPOINTS");
     override_value("Redis", "Host", "CHAT_REDIS_HOST");
     override_value("Redis", "Port", "CHAT_REDIS_PORT");
     override_value("Redis", "Passwd", "CHAT_REDIS_PASSWORD");

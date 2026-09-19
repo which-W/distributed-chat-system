@@ -3,7 +3,7 @@ param(
 )
 
 $runDir = Join-Path $BuildDir 'run'
-foreach ($name in @('gate_server', 'chatserver2', 'chatserver1', 'status_server', 'varify_server')) {
+foreach ($name in @('resource2', 'resource1', 'gate_server', 'chatserver2', 'chatserver1', 'status_server', 'varify_server')) {
     $pidFile = Join-Path $runDir "$name.pid"
     if (-not (Test-Path $pidFile)) {
         continue

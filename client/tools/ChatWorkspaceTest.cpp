@@ -27,8 +27,11 @@
 #include "LoginDialog.h"
 #include <QStackedWidget>
 
+int runResourceBoundaryTests();
+
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
+    if (app.arguments().contains("--resource-only")) return runResourceBoundaryTests();
     qInstallMessageHandler([](QtMsgType type, const QMessageLogContext&, const QString& message) {
         if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
             fprintf(stderr, "%s\n", message.toUtf8().constData());
@@ -41,12 +44,6 @@ int main(int argc, char** argv) {
     ThemeManager::instance().initialize();
     auto user = UserMgr::Getinstance();
     user->SetUserInfo(std::make_shared<UserInfo>(1, QStringLiteral("我"), ":/res/head_1.jpg"));
-    ChatWindow window;
-    QFontDatabase::addApplicationFont(":/include/Font/ElaAwesome.ttf");
-    auto* workspace = window.findChild<ChatDialog*>();
-    auto* edit = workspace->findChild<MessageTextEdit*>();
-    auto* search = workspace->findChild<QLineEdit*>("search_line");
-    auto* results = workspace->findChild<SearchList*>();
     int failures = 0;
     auto check = [&failures](bool ok, const char* message) {
         if (!ok) { fprintf(stderr, "%s\n", message); ++failures; }
@@ -78,6 +75,13 @@ int main(int argc, char** argv) {
     }
     if (app.arguments().contains("--auth-only"))
         return failures ? 1 : 0;
+    // 登录回归只需认证控件，聊天工作区延后到工作区测试时创建。
+    ChatWindow window;
+    QFontDatabase::addApplicationFont(":/include/Font/ElaAwesome.ttf");
+    auto* workspace = window.findChild<ChatDialog*>();
+    auto* edit = workspace->findChild<MessageTextEdit*>();
+    auto* search = workspace->findChild<QLineEdit*>("search_line");
+    auto* results = workspace->findChild<SearchList*>();
     window.show();
     QDir().mkpath("ui-preview");
     settle();
