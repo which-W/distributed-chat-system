@@ -23,4 +23,5 @@ done
 # Do not mount the CA signing key in running services.
 mkdir -p run/production/ca-private
 mv "$out/ca.key" run/production/ca-private/ca.key
+sh deploy/production/generate-resource-cert.sh
 echo "Internal certificates created. Back up run/production securely; renew leaf certificates before one year."

@@ -1,3 +1,4 @@
+#include "AvatarLoader.h"
 #include "FriendInfoPage.h"
 #include "ChatGraphics.h"
 #include "ThemeManager.h"
@@ -33,7 +34,7 @@ FriendInfoPage::FriendInfoPage(QWidget* parent) : QWidget(parent) {
         body->addWidget(label);
     }
     body->addSpacing(10);
-    auto* chat = new QPushButton(tr("发送消息"), card);
+    auto* chat = new QPushButton(tr("????"), card);
     chat->setObjectName("startFriendChat");
     chat->setMinimumHeight(44);
     body->addWidget(chat);
@@ -48,13 +49,13 @@ FriendInfoPage::FriendInfoPage(QWidget* parent) : QWidget(parent) {
 void FriendInfoPage::SetInfo(std::shared_ptr<UserInfo> user) {
     _user_info = user;
     if (!user) return;
-    avatar_->setPixmap(roundAvatar(QPixmap(user->_icon), 88));
+    AvatarLoader::instance().bind(avatar_,user->_uid,user->_icon,88);
     name_->setText(user->_name);
     uid_->setText(tr("UID  %1").arg(user->_uid));
-    nick_->setText(tr("昵称   %1").arg(user->_nick.isEmpty() ? user->_name : user->_nick));
+    nick_->setText(tr("??   %1").arg(user->_nick.isEmpty() ? user->_name : user->_nick));
     const auto friendInfo = UserMgr::Getinstance()->GetFriendById(user->_uid);
     const auto remark = friendInfo ? friendInfo->_back : QString();
-    remark_->setText(tr("备注   %1").arg(remark.isEmpty() ? tr("未设置") : remark));
+    remark_->setText(tr("??   %1").arg(remark.isEmpty() ? tr("???") : remark));
 }
 void FriendInfoPage::applyTheme() {
     const bool dark = ThemeManager::instance().themeMode() == ElaThemeType::Dark;

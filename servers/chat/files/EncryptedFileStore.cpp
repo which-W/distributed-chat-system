@@ -19,7 +19,7 @@ constexpr char Magic[] = "CHATFILE1";
 constexpr std::size_t HeaderBytes = 9 + 16;
 constexpr std::size_t TagBytes = crypto_aead_xchacha20poly1305_ietf_ABYTES;
 
-// 共享目录可能同时被多个 ChatServer 使用，原生文件锁用于保护单个密文附件。
+// 共享目录可能同时被多个资源实例使用，原生文件锁用于保护单个密文附件的记录读写。
 class CrossProcessFileLock {
   public:
     CrossProcessFileLock(const std::filesystem::path& path, bool shared) {
@@ -89,7 +89,7 @@ void writeLength(std::ofstream& output, std::uint32_t value) {
     output.write(reinterpret_cast<const char*>(bytes), sizeof(bytes));
 }
 
-// Called after closing the stream and while holding the attachment lock.
+// 关闭 C++ 文件流后、仍持有附件锁时执行，只有持久化成功才能向上层返回确认偏移。
 void syncFile(const std::filesystem::path& path) {
 #ifdef _WIN32
     HANDLE handle = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -159,7 +159,7 @@ EncryptedFileStore::nonceFor(const std::array<unsigned char, 16>& prefix,
 }
 
 void EncryptedFileStore::create(const std::string& transfer_id) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutexes_[std::hash<std::string>{}(transfer_id) % mutexes_.size()]);
     const auto path = pathFor(transfer_id);
     auto lock_path = path;
     lock_path += ".lock";
@@ -180,7 +180,7 @@ void EncryptedFileStore::create(const std::string& transfer_id) {
     output.write(reinterpret_cast<const char*>(prefix.data()), prefix.size());
     closeAndSync(output, path);
 #ifndef _WIN32
-    // Persist the directory entry before the database advertises a new upload.
+    // 数据库发布新上传前，先持久化目录项，避免仅文件内容落盘而文件名在故障后丢失。
     const int directory = ::open(root_.c_str(), O_RDONLY | O_DIRECTORY);
     if (directory < 0)
         throw std::runtime_error("cannot open attachment directory");
@@ -196,11 +196,11 @@ std::uint64_t EncryptedFileStore::append(const std::string& transfer_id, std::ui
     if (plaintext.empty() || plaintext.size() > chat::files::PlainChunkBytes ||
         offset % chat::files::PlainChunkBytes != 0)
         throw std::invalid_argument("invalid chunk");
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutexes_[std::hash<std::string>{}(transfer_id) % mutexes_.size()]);
     const auto path = pathFor(transfer_id);
     auto lock_path = path;
     lock_path += ".lock";
-    // 多个 ChatServer 共享目录时，用操作系统文件锁串行化同一附件的读写。
+    // 多个资源实例共享目录时，用操作系统文件锁串行化同一附件的读写。
     CrossProcessFileLock cross_process_guard(lock_path, false);
     std::ifstream header(path, std::ios::binary);
     std::array<char, 9> magic{};
@@ -212,7 +212,7 @@ std::uint64_t EncryptedFileStore::append(const std::string& transfer_id, std::ui
     }
     const auto chunk_index = offset / chat::files::PlainChunkBytes;
     const auto file_size = std::filesystem::file_size(path);
-    // Confirmed records must exist in full. Seeking past EOF alone does not fail.
+    // 已确认记录必须完整存在；仅 seek 越过文件末尾并不报错，因此还需检查实际文件长度。
     for (std::uint64_t index = 0; index < chunk_index; ++index) {
         const auto confirmed_size = readLength(header);
         if (confirmed_size != chat::files::PlainChunkBytes ||
@@ -234,8 +234,8 @@ std::uint64_t EncryptedFileStore::append(const std::string& transfer_id, std::ui
         throw std::runtime_error("attachment encryption failed");
     }
     if (confirmed_end < file_size) {
-        // A crash may precede the metadata CAS, or another node may have won it.
-        // Never rewrite a nonce/offset or truncate later confirmed records.
+        // 密文可能已落盘而数据库偏移尚未提交，也可能已被其他实例提交。
+        // 只接受完全相同的记录重放；不得复用同一 nonce 覆写内容或截断后续记录。
         const auto existing_size = readLength(header);
         if (existing_size != plaintext.size() || file_size - confirmed_end < 4 + ciphertext_size)
             throw std::runtime_error(
@@ -262,7 +262,7 @@ std::vector<unsigned char> EncryptedFileStore::read(const std::string& transfer_
     if (offset % chat::files::PlainChunkBytes != 0 || maximum_bytes == 0) {
         throw std::invalid_argument("invalid download offset");
     }
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutexes_[std::hash<std::string>{}(transfer_id) % mutexes_.size()]);
     const auto path = pathFor(transfer_id);
     auto lock_path = path;
     lock_path += ".lock";
@@ -318,19 +318,18 @@ std::string EncryptedFileStore::sha256(const std::string& transfer_id,
 }
 
 void EncryptedFileStore::remove(const std::string& transfer_id) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutexes_[std::hash<std::string>{}(transfer_id) % mutexes_.size()]);
     const auto path = pathFor(transfer_id);
     auto lock_path = path;
     lock_path += ".lock";
     std::error_code ignored;
     if (!std::filesystem::exists(lock_path, ignored)) {
-        std::filesystem::remove(path, ignored);
+        std::filesystem::remove(path);
         return;
     }
     {
         CrossProcessFileLock cross_process_guard(lock_path, false);
-        std::filesystem::remove(path, ignored);
+        std::filesystem::remove(path);
     }
-    // Windows 需要先关闭锁文件句柄，才能立即删除旁车文件。
-    std::filesystem::remove(lock_path, ignored);
+    // 在线清理保留旁车锁文件，避免重建后出现不同 inode，使新旧持锁者失去互斥。
 }

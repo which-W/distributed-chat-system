@@ -1,4 +1,5 @@
 #include "TcpMgr.h"
+#include "ResourceHttp.h"
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QNetworkProxy>
@@ -229,6 +230,8 @@ void TcpMgr::mergeFriendSnapshot(const QJsonObject& response) {
 }
 
 void TcpMgr::initHandlers() {
+    _handlers.insert(Req::ID_RESOURCE_TOKEN_RSP,[this](Req,int,QByteArray data) { emit sig_resource_token(QJsonDocument::fromJson(data).object()); });
+    _handlers.insert(Req::ID_AVATAR_CHANGED,[this](Req,int,QByteArray data) { emit sig_avatar_changed(QJsonDocument::fromJson(data).object()); });
     // 登录回包
     _handlers.insert(Req::ID_CHAT_LOGIN_RSP, [this](Req id, int len, QByteArray data) {
         Q_UNUSED(len);
@@ -879,6 +882,8 @@ void TcpMgr::writeFrame(Req reqId, const QByteArray& data) {
 }
 
 void TcpMgr::slot_disconnect() {
+    if (_authenticated) writeFrame(Req::ID_RESOURCE_REVOKE_REQ,QByteArrayLiteral("{}"));
+    ResourceHttp::instance().reset();
     _outbox_timer.stop();
     _messages.close();
     _manual_disconnect = true;

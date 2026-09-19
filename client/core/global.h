@@ -52,6 +52,10 @@ enum Req {
     ID_DOWNLOAD_FILE_CHUNK = 1033,
     ID_DOWNLOAD_FILE_DONE = 1034,
     ID_FILE_TRANSFER_CANCEL = 1035,
+    ID_RESOURCE_TOKEN_REQ = 1036,
+    ID_RESOURCE_TOKEN_RSP = 1037,
+    ID_RESOURCE_REVOKE_REQ = 1038,
+    ID_AVATAR_CHANGED = 1039,
 };
 
 enum Modules {
@@ -84,6 +88,7 @@ struct ServerInfo {
     QString Host;
     QString Port;
     QString Token;
+    QString ResourceBaseUrl;
     QString Transport;
     QString TlsServerName;
     bool AllowInsecure = false;

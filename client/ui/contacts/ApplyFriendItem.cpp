@@ -1,3 +1,4 @@
+#include "AvatarLoader.h"
 #include "ApplyFriendItem.h"
 #include "ChatGraphics.h"
 
@@ -6,7 +7,7 @@ ApplyFriendItem::ApplyFriendItem(QWidget* parent)
     ui->setupUi(this);
     SetItemType(ListItemType::APPLY_FRIEND_ITEM);
     ui->addBtn->SetState("normal", "hover", "press");
-    ui->addBtn->setText(tr("接受"));
+    ui->addBtn->setText(tr("??"));
     ui->addBtn->hide();
     connect(ui->addBtn, &ClickedBtn::clicked,
             [this]() { emit this->sig_auth_friend(_apply_info); });
@@ -18,25 +19,26 @@ ApplyFriendItem::~ApplyFriendItem() {
 
 void ApplyFriendItem::SetInfo(std::shared_ptr<ApplyInfo> apply_info) {
     _apply_info = apply_info;
-    // 加载图片
+    // ????
     QPixmap pixmap(_apply_info->_icon);
 
-    // 设置图片自动缩放
+    // ????????
     ui->icon_lb->setPixmap(
         roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
+    if (_apply_info->_uid > 0) AvatarLoader::instance().bind(ui->icon_lb,_apply_info->_uid,_apply_info->_icon,48);
 
     ui->user_name_lb->setTextFormat(Qt::PlainText);
     ui->user_name_lb->setText(_apply_info->_name);
     ui->user_chat_lb->setTextFormat(Qt::PlainText);
     QString _msg = _apply_info->_desc.isEmpty()
-        ? tr("UID %1 · 请求添加你为好友").arg(_apply_info->_uid) : _apply_info->_desc;
+        ? tr("UID %1 ? ????????").arg(_apply_info->_uid) : _apply_info->_desc;
     QByteArray msgBytes = _msg.toUtf8();
     QString displayMsg = _msg;
     int maxBytes = 50;
 
     if (msgBytes.size() > maxBytes) {
-        // 从前面截取部分字节，再转回字符串
+        // ????????????????
         QString truncated = QString::fromUtf8(msgBytes.left(maxBytes));
         displayMsg = truncated + "...";
     }

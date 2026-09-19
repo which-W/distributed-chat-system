@@ -1,29 +1,30 @@
 #include "ChatItemBase.h"
+#include "AvatarLoader.h"
 #include "ChatGraphics.h"
 
 ChatItemBase::ChatItemBase(ChatRole role, QWidget* parent) : QWidget(parent), m_role(role) {
-    // 基本消息框组件初始化
+    // ??????????
     m_pNameLabel = new QLabel();
     m_pNameLabel->setObjectName("chat_user_name");
     QFont font("Microsoft YaHei");
     font.setPointSize(8);
-    // 名称设置
+    // ????
     m_pNameLabel->setFont(font);
     m_pNameLabel->setFixedHeight(25);
-    // 图标设置
+    // ????
     m_pIconLabel = new QLabel();
     m_pIconLabel->setScaledContents(true);
     m_pIconLabel->setFixedSize(36, 36);
-    // 聊天气泡组件
+    // ??????
     m_pBubble = new QWidget();
-    // 创建主布局
+    // ?????
     QGridLayout* pGLayout = new QGridLayout();
     pGLayout->setVerticalSpacing(3);
     pGLayout->setHorizontalSpacing(3);
     pGLayout->setContentsMargins(3, 3, 3, 3);
-    // 将消息框推到一边
+    // ????????
     QSpacerItem* pSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
-    // 区分“自己”和“对方”的布局分支
+    // ????????????????
     if (m_role == ChatRole::Self) {
         m_pNameLabel->setContentsMargins(0, 0, 8, 0);
         m_pNameLabel->setAlignment(Qt::AlignRight);
@@ -60,3 +61,5 @@ void ChatItemBase::setWidget(QWidget* w) {
     delete m_pBubble;
     m_pBubble = w;
 }
+void ChatItemBase::setUserAvatar(int uid,const QString& fallback) { AvatarLoader::instance().bind(m_pIconLabel,uid,fallback,36); }
+

@@ -76,6 +76,10 @@ Start-ChatProcess -Name 'chatserver1' -Executable (Join-Path $binDir 'chat_serve
     -ConfigFile (Join-Path $projectDir 'config\chatserver1.ini')
 Start-ChatProcess -Name 'chatserver2' -Executable (Join-Path $binDir 'chat_server.exe') `
     -ConfigFile (Join-Path $projectDir 'config\chatserver2.ini')
+Start-ChatProcess -Name 'resource1' -Executable (Join-Path $binDir 'resource_server.exe') `
+    -ConfigFile (Join-Path $projectDir 'config\resource1.ini')
+Start-ChatProcess -Name 'resource2' -Executable (Join-Path $binDir 'resource_server.exe') `
+    -ConfigFile (Join-Path $projectDir 'config\resource2.ini')
 Start-ChatProcess -Name 'gate_server' -Executable (Join-Path $binDir 'gate_server.exe') `
     -ConfigFile (Join-Path $projectDir 'config\gate.ini')
 

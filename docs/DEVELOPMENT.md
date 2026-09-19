@@ -23,9 +23,10 @@ sh scripts/configure-fresh.sh linux-server-release
 
 ## 测试
 
-CTest 包含 C++ 密码哈希测试；系统安装 Node 后，还会运行 VarifyServer 测试套件：
+测试随构建选项而异。当前仓库缺少根 `tests/` 目录，不能把服务端 CTest 运行成功视为密码哈希或端到端测试已经执行。先列出实际注册的测试；桌面客户端有独立 CTest 用例，Node 测试单独运行：
 
 ```sh
+ctest --test-dir build/linux-server-release -N
 ctest --test-dir build/linux-server-release --output-on-failure
 cd VarifyServer
 npm ci
@@ -77,8 +78,11 @@ cmake --fresh --preset linux-server-release \
 - 已认证的聊天处理器从服务端 Session 获取操作人 UID，请求中的 `uid` 和
   `fromuid` 不参与授权判断。
 
-CI 覆盖 Linux Server Release、Windows Client Release、CTest、Node 依赖检查、
-Node 语法与测试以及 C++ 格式检查。
+CI 配置包含 Linux Server Release、Windows Client Release、CTest、Node 依赖检查与 Node 语法和测试。具体流程以 `.github/workflows/ci.yml` 为准。
 
 双机拓扑、健康心跳、防火墙边界和进程配置选择请参见
-`docs/TWO_SERVER_DEPLOYMENT.md`。
+`docs/deployment/two-server.md`。
+
+## 演示与性能验证的当前限制
+
+当前工作区缺少 `tests/e2e/chat_e2e.py`，`scripts/demo.sh` 无法完成其 E2E 阶段；故障与基准脚本也需要先检查测试模块及运行环境。不要把这些脚本作为已验证的一键入口。脚本用途见 [脚本导航](../scripts/README.md)。

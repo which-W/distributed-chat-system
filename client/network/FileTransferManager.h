@@ -2,6 +2,7 @@
 
 #include "Singleton.h"
 #include "global.h"
+#include "ResourceHttp.h"
 
 #include <QCryptographicHash>
 #include <QFile>
@@ -13,6 +14,7 @@
 class FileTransferManager : public QObject, public Singleton<FileTransferManager> {
     Q_OBJECT
     friend class Singleton<FileTransferManager>;
+    friend class ResourceBoundaryTests;
 
   public:
     // 当前实现对上传和下载分别串行化，避免多个大文件同时占满聊天连接。
@@ -39,6 +41,10 @@ class FileTransferManager : public QObject, public Singleton<FileTransferManager
     void resumeActiveTransfers();
     void failUpload(const QString& reason);
     QTimer uploadAckTimer_;
+    quint64 uploadGeneration_ = 0;
+    quint64 downloadGeneration_ = 0;
+    ResourceHttp::RequestHandle uploadRequest_, downloadRequest_;
+    void httpJson(Req response, const QByteArray& method, const QString& path, const QByteArray& body = {});
 
     struct UploadState {
         // 服务端只确认已持久化的 offset，断线后以响应值为续传起点。

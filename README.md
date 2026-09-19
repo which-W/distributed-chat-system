@@ -1,305 +1,122 @@
 # distributed-chat-system
 
+基于 **C++17、Qt、Boost.Asio 和 gRPC** 的分布式即时通信系统，包含桌面客户端、账号网关、聊天节点、状态服务、资源服务与邮箱验证码服务。
 
-## 前置条件
+[构建与运行](docs/guides/build.md) · [系统架构](docs/ARCHITECTURE.md) · [文档导航](docs/README.md) · [参与贡献](CONTRIBUTING.md)
 
-- CMake 3.24+
-- Ninja
-- C++17 编译器（Linux 推荐 GCC 11+ 或 Clang 14+）
-- vcpkg
-- Node.js 18+
-- Redis 6+
-- MySQL 8+
-- 构建桌面客户端时额外安装受维护的 Qt 6；Windows 公网 TLS 不再推荐 Qt 5.12
+## 功能
 
+- **账号与好友**：邮箱验证码注册、登录、密码重置与好友管理。
+- **即时消息**：TCP 长连接、跨节点转发、离线消息、ACK 确认与客户端本地消息存储。
+- **文件与资源**：文件分片上传、断点续传，以及独立的资源上传与下载服务。
+- **多节点协作**：通过 Status 与 Redis 进行聊天节点发现、健康检查和负载选择。
+- **安全与观测**：密码哈希、一次性登录票据、可配置的 TLS/mTLS，以及结构化日志。
 
-## 组件
+项目包含本地开发与生产部署配置。多聊天节点不代表整套系统已具备高可用能力；默认部署中的 Gate、Status、MySQL 和 Redis 仍需单独规划冗余。
 
-- `gate_server`：HTTP 注册、重置密码和登录网关，默认端口 `8080`。
-- `status_server`：聊天节点发现、负载选择和 token 签发，默认 gRPC 端口 `5050`。
-- `chat_server`：TCP 聊天节点及节点间 gRPC 服务；同一可执行文件使用不同配置启动多个实例。
-- `VarifyServer`：Node.js 邮箱验证码 gRPC 服务，默认端口 `5000`。
-- `chat_client`：Qt 桌面客户端，默认不参与服务器构建。
+## 架构
 
 ```mermaid
 flowchart LR
-    Client[Qt / Headless Client] -->|HTTPS| Gate[Gate Server]
-    Gate -->|gRPC + request_id| Verify[Varify Server]
-    Gate -->|gRPC + request_id| Status[Status Server]
-    Status --> Redis[(Redis)]
+    Client[Qt 客户端] -->|HTTP / HTTPS| Gate[Gate Server]
+    Gate -->|gRPC| Verify[邮箱验证码服务]
+    Gate -->|gRPC| Status[Status Server]
+    Client -->|TCP / TLS| Chat[Chat Server 集群]
+    Client -->|HTTP / HTTPS| Resource[Resource Server]
+    Chat -->|资源操作| Resource
     Gate --> MySQL[(MySQL)]
-    Client -->|TLS TCP| Chat1[Chat Server 1]
-    Client -->|TLS TCP| Chat2[Chat Server 2]
-    Chat1 <-->|gRPC mTLS| Chat2
-    Chat1 --> Redis
-    Chat2 --> Redis
-    Chat1 --> MySQL
-    Chat2 --> MySQL
+    Gate --> Redis[(Redis)]
+    Status --> Redis
+    Chat --> MySQL
+    Chat --> Redis
 ```
 
-完整架构、信任边界和消息时序见 [架构与消息流](docs/ARCHITECTURE.md)。
+HTTPS 与 TLS 是否启用取决于部署配置。服务职责和消息时序见 [系统架构](docs/ARCHITECTURE.md)，资源服务的接入和迁移见 [生产部署指南](deploy/production/README.md)。
 
-## 一键双节点演示
+| 组件 | 位置 | 职责 |
+| --- | --- | --- |
+| `chat_client` | `client/` | Qt 桌面界面、通信与本地消息存储 |
+| `gate_server` | `servers/gate/` | 注册、登录和账号接口 |
+| `status_server` | `servers/status/` | 节点选择与登录票据签发 |
+| `chat_server` | `servers/chat/` | 聊天会话、消息投递与节点间 RPC |
+| `resource_server` | `servers/resource/` | 资源存储与上传下载接口 |
+| 验证码服务 | `VarifyServer/` | Node.js 邮箱验证码 gRPC 服务 |
 
-只需 Git、Docker 和 Compose。在 Linux 上执行：
+## 快速开始
 
-```bash
-sh scripts/demo.sh          # 成功后自动清理
-sh scripts/demo.sh --keep   # 保留服务和数据以便检查
+### 1. 准备环境
+
+源码构建需要 CMake **3.25+**（仓库使用版本 6 的 Presets）、Ninja、C++17 编译器和 vcpkg。服务端还需要 MySQL 8、Redis 与 Node.js；Node CI 使用版本 22。桌面客户端的 CI 使用 **Qt 6.6.3 + MSVC**。
+
+克隆仓库后，在根目录初始化依赖子模块：
+
+```sh
+git submodule update --init --recursive
 ```
 
-脚本实时生成开发密钥，启动 MySQL、Redis、Mailpit、Varify、Gate、Status、两个 ChatServer，并用无界面协议客户端完成注册、跨节点消息、离线幂等/ACK 和文件断点续传。报告保存为 JSON、JUnit 和 Markdown；故障恢复套件可在 `--keep` 后运行 `sh scripts/fault-test.sh`。脚本没有固定验证码、认证绕过或测试专用生产接口。
+### 2. 构建服务端
 
-## 服务端目录结构
+Linux：
 
-三个 C++ 服务统一放在 `servers/` 下：
-
-```text
-servers/
-├── gate/
-│   ├── app/       # 程序入口
-│   ├── config/    # INI 配置读取
-│   ├── core/      # 常量和通用基类
-│   ├── network/   # HTTP 服务、连接和 IO 池
-│   ├── rpc/       # Status / Verify gRPC 客户端
-│   ├── service/   # 注册、登录等业务编排
-│   └── storage/   # MySQL / Redis 访问
-├── status/
-│   ├── app/       # 程序入口
-│   ├── config/    # 配置
-│   ├── core/      # 常量和通用基类
-│   ├── runtime/   # Asio 运行时
-│   ├── rpc/       # Status RPC 实现与 Chat RPC 客户端
-│   └── storage/   # 分布式锁、MySQL 和 Redis
-└── chat/
-    ├── app/       # 程序入口
-    ├── config/    # 配置
-    ├── core/      # 常量、数据结构和通用基类
-    ├── files/     # 文件处理
-    ├── network/   # TCP 服务、会话和消息帧
-    ├── rpc/       # 节点间 RPC 和 Status RPC 客户端
-    ├── runtime/   # IO 线程池
-    ├── service/   # 聊天业务、worker 和用户会话管理
-    └── storage/   # 分布式锁、MySQL 和 Redis
-```
-
-Qt 客户端统一放在 `client/` 下：`app/` 是入口和主窗口，`core/` 是全局定义，`model/` 是数据模型与用户状态，`network/` 是 HTTP/TCP 通信，`ui/` 按 `auth / chat / contacts / common` 拆分界面组件，`resources/` 保存 QRC、图片和 QSS。客户端构建规则位于 `client/CMakeLists.txt`。
-
-依赖由根目录的 `vcpkg.json` 声明，不再使用任何写死的本机库路径。
-
-## Linux 服务器构建
-
-```bash
-export VCPKG_ROOT=/opt/vcpkg
-cmake --preset linux-server-release
+```sh
+export VCPKG_ROOT=/path/to/vcpkg
+cmake --fresh --preset linux-server-release
 cmake --build --preset linux-server-release -j
 npm ci --prefix VarifyServer
 ```
 
-如果脚本没有执行权限：
-
-```bash
-chmod +x scripts/*.sh
-```
-
-## Windows CMake 构建
-
-Windows 也不需要打开 Visual Studio，但仍需要安装 MSVC Build Tools、Ninja 和 vcpkg：
+Windows 请在 MSVC Developer PowerShell 中执行：
 
 ```powershell
 $env:VCPKG_ROOT = 'C:\tools\vcpkg'
-cmake --preset windows-server-release
+cmake --fresh --preset windows-server-release
 cmake --build --preset windows-server-release
 npm ci --prefix VarifyServer
 ```
 
-MySQL Connector/C++ 的 JDBC 兼容接口要求静态 vcpkg triplet，因此 Windows 服务器预设使用仓库内的 `x64-windows-static-release`，宿主工具使用 `x64-windows-release`。两者只构建发布版依赖，避免 vcpkg 同时生成体积很大的 Debug/Release 库，并会跳过 libmysql 在 Windows 上可选且可能卡住的 WSL ABI 检查。
+### 3. 配置并运行
 
-## Qt 客户端构建
+按 [构建与运行指南](docs/guides/build.md) 配置数据库、Redis、SMTP、内部服务凭据、文件存储和证书，再通过 `run_all` 启动本地服务。客户端构建与本地明文联调方式也在该指南中。
 
-初始化 ElaWidgetTools 子模块，并把 Qt 6.6.3 的 CMake 目录加入
-`CMAKE_PREFIX_PATH` 后执行：
+生产环境使用 [生产部署指南](deploy/production/README.md)；升级已有数据库时，先核对其中的迁移步骤。
 
-```bash
-git submodule update --init --recursive
-cmake --preset desktop-release -DCMAKE_PREFIX_PATH=/path/to/Qt/6.6.3/gcc_64
-cmake --build --preset desktop-release -j
+**演示脚本状态**：仓库保留了 `scripts/demo.sh`，但当前缺少它依赖的 `tests/e2e/chat_e2e.py`，暂不能作为开箱即用的演示入口。测试与相关工具的适用范围见 [开发指南](docs/DEVELOPMENT.md)。
+
+## 目录
+
+```text
+client/          Qt 桌面客户端
+servers/         Gate、Status、Chat、Resource 服务
+VarifyServer/    Node.js 验证码服务
+common/          服务端共享组件
+proto/           Protobuf 协议定义
+config/          运行配置
+cmake/           CMake 模块与 vcpkg triplet
+third_party/     第三方子模块
+scripts/         构建、启停、打包与验证入口
+bench/           性能测试工具
+database/       数据库结构与迁移
+deploy/         容器、代理与生产部署配置
+packaging/      安装包资源与第三方声明
+docs/           开发、架构和专题指南
 ```
 
-Client 的 Fluent 窗口依赖 ElaWidgetTools 及其 Qt Widgets 私有接口，因此必须使用
-Ela 官方验证的 Qt 6.6.3，不能把不同 Qt 版本构建的 Ela DLL 混用。
-`CMakeUserPresets.json` 保存本机 Qt/Ninja 路径并已被 Git 忽略。在
-**MSVC Developer PowerShell/Command Prompt** 中执行：
+`build/`、个人 CMake 预设、依赖下载和运行日志属于本机产物，不需要提交。根目录的 Compose 文件保留为标准入口，各自用途见 [文档导航](docs/README.md)。
 
-```powershell
-$env:VCPKG_ROOT = 'F:\DevTools\vcpkg'
-cmake --preset desktop-local
-cmake --build --preset desktop-local
-& '.\build\desktop-qt663-local\bin\chat_tls_probe.exe'
-```
+## 文档
 
-本机预设显式复制 `config/client.local.ini` 以保留单机明文联调；普通 `desktop-release` 使用安全的生产默认配置 `config/client.ini`。这里只使用 MSVC 的命令行编译环境，不使用 Visual Studio 工程或 IDE。Windows 构建完成后 CMake 会自动运行 `windeployqt`，把 Qt DLL 和 Schannel TLS 插件复制到客户端输出目录；探针必须显示 `TLS 可用: 是`。
+| 目标 | 入口 |
+| --- | --- |
+| 构建客户端或服务端 | [构建与运行](docs/guides/build.md) |
+| 开发与验证 | [开发指南](docs/DEVELOPMENT.md) |
+| 理解消息投递与节点协作 | [架构与消息流](docs/ARCHITECTURE.md) |
+| 部署到服务器 | [生产部署](deploy/production/README.md) · [双机部署](docs/deployment/two-server.md) |
+| 配置加密通信 | [公网 TLS](docs/deployment/public-edge-tls.md) · [内部 gRPC TLS](docs/deployment/grpc-tls.md) |
+| 制作 Windows 安装包 | [客户端打包](docs/guides/client-installer.md) |
+| 查找其他工具和专题 | [完整文档导航](docs/README.md) |
 
-## 配置
+## 贡献与许可证
 
-仓库中的 `config/*.ini` 只包含安全的本机默认值。生产环境不要把密码写入 Git，复制 `.env.example` 为 `.env` 并填写：
+欢迎提交问题反馈与 Pull Request。请附上复现步骤、运行环境和相关验证结果，详见 [贡献指南](CONTRIBUTING.md)。
 
-```bash
-cp .env.example .env
-```
-
-C++ 服务支持以下环境变量覆盖 INI：
-
-- `CHAT_REDIS_HOST`、`CHAT_REDIS_PORT`、`CHAT_REDIS_PASSWORD`、`CHAT_REDIS_USER`
-- `CHAT_MYSQL_HOST`、`CHAT_MYSQL_PORT`、`CHAT_MYSQL_PASSWORD`、`CHAT_MYSQL_USER`、`CHAT_MYSQL_SCHEMA`
-- `CHAT_LOG_LEVEL`、`CHAT_LOG_DIR`、`CHAT_LOG_CONSOLE`、`CHAT_LOG_FILE_ENABLED`
-- `CHAT_LOG_MAX_FILE_MB`、`CHAT_LOG_MAX_FILES`、`CHAT_LOG_QUEUE_CAPACITY`
-
-三个 C++ 服务使用固定在 `v1.0.0` 的 [LogSystem](https://github.com/which-W/LogSystem) 子模块输出 JSON Lines；Node 验证码服务输出相同核心字段。禁止记录密码、验证码、登录票据、RPC token、邮件/聊天正文及文件内容，邮箱只使用不可逆短摘要。性能复现和本机实测结果见 [性能测试](docs/PERFORMANCE.md)，当前验证状态见 [验证记录](docs/VALIDATION_REPORT.md)。
-
-验证码服务使用 `VARIFY_*` 环境变量，完整列表见 `.env.example`。`.env`、旧 `config.ini` 和 `VarifyServer/config.json` 已被 `.gitignore` 排除。
-
-初始化数据库：
-
-```bash
-mysql -u root -p < database/schema.sql
-```
-
-## 启动和停止
-
-Linux：
-
-```bash
-cmake --build build/linux-server-release --target run_all
-cmake --build build/linux-server-release --target stop_all
-```
-
-Windows：
-
-```powershell
-cmake --build build/windows-server-release --target run_all
-cmake --build build/windows-server-release --target stop_all
-```
-
-也可以在 Windows 双击 `start_server.bat`；它只是 CMake 目标的薄封装，不再直接启动 VS 产物。日志和 PID 位于对应构建目录的 `logs/` 与 `run/`。
-
-## 单机测试与多机部署
-
-`run_all`/`run-all` 只用于在一台机器上启动整套服务。正式部署时，每台机器只启动自己的进程，并通过 `CHAT_CONFIG_FILE` 指定配置：
-
-```bash
-# 网关机
-CHAT_CONFIG_FILE=/etc/distributed-chat/gate.ini /opt/distributed-chat/bin/gate_server
-
-# 状态服务器
-CHAT_CONFIG_FILE=/etc/distributed-chat/status.ini /opt/distributed-chat/bin/status_server
-
-# 聊天节点 1 / 2
-CHAT_CONFIG_FILE=/etc/distributed-chat/chatserver1.ini /opt/distributed-chat/bin/chat_server
-CHAT_CONFIG_FILE=/etc/distributed-chat/chatserver2.ini /opt/distributed-chat/bin/chat_server
-```
-
-多机配置规则：
-
-- `config/client.ini` 的 Gate `Host` 是客户端能够访问的网关公网 IP 或域名。
-- `config/gate.ini` 中 `VarifyServer.Host`、`StatusServer.Host` 是网关能够访问的服务内网 IP 或 DNS 名。
-- `config/status.ini` 中各 `chatserver*.Host/Port` 会原样返回客户端，必须是客户端能够访问的地址；外网客户端不能使用服务器内网 IP，除非通过 VPN 或专网接入。
-- `config/chatserver*.ini` 的 peer `Host/Port` 是聊天节点之间的 gRPC 内网地址和 RPC 端口（默认 `50055/50056`）。
-- 所有服务必须访问同一套 Redis 和 MySQL。它们应只开放在内网，不要把 `6379/3306` 暴露到公网。
-- `chatserver1`、`chatserver2` 等节点名必须在 `[chatservers]`、`[SelfServer]`、`[PeerServer]` 和 peer section 中完全一致，因为 Redis 路由保存的是节点名。
-
-推荐网络拓扑是：公网只开放 Gate `8080` 和客户端需要直连的 Chat TCP `8989/8990`；`5000`、`5050`、`50055/50056`、`6379`、`3306` 仅允许服务所在的内网或安全组访问。
-
-## gRPC TLS/mTLS
-
-项目支持三种模式：
-
-- `insecure`：明文，只适合本机开发，且是仓库配置的默认值。
-- `tls`：客户端验证服务器证书，链路加密。
-- `mtls`：双方都验证证书，既加密又认证服务身份；生产环境推荐。
-
-C++ 服务通过每个 INI 的 `[GrpcTLS]` 配置，也可以由环境变量覆盖：
-
-```ini
-[GrpcTLS]
-Mode = mtls
-CACert = /etc/distributed-chat/tls/ca.crt
-Cert = /etc/distributed-chat/tls/service.crt
-Key = /etc/distributed-chat/tls/service.key
-```
-
-```bash
-export CHAT_GRPC_TLS_MODE=mtls
-export CHAT_GRPC_CA_CERT=/etc/distributed-chat/tls/ca.crt
-export CHAT_GRPC_CERT=/etc/distributed-chat/tls/status.crt
-export CHAT_GRPC_KEY=/etc/distributed-chat/tls/status.key
-```
-
-每台机器应使用自己的叶子证书和私钥，所有证书由同一个内部 CA 签发。证书必须同时具有 `serverAuth` 和 `clientAuth` 扩展。私钥权限建议设为 `0600`，CA 私钥不要复制到业务服务器。
-
-当 `Host` 使用 IP，而服务器证书使用 DNS 名时，在对应远端 section 设置 `TLSName`：
-
-```ini
-[StatusServer]
-Host = 10.0.1.20
-Port = 5050
-TLSName = status
-```
-
-`TLSName` 必须出现在服务器证书的 SAN 中。生产环境更推荐让 `Host` 直接使用内部 DNS 名，并让证书 SAN 与该名称一致。不要用 `TLSName` 绕过错误证书；它只用于指定预期身份，证书仍会由 CA 校验。
-
-本地联调可以用 OpenSSL 脚本生成一套开发证书：
-
-```bash
-sh scripts/generate-dev-certs.sh certs
-```
-
-该脚本生成 `gate`、`status`、`chatserver1`、`chatserver2`、`varify` 证书，SAN 包含服务名、`localhost` 和 `127.0.0.1`。`certs/` 和私钥已被 Git 忽略。生产环境应使用企业 CA、Vault PKI、step-ca 或云厂商私有 CA，不要使用开发 CA。
-
-VarifyServer 使用单独的 Node.js 环境变量：
-
-```bash
-export VARIFY_GRPC_TLS_MODE=mtls
-export VARIFY_GRPC_CA_CERT=/etc/distributed-chat/tls/ca.crt
-export VARIFY_GRPC_CERT=/etc/distributed-chat/tls/varify.crt
-export VARIFY_GRPC_KEY=/etc/distributed-chat/tls/varify.key
-node VarifyServer/server.js
-```
-
-启用 mTLS 时，Gate、Status、Chat 和 Varify 必须同时切换；混用 `insecure` 与 `mtls` 的两端无法建立连接。当前 mTLS 验证“证书是否由内部 CA 签发”以及服务器 SAN；如需限制某个 RPC 只能由特定服务调用，还应增加基于证书身份的授权策略。
-
-这套配置只保护 gRPC 链路。对公网开放的 Gate HTTP 和客户端到 Chat 的自定义 TCP 协议仍需要单独加密：Gate 建议放在 Nginx/Caddy 后终止 HTTPS；聊天 TCP 应增加 TLS（或先限制在可信 VPN/专网内）。
-
-## Windows 客户端安装包
-
-离线 EXE 安装包、手动覆盖升级、发布配置与打包命令见
-[客户端安装包文档](docs/client-installer.md)。默认发布网关为 `https://api.deepecho.top`。
-
-## 部署端口
-
-需要开放或映射的默认端口：
-
-| 端口 | 协议 | 服务 |
-|---:|---|---|
-| 8080 | HTTP | GateServer |
-| 5000 | gRPC | VarifyServer |
-| 5050 | gRPC | StatusServer |
-| 8989 / 8990 | TCP | 两个 ChatServer 客户端入口 |
-| 50055 / 50056 | gRPC | 两个 ChatServer 节点间入口 |
-
-多主机部署时，修改 `config/status.ini` 中提供给客户端的聊天节点地址，以及两份 `config/chatserver*.ini` 中的 peer 地址。
-
-## Xray 备用入口
-
-保留现有 Nginx 主入口并增加 `VLESS + XHTTP + REALITY` 备用入口的服务端配置、
-Windows Xray/v2rayN/Mihomo 客户端配置、Qt Client 切换方式和完整验收流程见
-[Xray 备用入口部署与使用文档](docs/xray-backup-entry.md)。
-
-## 公网 HTTPS 与 Chat TLS
-
-Gate HTTPS、Chat TCP TLS、证书、防火墙规则和生产环境模板详见
-[公网 TLS 部署文档](docs/public-edge-tls.md)。可直接修改使用的示例位于
-`deploy/nginx/` 和 `deploy/config/`。生产客户端必须设置
-`AllowInsecure=false`，明文模式只能用于明确的本地联调。
-
-基于 Qt、Boost.Asio、gRPC、Redis 和 MySQL 的分布式即时通信系统。
+仓库根目录许可证为 [Apache-2.0](LICENSE)。第三方依赖及子项目的声明见各自目录与 [第三方声明](packaging/windows/licenses/THIRD-PARTY-NOTICES.txt)。

@@ -129,13 +129,16 @@ if(CHAT_BUILD_SERVERS)
     add_subdirectory(servers/gate)
     add_subdirectory(servers/status)
     add_subdirectory(servers/chat)
+    add_subdirectory(servers/resource)
 
-    install(TARGETS gate_server status_server chat_server RUNTIME DESTINATION bin)
+    install(TARGETS gate_server status_server chat_server resource_server RUNTIME DESTINATION bin)
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/config/gate.ini"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/status.ini"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/chatserver1.ini"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/chatserver2.ini"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/resource1.ini"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/resource2.ini"
         DESTINATION config)
 endif()
 
@@ -158,7 +161,7 @@ if(CHAT_BUILD_SERVERS)
             COMMAND powershell -NoProfile -ExecutionPolicy Bypass
                 -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/run-all.ps1"
                 -BuildDir "${CMAKE_BINARY_DIR}"
-            DEPENDS gate_server status_server chat_server
+            DEPENDS gate_server status_server chat_server resource_server
             USES_TERMINAL)
         add_custom_target(stop_all
             COMMAND powershell -NoProfile -ExecutionPolicy Bypass
@@ -168,7 +171,7 @@ if(CHAT_BUILD_SERVERS)
     else()
         add_custom_target(run_all
             COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/scripts/run-all.sh" "${CMAKE_BINARY_DIR}"
-            DEPENDS gate_server status_server chat_server
+            DEPENDS gate_server status_server chat_server resource_server
             USES_TERMINAL)
         add_custom_target(stop_all
             COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/scripts/stop-all.sh" "${CMAKE_BINARY_DIR}"

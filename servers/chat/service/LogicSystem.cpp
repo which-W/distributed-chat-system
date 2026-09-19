@@ -1,6 +1,8 @@
 #include "LogicSystem.h"
 #include "ChatLogger.h"
 #include "TextMessageService.h"
+#include "ResourceClient.h"
+#include "ResourceToken.h"
 #include <charconv>
 
 namespace {
@@ -19,9 +21,7 @@ std::size_t logicShardCount() {
 LogicSystem::LogicSystem() {
     RegisterCallBacks();
 
-    for (int i = 0; i < LOGIC_WORKER_COUNT; i++) {
-        _workers.push_back(std::make_shared<LogicWorker>());
-    }
+    // Attachment IO is owned exclusively by Resource Server.
     const auto count = logicShardCount();
     _delivery.resize(count);
     _delivery_cursor.resize(count);
@@ -232,6 +232,11 @@ void LogicSystem::LoginChatCallback(shared_ptr<CSession> session, short msg_id, 
         rtvalue["error"] = ErrorCodes::TokenInvalid;
         return;
     }
+    if (root.get("resource_protocol_version", 0).asInt() != 1) {
+        rtvalue["error"] = 426;
+        rtvalue["message"] = "Please upgrade the client: HTTPS resource protocol v1 required";
+        return;
+    }
     std::string uid_str = std::to_string(uid);
     std::string ticket_value;
     const std::string ticket_key = CHAT_TICKET_PREFIX + token;
@@ -303,17 +308,8 @@ void LogicSystem::LoginChatCallback(shared_ptr<CSession> session, short msg_id, 
     }
 
     // 临时附件元数据随登录恢复，文件本体仍需接收方点击后按权限分片下载。
-    for (const auto& file : MysqlMgr::GetInstance()->GetPendingFileTransfers(uid)) {
-        Json::Value obj;
-        obj["id"] = file.id;
-        obj["fromuid"] = file.sender_uid;
-        obj["touid"] = file.receiver_uid;
-        obj["name"] = file.original_name;
-        obj["mime"] = file.mime_type;
-        obj["total_size"] = Json::UInt64(file.total_size);
-        obj["sha256"] = file.sha256;
-        rtvalue["pending_files"].append(obj);
-    }
+    rtvalue["pending_files"] = PendingResources(uid);
+    rtvalue["resources_unavailable"] = rtvalue["pending_files"].isNull();
 
     auto server_name = ConfigMgr::Inst().GetValue("SelfServer", "Name");
 
@@ -903,6 +899,28 @@ void LogicSystem::GetUserByName(std::string name, Json::Value& rtvalue) {
 }
 
 void LogicSystem::RegisterCallBacks() {
+    _func_callback[ID_RESOURCE_TOKEN_REQ] = [](std::shared_ptr<CSession> session, const short&, const std::string& body) {
+        // 请求标识仅用于关联续领响应；身份始终取自已认证会话，不能由客户端指定。
+        Json::Value request; Json::Reader reader;
+        if (!reader.parse(body,request) || !request["request_id"].isString() ||
+            request["request_id"].asString().empty() || request["request_id"].asString().size()>64)
+            throw std::invalid_argument("resource credential request id required");
+        Json::Value response; response["error"] = 0;
+        response["uid"]=session->GetUserId(); response["request_id"]=request["request_id"];
+        auto redis = RedisMgr::GetInstance();
+        const auto token = chat::resources::newToken();
+        Json::Value record; record["uid"] = session->GetUserId(); record["session"] = session->GetSessionId();
+        record["generation"] = session->GetSessionId();
+        const bool ok = redis->SetWithTtl(chat::resources::sessionKey(session->GetSessionId()), session->GetSessionId(), chat::resources::TokenSeconds) &&
+            redis->SetWithTtl(chat::resources::tokenKey(token), record.toStyledString(), chat::resources::TokenSeconds);
+        if (ok) { response["token"] = token; response["expires_in"] = chat::resources::TokenSeconds; }
+        else response["error"] = 503;
+        session->Send(response.toStyledString(), ID_RESOURCE_TOKEN_RSP);
+    };
+    _func_callback[ID_RESOURCE_REVOKE_REQ] = [](std::shared_ptr<CSession> session, const short&, const std::string&) {
+        RedisMgr::GetInstance()->Del(chat::resources::sessionKey(session->GetSessionId()));
+        session->Close();
+    };
     _func_callback[MSG_CHAT_LOGIN] =
         std::bind(&LogicSystem::LoginChatCallback, this, std::placeholders::_1,
                   std::placeholders::_2, std::placeholders::_3);
@@ -979,15 +997,9 @@ void LogicSystem::HeartbeatCallback(std::shared_ptr<CSession> session, short, st
             if (snapshot["friend_list"].size() == 20) flush();
         }
     }
-    for (const auto& file : MysqlMgr::GetInstance()->GetPendingFileTransfers(session->GetUserId())) {
-        Json::Value item;
-        item["id"] = file.id;
-        item["fromuid"] = file.sender_uid;
-        item["touid"] = file.receiver_uid;
-        item["name"] = file.original_name;
-        item["mime"] = file.mime_type;
-        item["total_size"] = Json::UInt64(file.total_size);
-        item["sha256"] = file.sha256;
+    const auto files = PendingResources(session->GetUserId());
+    snapshot["resources_unavailable"] = files.isNull();
+    for (const auto& item : files) {
         if (snapshot.toStyledString().size() + item.toStyledString().size() > 12 * 1024) flush();
         snapshot["pending_files"].append(item);
         if (snapshot["pending_files"].size() == 20) flush();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FileTransferTypes.h"
+#include "ResourceStore.h"
 
 #include <array>
 #include <filesystem>
@@ -9,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-class EncryptedFileStore {
+class EncryptedFileStore : public chat::resources::ResourceStore {
   public:
     EncryptedFileStore(std::filesystem::path root, const std::string& master_key_hex);
 
@@ -29,5 +30,5 @@ class EncryptedFileStore {
 
     std::filesystem::path root_;
     std::array<unsigned char, 32> master_key_{};
-    mutable std::mutex mutex_;
+    mutable std::array<std::mutex, 257> mutexes_;
 };

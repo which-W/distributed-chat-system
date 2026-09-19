@@ -13,7 +13,7 @@ MysqlDao::MysqlDao() {
     const auto& schema = cfg["Mysql"]["Schema"];
     const auto& user = cfg["Mysql"]["User"];
     pool_.reset(new MySqlPool(host + ":" + port, user, pwd, schema, 5));
-    EnsureFileTransferTable();
+    // Resource Server owns attachment schema and cleanup.
     EnsureChatMessageTable();
 }
 

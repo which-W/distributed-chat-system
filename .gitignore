@@ -47,6 +47,10 @@ VarifyServer/config.json
 **/config.ini
 *.pid
 /run/
+/backups/
+/.resource-migration-state.json
+/.resource-migration.lock
+/compose.resource-candidate.json
 /certs/
 *.key
 *.pem
@@ -61,3 +65,11 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Python generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local CodeGraph index
+/.codegraph/

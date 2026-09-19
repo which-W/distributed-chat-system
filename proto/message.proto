@@ -46,6 +46,7 @@ message LoginRsp {
 }
 
 service ChatService {
+  rpc NotifyAvatarChanged(AvatarChangedReq) returns (AvatarChangedRsp);
   rpc NotifyAddFriend(AddFriendReq) returns (AddFriendRsp);
   rpc RplyAddFriend(RplyFriendReq) returns (RplyFriendRsp);
   rpc SendChatMsg(SendChatMsgReq) returns (SendChatMsgRsp);
@@ -53,6 +54,17 @@ service ChatService {
   rpc NotifyTextChatMsg(TextChatMsgReq) returns (TextChatMsgRsp);
   rpc NotifyFileAvailable(FileAvailableReq) returns (FileAvailableRsp);
 }
+
+service ResourceService {
+  rpc GetMetadata(ResourceMetadataReq) returns (ResourceMetadataRsp);
+  rpc ListPending(ResourcePendingReq) returns (ResourcePendingRsp);
+}
+message ResourcePendingReq { int32 uid = 1; }
+message ResourceMetadataReq { string id = 1; int32 uid = 2; }
+message ResourceMetadataRsp { string metadata_json = 1; }
+message ResourcePendingRsp { repeated string metadata_json = 1; }
+message AvatarChangedReq { int32 uid = 1; string avatar_id = 2; uint64 version = 3; }
+message AvatarChangedRsp {}
 
 message FileAvailableReq {
   string id = 1;

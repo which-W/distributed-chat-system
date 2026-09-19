@@ -1,3 +1,4 @@
+#include "AvatarLoader.h"
 #include "ChatUserWid.h"
 #include "ChatGraphics.h"
 
@@ -12,13 +13,14 @@ ChatUserWid::~ChatUserWid() {
 
 void ChatUserWid::SetInfo(std::shared_ptr<FriendInfo> friend_info) {
     _user_info = std::make_shared<UserInfo>(friend_info);
-    // 加载图片
+    // ????
     QPixmap pixmap(_user_info->_icon);
 
-    // 设置图片自动缩放
+    // ????????
     ui->icon_lb->setPixmap(
         roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
+    if (_user_info->_uid > 0) AvatarLoader::instance().bind(ui->icon_lb,_user_info->_uid,_user_info->_icon,48);
 
     ui->user_name_lb->setText(_user_info->_name);
     ui->user_data_lb->setText(_user_info->_last_msg);
@@ -26,13 +28,14 @@ void ChatUserWid::SetInfo(std::shared_ptr<FriendInfo> friend_info) {
 
 void ChatUserWid::SetInfo(std::shared_ptr<UserInfo> user_info) {
     _user_info = user_info;
-    // 加载图片
+    // ????
     QPixmap pixmap(_user_info->_icon);
 
-    // 设置图片自动缩放
+    // ????????
     ui->icon_lb->setPixmap(
         roundAvatar(pixmap));
     ui->icon_lb->setScaledContents(true);
+    if (_user_info->_uid > 0) AvatarLoader::instance().bind(ui->icon_lb,_user_info->_uid,_user_info->_icon,48);
 
     ui->user_name_lb->setText(_user_info->_name);
     ui->user_data_lb->setText(_user_info->_last_msg);
@@ -43,7 +46,7 @@ std::shared_ptr<UserInfo> ChatUserWid::GetUserInfo() {
 }
 
 void ChatUserWid::updateFileSummary(const QString& name) {
-    _user_info->_last_msg = tr("[文件] %1").arg(name);
+    _user_info->_last_msg = tr("[??] %1").arg(name);
     ui->user_data_lb->setTextFormat(Qt::PlainText);
     ui->user_data_lb->setText(_user_info->_last_msg);
     ui->user_data_lb->setToolTip(_user_info->_last_msg);
