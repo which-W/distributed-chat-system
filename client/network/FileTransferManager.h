@@ -17,7 +17,7 @@ class FileTransferManager : public QObject, public Singleton<FileTransferManager
     friend class ResourceBoundaryTests;
 
   public:
-    // 当前实现对上传和下载分别串行化，避免多个大文件同时占满聊天连接。
+    // 上传和下载分别串行化，避免多个大文件同时占满资源服务连接。
     QString startUpload(const QString& path, int receiverUid);
     void startDownload(const QJsonObject& metadata, const QString& savePath);
     void cancel(const QString& transferId);
@@ -32,8 +32,9 @@ class FileTransferManager : public QObject, public Singleton<FileTransferManager
     void transferFailed(const QString& id, const QString& reason);
 
   private:
+    enum class HttpStage { UploadInit, UploadChunk, UploadFinish, DownloadChunk };
     FileTransferManager();
-    void handleFrame(Req id, const QJsonObject& value);
+    void handleFrame(HttpStage id, const QJsonObject& value);
     void hashUploadStep();
     void sendUploadInit();
     void sendNextUploadChunk();
@@ -44,7 +45,7 @@ class FileTransferManager : public QObject, public Singleton<FileTransferManager
     quint64 uploadGeneration_ = 0;
     quint64 downloadGeneration_ = 0;
     ResourceHttp::RequestHandle uploadRequest_, downloadRequest_;
-    void httpJson(Req response, const QByteArray& method, const QString& path, const QByteArray& body = {});
+    void httpJson(HttpStage response, const QByteArray& method, const QString& path, const QByteArray& body = {});
 
     struct UploadState {
         // 服务端只确认已持久化的 offset，断线后以响应值为续传起点。

@@ -49,6 +49,10 @@ CHAT_CONFIG_FILE=/opt/distributed-chat/config/chatserver2.ini ./chat_server
 4. ChatServer1、ChatServer2
 5. GateServer
 
+升级现有集群时先部署服务端，再发布支持续期的客户端。Gate 与 Chat 必须共享 Redis，
+且 Chat 与资源服务必须使用相同的资源会话键空间；无需 MySQL 迁移。
+续期接口、90 秒资源租约和故障恢复步骤见 [会话恢复与部署](../SESSION_RECOVERY.md)。
+
 ## 健康检查和路由
 
 每个 Chat 进程启动后会立即向 Redis 写入 `chat_health_<服务器名称>`，随后每五秒

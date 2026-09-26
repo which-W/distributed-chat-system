@@ -13,6 +13,7 @@ struct UserInfo {
     std::string pwd;
     int uid;
     std::string email;
+    std::string password_fingerprint;
 };
 
 class MysqlDao {
@@ -22,10 +23,14 @@ class MysqlDao {
     int RegUser(const std::string& name, const std::string& email, const std::string& pwd);
     int RegUserTransaction(const std::string& name, const std::string& email,
                            const std::string& pwd, const std::string& icon);
-    bool CheckEmail(const std::string& name, const std::string& email);
+    bool CheckEmail(const std::string& name, const std::string& email,
+                    bool* unavailable = nullptr);
     bool UpdatePwd(const std::string& name, const std::string& newpwd);
+    bool UpdatePwdHash(const std::string& name, const std::string& email,
+                       const std::string& encoded_hash);
     bool CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userInfo,
                   bool* unavailable = nullptr);
+    bool PasswordFingerprint(int uid, std::string& fingerprint, bool* unavailable = nullptr);
 
   private:
     void EnsurePasswordSchemeColumn();

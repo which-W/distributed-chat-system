@@ -3,7 +3,19 @@
 #include "PasswordHasher.h"
 #include "PasswordUpgradeGuard.h"
 #include <sodium.h>
+#include <array>
 #include <vector>
+
+namespace {
+std::string fingerprintOf(const std::string& hash) {
+    std::array<unsigned char, crypto_hash_sha256_BYTES> digest{};
+    crypto_hash_sha256(digest.data(), reinterpret_cast<const unsigned char*>(hash.data()), hash.size());
+    std::string hex(digest.size() * 2 + 1, '\0');
+    sodium_bin2hex(hex.data(), hex.size(), digest.data(), digest.size());
+    hex.resize(digest.size() * 2);
+    return hex;
+}
+}
 
 MysqlDao::MysqlDao() {
     auto& cfg = ConfigMgr::ins();
@@ -236,10 +248,15 @@ int MysqlDao::RegUserTransaction(const std::string& name, const std::string& ema
     }
 }
 
-bool MysqlDao::CheckEmail(const std::string& name, const std::string& email) {
+bool MysqlDao::CheckEmail(const std::string& name, const std::string& email,
+                          bool* unavailable) {
+    if (unavailable)
+        *unavailable = false;
     auto con = pool_->getConnection();
     try {
         if (con == nullptr) {
+            if (unavailable)
+                *unavailable = true;
             pool_->returnConnection(std::move(con));
             return false;
         }
@@ -264,6 +281,8 @@ bool MysqlDao::CheckEmail(const std::string& name, const std::string& email) {
         pool_->returnConnection(std::move(con));
         return false;
     } catch (sql::SQLException& e) {
+        if (unavailable)
+            *unavailable = true;
         pool_->returnConnection(std::move(con));
         chat::observability::stream(chat::observability::Level::Warn)
             << "SQLException: " << e.what();
@@ -360,6 +379,9 @@ bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserIn
         userInfo.email = email;
         userInfo.uid = uid;
         userInfo.pwd.clear();
+        // 只把数据库密码哈希的指纹带到会话层，避免明文或完整哈希进入 Redis。
+        userInfo.password_fingerprint = fingerprintOf(
+            verification.upgrade_required ? verification.upgraded_hash : stored_hash);
         return true;
     } catch (sql::SQLException& e) {
         if (unavailable)
@@ -370,6 +392,55 @@ bool MysqlDao::CheckPwd(const std::string& email, const std::string& pwd, UserIn
             << " (MySQL error code: " << e.getErrorCode();
         chat::observability::stream(chat::observability::Level::Warn)
             << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+        return false;
+    }
+}
+
+bool MysqlDao::UpdatePwdHash(const std::string& name, const std::string& email,
+                              const std::string& encoded_hash) {
+    auto con = pool_->getConnection();
+    if (!con)
+        return false;
+    Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+    try {
+        std::unique_ptr<sql::PreparedStatement> statement(con->_con->prepareStatement(
+            "UPDATE user SET pwd = ?, password_scheme = 'argon2id_raw' "
+            "WHERE name = ? AND email = ?"));
+        statement->setString(1, encoded_hash);
+        statement->setString(2, name);
+        statement->setString(3, email);
+        return statement->executeUpdate() == 1;
+    } catch (const sql::SQLException& error) {
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "Password update failed: " << error.what() << std::endl;
+        return false;
+    }
+}
+
+bool MysqlDao::PasswordFingerprint(int uid, std::string& fingerprint, bool* unavailable) {
+    if (unavailable)
+        *unavailable = false;
+    auto con = pool_->getConnection();
+    if (!con) {
+        if (unavailable)
+            *unavailable = true;
+        return false;
+    }
+    Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+    try {
+        std::unique_ptr<sql::PreparedStatement> statement(
+            con->_con->prepareStatement("SELECT pwd FROM user WHERE uid = ?"));
+        statement->setInt(1, uid);
+        std::unique_ptr<sql::ResultSet> rows(statement->executeQuery());
+        if (!rows->next())
+            return false;
+        fingerprint = fingerprintOf(rows->getString("pwd"));
+        return true;
+    } catch (const sql::SQLException& error) {
+        if (unavailable)
+            *unavailable = true;
+        chat::observability::stream(chat::observability::Level::Warn)
+            << "Password fingerprint lookup failed: " << error.what() << std::endl;
         return false;
     }
 }

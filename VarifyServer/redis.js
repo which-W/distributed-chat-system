@@ -16,7 +16,7 @@ const RedisCli = new redis({
  */
 RedisCli.on("error", function (err) {
   log('error', 'redis.connection_error', 'Redis connection error', { error: err.message });
-  RedisCli.quit();
+  // ioredis 会自行重连；错误事件不能主动关闭客户端。
 });
 
 /**
@@ -103,11 +103,18 @@ if global_hourly > tonumber(ARGV[6]) then
 end
 redis.call('SET', KEYS[2], '1', 'EX', ARGV[2])
 redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[5])
+redis.call('SET', KEYS[6], ARGV[7], 'EX', ARGV[5])
 redis.call('DEL', KEYS[4])
 return 1
 `
 
-async function IssueVerificationCode(email, code, options = {}) {
+const ROLLBACK_CODE_SCRIPT = `
+if redis.call('GET', KEYS[3]) ~= ARGV[1] then return 0 end
+redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
+return 1
+`
+
+async function IssueVerificationCode(email, code, issuanceId, options = {}) {
     const cooldownSeconds = options.cooldownSeconds ?? 60
     const hourlyWindowSeconds = options.hourlyWindowSeconds ?? 3600
     const hourlyLimit = options.hourlyLimit ?? 10
@@ -119,23 +126,38 @@ async function IssueVerificationCode(email, code, options = {}) {
     try {
         const result = await RedisCli.eval(
             ISSUE_CODE_SCRIPT,
-			5,
+				6,
             keys.code,
             keys.cooldown,
             keys.hourly,
             keys.attempts,
 			'verification_global_hourly',
+			keys.code + ':issue',
             code,
             cooldownSeconds,
             hourlyWindowSeconds,
             hourlyLimit,
             codeTtlSeconds,
 			globalHourlyLimit,
+			issuanceId,
         )
         return Number(result)
     } catch (error) {
         log('error', 'redis.verification_issue_failed', 'Verification code transaction failed', { error: error.message })
         return 0
+    }
+}
+
+async function RollbackVerificationCode(email, issuanceId) {
+    const keys = verificationKeys(email)
+    try {
+        // 只回滚本次签发，保留每小时预算，避免旧邮件失败删除更新的验证码。
+        return Number(await RedisCli.eval(ROLLBACK_CODE_SCRIPT, 3,
+            keys.code, keys.cooldown, keys.code + ':issue', issuanceId)) === 1
+    } catch (error) {
+        log('error', 'redis.verification_rollback_failed', 'Verification rollback failed',
+            { error: error.message })
+        return false
     }
 }
 
@@ -146,4 +168,5 @@ function Quit() {
     RedisCli.quit();
 }
 
-module.exports = { GetRedis, QueryRedis, Quit, SetRedisExpire, IssueVerificationCode }
+module.exports = { GetRedis, QueryRedis, Quit, SetRedisExpire, IssueVerificationCode,
+    RollbackVerificationCode }

@@ -6,8 +6,13 @@ Httpmgr::Httpmgr() {
 }
 
 Httpmgr::~Httpmgr() {
-    // 清理资源
-    _manager.deleteLater();
+    // _manager 是成员对象，随 Httpmgr 同步析构，不能调用 deleteLater()。
+    for (auto reply : _pending) {
+        if (!reply) continue;
+        disconnect(reply, nullptr, this, nullptr);
+        reply->abort();
+    }
+    _pending.clear();
 }
 
 void Httpmgr::PostHttpRequest(const QString& url, const QJsonObject& jsonObj, Req req_id,
@@ -17,12 +22,17 @@ void Httpmgr::PostHttpRequest(const QString& url, const QJsonObject& jsonObj, Re
     QNetworkRequest request(url);
 #if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                         QNetworkRequest::NoLessSafeRedirectPolicy);
+                         QNetworkRequest::ManualRedirectPolicy);
 #endif
+    request.setTransferTimeout(5000);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setHeader(QNetworkRequest::ContentLengthHeader, QByteArray::number(postData.length()));
-    auto self = shared_from_this();
+    // 同一页面的旧请求在新请求到来时失效，防止迟到回包覆盖新登录状态。
+    const int requestKey = static_cast<int>(mod);
+    if (_pending.value(requestKey))
+        _pending.value(requestKey)->abort();
     QNetworkReply* reply = _manager.post(request, postData);
+    _pending.insert(requestKey, reply);
     connect(reply, &QNetworkReply::sslErrors, this, [reply](const QList<QSslError>& errors) {
         for (const auto& error : errors) {
             qWarning() << "Gate TLS verification failed:" << error.errorString();
@@ -30,14 +40,20 @@ void Httpmgr::PostHttpRequest(const QString& url, const QJsonObject& jsonObj, Re
         reply->abort();
     });
     // 连接信号槽处理网络请求完成
-    connect(reply, &QNetworkReply::finished, this, [self, req_id, mod, reply]() {
-        if (reply->error() == QNetworkReply::NoError) {
+    connect(reply, &QNetworkReply::finished, this, [this, requestKey, req_id, mod, reply]() {
+        if (_pending.value(requestKey) != reply) {
+            reply->deleteLater();
+            return;
+        }
+        _pending.remove(requestKey);
+        if (reply->error() == QNetworkReply::NoError &&
+            !reply->attribute(QNetworkRequest::RedirectionTargetAttribute).isValid()) {
             QString response = reply->readAll();
-            emit self->sig_http_finish(req_id, response, ERR_OK, mod);
+            emit sig_http_finish(req_id, response, ERR_OK, mod);
 
         } else {
             qDebug() << "HTTP request failed:" << reply->errorString();
-            emit self->sig_http_finish(req_id, QString(), ERR_NETWORK, mod);
+            emit sig_http_finish(req_id, QString(), ERR_NETWORK, mod);
         }
         reply->deleteLater();
         return;

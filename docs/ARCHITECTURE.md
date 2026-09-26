@@ -98,37 +98,37 @@ sequenceDiagram
 
 语义是 ACK 提交前至少一次投递，客户端以 `(sender_uid, client_message_id)` 在 SQLite 中去重；同 ID 不同内容会拒绝整个接收批次，不发 ACK。服务端通过 32 条窗口持续重投并在 ACK 后续投，数据库查询失败不会被解释为空队列。
 
-客户端先保存 outbox 再发送，按 5、10、20、40、60 秒退避，用原 ID 重试。收到匹配的 `accepted` 回包后更新本地状态；它表示服务端已接收，不代表对方已读。登录时恢复每个好友最近 200 条消息。SQLite 文件按 Gate 地址哈希与账号 UID 隔离，位于 Qt `AppLocalDataLocation/messages` 下，使用 WAL 与 `synchronous=FULL`，目前没有本地数据库加密。断线后一次性票据不能重复使用；重新登录取得新票据后才能恢复投递。
+客户端先保存 outbox 再发送，按 5、10、20、40、60 秒退避，用原 ID 重试。收到匹配的 `accepted` 回包后更新本地状态；它表示服务端已接收，不代表对方已读。登录时恢复每个好友最近 200 条消息。SQLite 文件按 Gate 地址哈希与账号 UID 隔离，位于 Qt `AppLocalDataLocation/messages` 下，使用 WAL 与 `synchronous=FULL`，目前没有本地数据库加密。断线后使用仅存于内存的续期凭证向 Gate 换取新一次性票据，再重新认证并投递 outbox；已消费的票据不会重发。详见 [会话恢复与部署](SESSION_RECOVERY.md)。
 
 发送草稿先作为一个事务保存，成功后才清空编辑器；JSON 序列化后的单条请求不得超过 2048 字节。接收落盘失败会关闭连接并保留服务端待确认状态。
 
 ## 过载与退出
 
-每连接发送队列同时限制 1000 帧和 4 MiB（包含正在发送的帧）；每个文件工作队列限制 16 MiB。聊天请求桶每秒补充 100 帧、最大突发 200 帧；文件请求独立限制为每秒 128 帧、突发 256 帧，文件字节桶每秒 4 MiB、突发 8 MiB。超限连接会关闭，不会继续分配消息体；客户端待发送记录仍保留。
+每连接发送队列同时限制 1000 帧和 4 MiB（包含正在发送的帧）。聊天请求桶每秒补充 100 帧、最大突发 200 帧；请求正文上限为 2048 字节。超限连接会关闭，不会继续分配消息体；客户端待发送记录仍保留。文件内容由 HTTPS 资源服务处理，不进入聊天 TCP 会话。
 
 停机时取消尚未运行的跨节点唤醒通知，等待正在执行的通知返回，并排空已接收的业务任务。该流程没有强制终止正在运行的数据库或 RPC 调用，退出耗时仍受依赖超时影响。全局运行指标只由分片 0 上报；会话数和在途窗口数通过独立的 `runtime.shard_metrics` 上报。
 
 ## 文件传输
 
-以下描述聊天文件分片处理链路。当前资源服务的部署与数据库迁移要求见 [生产部署指南](../deploy/production/README.md)。数据库偏移更新失败会保留密文，后续续传重新核对状态。
+文件上传、分片、续传和下载均通过 HTTPS 资源服务。Chat 仅签发资源凭证、刷新 90 秒会话租约并转发文件可用通知；资源服务同时校验资源 token 与会话租约。当前资源服务的部署与数据库迁移要求见 [生产部署指南](../deploy/production/README.md)。数据库偏移更新失败会保留密文，后续续传重新核对状态。
 
 ```mermaid
 sequenceDiagram
     participant A as Sender
-    participant C as Chat
+    participant R as Resource HTTPS
     participant FS as Encrypted Store
     participant DB as MySQL
     participant B as Receiver
-    A->>C: 创建上传(id 可为空)
-    C->>FS: 创建密文文件
-    C->>DB: 保存元数据与 offset
+    A->>R: 创建上传(id 可为空)
+    R->>FS: 创建密文文件
+    R->>DB: 保存元数据与 offset
     loop 分片/断点续传
-        A->>C: chunk(id, offset, data)
-        C->>FS: 认证加密追加
-        C->>DB: 原子推进 offset
+        A->>R: chunk(id, offset, data)
+        R->>FS: 认证加密追加
+        R->>DB: 原子推进 offset
     end
-    A->>C: finish + SHA-256
-    C->>FS: 校验摘要
-    C->>DB: 标记 available
-    C-->>B: 文件可用通知
+    A->>R: finish + SHA-256
+    R->>FS: 校验摘要
+    R->>DB: 标记 available
+    R-->>B: 经 Chat 转发文件可用通知
 ```

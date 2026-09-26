@@ -5,6 +5,8 @@
 #include "global.h"
 #include "usermgr.h"
 #include <QSet>
+#include <QNetworkAccessManager>
+#include <QPointer>
 #include <QSslCipher>
 #include <QSslSocket>
 #include <QTimer>
@@ -34,6 +36,15 @@ class TcpMgr : public QObject,
     int _retry_attempt;
     int _missed_heartbeats;
     QByteArray _login_payload;
+    QString _resume_token;
+    QString _gate_base_url;
+    QString _resource_base_url;
+    int _uid{0};
+    bool _allow_insecure{false};
+    QNetworkAccessManager _credential_manager;
+    QPointer<QNetworkReply> _credential_reply;
+    quint64 _credential_generation{0};
+    QTimer _renew_timer;
     QTimer _retry_timer;
     QTimer _heartbeat_timer;
     QByteArray _buffer;
@@ -55,6 +66,10 @@ class TcpMgr : public QObject,
     void beginConnection();
     void handleTransportReady();
     void scheduleReconnect();
+    void requestSession(bool renew);
+    void cancelCredentialRequest();
+    void logoutResumeToken();
+    bool credentialUrlAllowed(const QUrl& url) const;
     void resetParser();
     QMap<Req, std::function<void(Req id, int len, QByteArray data)>> _handlers;
   public slots:
@@ -77,6 +92,5 @@ class TcpMgr : public QObject,
     void sig_auth_rsp(std::shared_ptr<AuthRsp>);
     void sig_text_chat_msg(std::shared_ptr<TextChatMsg>);
     void sig_connection_state(const QString& message, bool connected);
-    void sig_file_frame(Req id, const QJsonObject& value);
     void sig_file_available(const QJsonObject& metadata);
 };

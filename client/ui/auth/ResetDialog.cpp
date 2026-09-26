@@ -1,5 +1,8 @@
 #include "ResetDialog.h"
 #include "ElaMessageBar.h"
+#include <QCryptographicHash>
+#include <QRandomGenerator>
+#include <array>
 
 ResetDialog::ResetDialog(QWidget* parent)
     : QDialog(parent), ui(new Ui::ResetDialogClass()), _counter(5) {
@@ -29,11 +32,15 @@ ResetDialog::~ResetDialog() {
 
 void ResetDialog::on_return_btn_clicked() {
     _timer->stop();
+    _reset_request_token.clear();
+    _reset_payload_fingerprint.clear();
     qDebug() << "sure btn clicked ";
     emit switchLogin();
 }
 
 void ResetDialog::on_varify_btn_clicked() {
+    _reset_request_token.clear();
+    _reset_payload_fingerprint.clear();
     // 获取验证码按钮点击事件
     auto email = ui->email_edit->text();
     if (email.isEmpty()) {
@@ -104,6 +111,18 @@ void ResetDialog::on_sure_btn_clicked() {
     json_obj["email"] = ui->email_edit->text();
     json_obj["passwd"] = ui->pwd_edit->text();
     json_obj["varifycode"] = ui->varify_edit->text();
+    const auto payload_fingerprint = QCryptographicHash::hash(
+        QJsonDocument(json_obj).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256);
+    if (_reset_request_token.isEmpty() || payload_fingerprint != _reset_payload_fingerprint) {
+        std::array<quint32, 8> random_words{};
+        QRandomGenerator::system()->generate(random_words.begin(), random_words.end());
+        _reset_request_token = QString::fromLatin1(
+            QByteArray(reinterpret_cast<const char*>(random_words.data()),
+                       static_cast<int>(sizeof(random_words))).toHex());
+        _reset_payload_fingerprint = payload_fingerprint;
+    }
+    // 网络或数据库故障后重试同一请求，沿用内存中的随机标识。
+    json_obj["reset_request_token"] = _reset_request_token;
     Httpmgr::Getinstance()->PostHttpRequest(gate_url_prefix + "/reset_pwd", json_obj,
                                             Req::ID_RESET_PWD, Modules::RESETMOD);
 }
@@ -214,5 +233,7 @@ void ResetDialog::initHandlers() {
         }
         auto email = jsonObj["email"].toString();
         showTip(tr("重置成功,点击返回登录"), true);
+        _reset_request_token.clear();
+        _reset_payload_fingerprint.clear();
     });
 }

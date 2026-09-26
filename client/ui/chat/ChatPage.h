@@ -11,6 +11,7 @@
 #include "ui_ChatPage.h"
 #include "usermgr.h"
 #include <QHash>
+#include <QPointer>
 #include <QPainter>
 #include <QPixmap>
 #include <QStyleOption>
@@ -42,6 +43,7 @@ class ChatPage : public QWidget {
   private:
     Ui::ChatPageClass* ui;
     std::shared_ptr<UserInfo> _user_info;
-    QHash<QString, FileBubble*> _file_bubbles;
+    // QPointer 在历史气泡或整个页面析构时自动置空，避免悬空控件指针。
+    QHash<QString, QPointer<FileBubble>> _file_bubbles;
     void appendFileBubble(const QJsonObject& metadata, ChatRole role, bool incoming);
 };

@@ -2,6 +2,7 @@
 #include "GrpcTlsSupport.h"
 #include "InternalRpcAuth.h"
 #include <fstream>
+#include <sstream>
 #ifndef _WIN32
 #include <sys/vfs.h>
 #endif
@@ -32,7 +33,61 @@ std::filesystem::path storageRoot() {
 }
 Response result(const Json::Value& value, unsigned status = 200) { Response r; r.status = status; r.body = json(value); return r; }
 }
-Service::Service() : root_(storageRoot()), store_(root_, setting("FileStorage", "MasterKey")) {}
+Service::Service()
+    : root_(storageRoot()), store_(root_, setting("FileStorage", "MasterKey")),
+      notification_workers_(4, 16) {
+    // 节点 channel 由所有通知事件复用，避免每次 RPC 重新建立连接。
+    std::istringstream peers(setting("PeerServer", "Servers"));
+    std::string peer;
+    auto& cfg = ConfigMgr::Inst();
+    while (std::getline(peers, peer, ',')) {
+        if (!peer.empty())
+            peer_channels_.push_back(chat::grpc_tls::make_channel(
+                cfg[peer]["Host"], cfg[peer]["Port"], chat::grpc_tls::from_config(cfg),
+                cfg[peer]["TLSName"]));
+    }
+}
+
+void Service::stopNotifications() { notification_workers_.stop(true); }
+
+void Service::deliverNotification(NotificationEvent event) {
+    // 未配置任何 Chat 节点时不能把事件误标为已送达。
+    bool sent = !peer_channels_.empty();
+    for (const auto& channel : peer_channels_) {
+        auto stub = message::ChatService::NewStub(channel);
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(2));
+        chat::internal_rpc::authenticate(context, setting("InternalRpc", "PeerToken"));
+        if (event.kind == "file") {
+            message::FileAvailableReq request;
+            message::FileAvailableRsp reply;
+            const auto& v = event.payload;
+            request.set_id(v["id"].asString());
+            request.set_fromuid(v["fromuid"].asInt());
+            request.set_touid(v["touid"].asInt());
+            request.set_name(v["name"].asString());
+            request.set_mime(v["mime"].asString());
+            request.set_total_size(v["total_size"].asUInt64());
+            request.set_sha256(v["sha256"].asString());
+            sent = stub->NotifyFileAvailable(&context, request, &reply).ok() &&
+                   reply.error() == 0 && sent;
+        } else {
+            message::AvatarChangedReq request;
+            message::AvatarChangedRsp reply;
+            const auto& v = event.payload;
+            request.set_uid(v["uid"].asInt());
+            request.set_avatar_id(v["avatar_id"].asString());
+            request.set_version(v["version"].asUInt64());
+            sent = stub->NotifyAvatarChanged(&context, request, &reply).ok() && sent;
+        }
+    }
+    // RPC 完成后才重新借用数据库连接；网络等待期间不持有行锁或连接。
+    auto lease = database_.lease();
+    execute(lease.get(), sent
+        ? "UPDATE resource_outbox SET delivered_at=NOW() WHERE id=? AND delivered_at IS NULL"
+        : "UPDATE resource_outbox SET attempts=attempts+1,next_attempt_at=DATE_ADD(NOW(),INTERVAL 10 SECOND) WHERE id=? AND delivered_at IS NULL",
+        {event.id});
+}
 bool Service::ready() {
     try {
         storageRoot(); auto lease = database_.lease(); auto s = statement(lease.get(), "SELECT id FROM resource_outbox LIMIT 0");
@@ -184,33 +239,33 @@ grpc::Status Service::ListPending(grpc::ServerContext* context, const message::R
     } catch (...) { return {grpc::StatusCode::UNAVAILABLE, "resource database unavailable"}; }
 }
 void Service::maintenance() {
-    auto l = database_.lease(); auto& c = l.get();
-    // Claim one event with a row lock; bounded RPC deadline, at-least-once delivery.
+    std::vector<NotificationEvent> claimed;
     {
-        Transaction tx(c); auto s = statement(c, "SELECT id,kind,payload FROM resource_outbox WHERE delivered_at IS NULL AND next_attempt_at<=NOW() ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED");
+        auto claim_lease = database_.lease();
+        auto& c = claim_lease.get();
+        Transaction tx(c);
+        // 短事务一次领取最多 16 条；60 秒领取租约让进程崩溃后可重新投递。
+        auto s = statement(c, "SELECT id,kind,payload FROM resource_outbox WHERE delivered_at IS NULL AND next_attempt_at<=NOW() ORDER BY id LIMIT 16 FOR UPDATE SKIP LOCKED");
         std::unique_ptr<sql::ResultSet> rows(s->executeQuery());
-        if (rows->next()) {
-            auto event = rows->getString("id").asStdString(); auto v = parse(rows->getString("payload").asStdString());
-            bool sent = true; std::istringstream peers(setting("PeerServer", "Servers")); std::string peer;
-            while (std::getline(peers, peer, ',')) {
-                auto& cfg = ConfigMgr::Inst(); auto stub = message::ChatService::NewStub(chat::grpc_tls::make_channel(cfg[peer]["Host"], cfg[peer]["Port"], chat::grpc_tls::from_config(cfg), cfg[peer]["TLSName"]));
-                grpc::ClientContext context; context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(2));
-                chat::internal_rpc::authenticate(context, setting("InternalRpc", "PeerToken"));
-                if (rows->getString("kind") == "file") {
-                    message::FileAvailableReq request; message::FileAvailableRsp reply;
-                    request.set_id(v["id"].asString()); request.set_fromuid(v["fromuid"].asInt()); request.set_touid(v["touid"].asInt());
-                    request.set_name(v["name"].asString()); request.set_mime(v["mime"].asString()); request.set_total_size(v["total_size"].asUInt64()); request.set_sha256(v["sha256"].asString());
-                    sent = stub->NotifyFileAvailable(&context, request, &reply).ok() && reply.error() == 0 && sent;
-                } else {
-                    message::AvatarChangedReq request; message::AvatarChangedRsp reply;
-                    request.set_uid(v["uid"].asInt()); request.set_avatar_id(v["avatar_id"].asString()); request.set_version(v["version"].asUInt64());
-                    sent = stub->NotifyAvatarChanged(&context, request, &reply).ok() && sent;
-                }
-            }
-            execute(c, sent ? "UPDATE resource_outbox SET delivered_at=NOW() WHERE id=?" : "UPDATE resource_outbox SET attempts=attempts+1,next_attempt_at=DATE_ADD(NOW(),INTERVAL 10 SECOND) WHERE id=?", {event});
+        while (rows->next()) {
+            claimed.push_back({rows->getString("id").asStdString(),
+                               rows->getString("kind").asStdString(),
+                               parse(rows->getString("payload").asStdString())});
         }
+        rows.reset();
+        for (const auto& event : claimed)
+            execute(c, "UPDATE resource_outbox SET next_attempt_at=DATE_ADD(NOW(),INTERVAL 60 SECOND) WHERE id=? AND delivered_at IS NULL", {event.id});
         tx.commit();
     }
+    for (auto& event : claimed) {
+        const auto key = std::hash<std::string>{}(event.id);
+        if (!notification_workers_.post(key, [this, event]() { deliverNotification(event); })) {
+            // 工作池满时把领取租约缩短到正常重试间隔。
+            auto retry_lease = database_.lease();
+            execute(retry_lease.get(), "UPDATE resource_outbox SET next_attempt_at=DATE_ADD(NOW(),INTERVAL 10 SECOND) WHERE id=? AND delivered_at IS NULL", {event.id});
+        }
+    }
+    auto l = database_.lease(); auto& c = l.get();
     auto avatars = statement(c,"SELECT id FROM resource_avatar WHERE expires_at<=NOW() LIMIT 16");
     std::unique_ptr<sql::ResultSet> avatarRows(avatars->executeQuery()); std::vector<std::string> expiredAvatars;
     while (avatarRows->next()) expiredAvatars.push_back(avatarRows->getString(1).asStdString());

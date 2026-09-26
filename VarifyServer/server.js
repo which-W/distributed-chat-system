@@ -1,13 +1,11 @@
 const grpc = require('@grpc/grpc-js')
 const message_proto = require('./proto')
 const const_module = require('./const')
-const config = require('./config')
-const emailModule = require('./email')
-const redis_module = require('./redis')
 const fs = require('fs')
-const { generateVerificationCode, normalizeEmail } = require('./security')
+const { normalizeEmail } = require('./security')
 const { log, emailHash } = require('./logger')
 const crypto = require('crypto')
+const { issueAndSend } = require('./verification')
 
 const INTERNAL_TOKEN_HEADER = 'x-chat-internal-token'
 const DEVELOPMENT_TOKEN = 'local-development-only-change-me'
@@ -72,8 +70,7 @@ async function GetVarifyCode(call, callback) {
         return
     }
     try{
-        const uniqueId = generateVerificationCode()
-        const issueResult = await redis_module.IssueVerificationCode(email, uniqueId)
+        const issueResult = await issueAndSend(email)
 	        if (issueResult === 2 || issueResult === 3 || issueResult === 4) {
 			log('warn', 'verification.rate_limited', 'verification request rate limited', { request_id: requestId, email_hash: emailHash(email), duration_ms: Date.now() - started })
             callback(null, { email, error: const_module.Errors.RateLimited })
@@ -85,16 +82,6 @@ async function GetVarifyCode(call, callback) {
             return
         }
 
-        const htmlContent = emailModule.generateVerifyCodeTemplate(uniqueId, email);
-        //发送邮件
-        let mailOptions = {
-            from: config.email_user,
-            to: email,
-            subject: `🔐 您的验证码：${uniqueId} - 请在5分钟内使用`,
-            html: htmlContent,
-        };
-
-        await emailModule.SendMail(mailOptions);
 		log('info', 'verification.sent', 'verification email sent', { request_id: requestId, email_hash: emailHash(email), duration_ms: Date.now() - started })
 
         callback(null, { email,

@@ -10,6 +10,7 @@ class HttpConnection : public std::enable_shared_from_this<HttpConnection> {
     HttpConnection(boost::asio::io_context& ioc);
     void start();
     tcp::socket& GetSocket();
+    void SetJsonError(http::status status, int error);
 
   private:
     void CheckDeadline();

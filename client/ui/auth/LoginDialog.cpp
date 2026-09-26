@@ -169,6 +169,8 @@ void LoginDialog::initHttpHandlers() {
         si.Host = jsonObj["host"].toString();
         si.Port = jsonObj["port"].toString();
         si.Token = jsonObj["token"].toString();
+        // 续期凭证只交给内存中的连接管理器，不写入本地消息数据库。
+        si.ResumeToken = jsonObj["resume_token"].toString();
         si.ResourceBaseUrl = jsonObj["resource_base_url"].toString();
         ResourceHttp::instance().configure(si.ResourceBaseUrl,si.Uid);
         si.Transport = jsonObj["transport"].toString("insecure").toLower();

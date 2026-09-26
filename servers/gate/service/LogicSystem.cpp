@@ -1,14 +1,109 @@
 #include "LogicSystem.h"
 #include "ChatLogger.h"
 #include "MysqlMgr.h"
+#include "PasswordHasher.h"
+#include "RedisMgr.h"
 #include "StatusGrpcClient.h"
 #include "VerifyGrpcClient.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <initializer_list>
+#include <array>
+#include <sodium.h>
 
 namespace {
+constexpr int kResumeSeconds = 15 * 60;
+
+std::string hexDigest(const std::string& value) {
+    std::array<unsigned char, crypto_hash_sha256_BYTES> digest{};
+    crypto_hash_sha256(digest.data(), reinterpret_cast<const unsigned char*>(value.data()),
+                       value.size());
+    std::string encoded(digest.size() * 2 + 1, '\0');
+    sodium_bin2hex(encoded.data(), encoded.size(), digest.data(), digest.size());
+    encoded.resize(digest.size() * 2);
+    return encoded;
+}
+
+std::string newResumeToken() {
+    std::array<unsigned char, 32> bytes{};
+    randombytes_buf(bytes.data(), bytes.size());
+    std::string token(bytes.size() * 2 + 1, '\0');
+    sodium_bin2hex(token.data(), token.size(), bytes.data(), bytes.size());
+    token.resize(bytes.size() * 2);
+    return token;
+}
+
+bool validResumeToken(const std::string& token) {
+    return token.size() == 64 &&
+           std::all_of(token.begin(), token.end(), [](unsigned char ch) {
+               return std::isxdigit(ch) != 0;
+           });
+}
+
+void sessionError(const std::shared_ptr<HttpConnection>& connection, Json::Value& response,
+                  http::status status) {
+    response = Json::Value(Json::objectValue);
+    response["error"] = status == http::status::unauthorized ? ERROR_CODE_UNAUTHORIZED
+                                                            : ERROR_CODE_SERVICE_UNAVAILABLE;
+    connection->SetJsonError(status, response["error"].asInt());
+}
+
+// 只在数据库中的密码哈希指纹仍匹配时接受续期凭证。
+bool readResumeSession(const std::shared_ptr<HttpConnection>& connection,
+                       const std::string& token, Json::Value& response, int& uid,
+                       std::string& record) {
+    if (!validResumeToken(token)) {
+        sessionError(connection, response, http::status::unauthorized);
+        return false;
+    }
+    const auto key = "resume_session_" + hexDigest(token);
+    const auto read = RedisMgr::GetInstance()->ReadSession(key, record);
+    if (read != RedisMgr::SessionReadResult::Found) {
+        sessionError(connection, response, read == RedisMgr::SessionReadResult::Missing
+                                              ? http::status::unauthorized
+                                              : http::status::service_unavailable);
+        return false;
+    }
+    const auto delimiter = record.find(':');
+    try {
+        if (delimiter == std::string::npos || delimiter == 0)
+            throw std::invalid_argument("invalid resume record");
+        std::size_t parsed = 0;
+        uid = std::stoi(record.substr(0, delimiter), &parsed);
+        if (uid <= 0 || parsed != delimiter)
+            throw std::invalid_argument("invalid resume uid");
+    } catch (const std::exception&) {
+        sessionError(connection, response, http::status::unauthorized);
+        return false;
+    }
+    std::string current;
+    bool unavailable = false;
+    if (!MysqlMgr::GetInstance()->PasswordFingerprint(uid, current, &unavailable)) {
+        sessionError(connection, response, unavailable ? http::status::service_unavailable
+                                                       : http::status::unauthorized);
+        return false;
+    }
+    const auto stored = record.substr(delimiter + 1);
+    if (stored.size() != current.size() || sodium_memcmp(stored.data(), current.data(),
+                                                         stored.size()) != 0) {
+        sessionError(connection, response, http::status::unauthorized);
+        return false;
+    }
+    return true;
+}
+
+void addChatEndpoint(Json::Value& root, int uid, const GetChatServerRsp& reply) {
+    root["uid"] = uid;
+    root["token"] = reply.token();
+    const char* resource_url = std::getenv("CHAT_RESOURCE_BASE_URL");
+    root["resource_base_url"] = resource_url ? resource_url : "https://localhost/api/resources/v1";
+    root["resource_protocol_version"] = 1;
+    root["host"] = reply.host();
+    root["port"] = reply.port();
+    root["transport"] = reply.transport();
+    root["tls_server_name"] = reply.tls_server_name();
+}
 
 std::string normalizeEmail(std::string email) {
     email.erase(email.begin(), std::find_if(email.begin(), email.end(),
@@ -201,24 +296,92 @@ LogicSystem::LogicSystem() {
             beast::ostream(connection->_res.body()) << root.toStyledString();
             return true;
         }
-        if (!consumeVerificationCode(email, src_root["varifycode"].asString(), root)) {
-            std::string jsonstr = root.toStyledString();
-            beast::ostream(connection->_res.body()) << jsonstr;
-            return true;
-        }
-        // 查询数据库判断用户名和邮箱是否匹配
-        bool email_valid = MysqlMgr::GetInstance()->CheckEmail(name, email);
+        // 先检查账户与数据库状态，避免因数据库故障白白消费验证码。
+        bool database_unavailable = false;
+        bool email_valid = MysqlMgr::GetInstance()->CheckEmail(name, email, &database_unavailable);
         if (!email_valid) {
-            chat::observability::stream(chat::observability::Level::Info)
-                << " user email not match" << std::endl;
-            root["error"] = ERROR_CODE::EmailNotMatch;
+            connection->_res.result(database_unavailable ? http::status::service_unavailable
+                                                         : http::status::bad_request);
+            root["error"] = database_unavailable ? ERROR_CODE::RPC_ERROR
+                                                   : ERROR_CODE::EmailNotMatch;
             std::string jsonstr = root.toStyledString();
             beast::ostream(connection->_res.body()) << jsonstr;
             return true;
         }
-        // 更新密码为最新密码
-        bool b_up = MysqlMgr::GetInstance()->UpdatePwd(name, pwd);
+        const auto request_token = src_root["reset_request_token"].isString()
+                                       ? src_root["reset_request_token"].asString()
+                                       : std::string{};
+        std::string password_hash;
+        std::string grant_key;
+        if (request_token.empty()) {
+            // 旧客户端仍可提交原字段，但数据库更新失败后需重新获取验证码。
+            if (!consumeVerificationCode(email, src_root["varifycode"].asString(), root)) {
+                beast::ostream(connection->_res.body()) << root.toStyledString();
+                return true;
+            }
+        } else {
+            if (!validResumeToken(request_token)) {
+                connection->_res.result(http::status::bad_request);
+                root["error"] = ERROR_CODE_BAD_REQUEST;
+                beast::ostream(connection->_res.body()) << root.toStyledString();
+                return true;
+            }
+            grant_key = "reset_grant_" + hexDigest(request_token);
+            auto redis = RedisMgr::GetInstance();
+            std::string grant;
+            auto grant_read = redis->ReadSession(grant_key, grant);
+            if (grant_read == RedisMgr::SessionReadResult::RedisError) {
+                sessionError(connection, root, http::status::service_unavailable);
+                return true;
+            }
+            if (grant_read == RedisMgr::SessionReadResult::Missing) {
+                Json::Value record;
+                record["email"] = email;
+                record["user"] = name;
+                record["hash"] = chat::security::PasswordHasher::hash(pwd);
+                const auto issue = redis->ConsumeResetCodeAndGrant(
+                    email, src_root["varifycode"].asString(), grant_key, record.toStyledString());
+                if (issue == RedisMgr::ResetGrantResult::Created) {
+                    grant = record.toStyledString();
+                } else if (issue == RedisMgr::ResetGrantResult::Exists) {
+                    grant_read = redis->ReadSession(grant_key, grant);
+                    if (grant_read != RedisMgr::SessionReadResult::Found) {
+                        sessionError(connection, root, http::status::service_unavailable);
+                        return true;
+                    }
+                } else {
+                    connection->_res.result(issue == RedisMgr::ResetGrantResult::RedisError
+                                                ? http::status::service_unavailable
+                                                : http::status::bad_request);
+                    root["error"] = issue == RedisMgr::ResetGrantResult::RedisError
+                                        ? ERROR_CODE::RPC_ERROR
+                                        : issue == RedisMgr::ResetGrantResult::Expired
+                                              ? ERROR_CODE::VarifyExpired
+                                              : ERROR_CODE::VarifyCodeErr;
+                    beast::ostream(connection->_res.body()) << root.toStyledString();
+                    return true;
+                }
+            }
+            Json::Value record;
+            Json::Reader grant_reader;
+            if (!grant_reader.parse(grant, record) || !record.isObject() ||
+                !record["email"].isString() || record["email"].asString() != email ||
+                !record["user"].isString() || record["user"].asString() != name ||
+                !record["hash"].isString() ||
+                !chat::security::PasswordHasher::verify(pwd, record["hash"].asString())) {
+                connection->_res.result(http::status::unauthorized);
+                root["error"] = ERROR_CODE_UNAUTHORIZED;
+                beast::ostream(connection->_res.body()) << root.toStyledString();
+                return true;
+            }
+            password_hash = record["hash"].asString();
+        }
+        // 同一随机请求的 Argon2 哈希固定，数据库故障时可安全重试。
+        bool b_up = request_token.empty()
+                        ? MysqlMgr::GetInstance()->UpdatePwd(name, pwd)
+                        : MysqlMgr::GetInstance()->UpdatePwdHash(name, email, password_hash);
         if (!b_up) {
+            connection->_res.result(http::status::service_unavailable);
             chat::observability::stream(chat::observability::Level::Info)
                 << " update pwd failed" << std::endl;
             root["error"] = ERROR_CODE::PasswdUpFailed;
@@ -228,6 +391,8 @@ LogicSystem::LogicSystem() {
         }
         chat::observability::stream(chat::observability::Level::Info)
             << "succeed to update password" << std::endl;
+        if (!grant_key.empty())
+            RedisMgr::GetInstance()->Del(grant_key);
         root["error"] = 0;
         root["email"] = email;
         root["user"] = name;
@@ -284,17 +449,107 @@ LogicSystem::LogicSystem() {
         root["error"] = 0;
         root["email"] = email;
         root["user"] = userInfo.name;
-        root["uid"] = userInfo.uid;
-        root["token"] = reply.token();
-        const char* resource_url = std::getenv("CHAT_RESOURCE_BASE_URL");
-        root["resource_base_url"] = resource_url ? resource_url : "https://localhost/api/resources/v1";
-        root["resource_protocol_version"] = 1;
-        root["host"] = reply.host();
-        root["port"] = reply.port();
-        root["transport"] = reply.transport();
-        root["tls_server_name"] = reply.tls_server_name();
+        addChatEndpoint(root, userInfo.uid, reply);
+        // Redis 仅保存随机凭证的摘要；密码重置会使记录中的指纹立即失配。
+        const auto resume_token = newResumeToken();
+        if (!RedisMgr::GetInstance()->SetWithTtl("resume_session_" + hexDigest(resume_token),
+                                                std::to_string(userInfo.uid) + ":" +
+                                                    userInfo.password_fingerprint,
+                                                kResumeSeconds)) {
+            sessionError(connection, root, http::status::service_unavailable);
+            return true;
+        }
+        root["resume_token"] = resume_token;
+        root["resume_expires_in"] = kResumeSeconds;
         std::string jsonstr = root.toStyledString();
         beast::ostream(connection->_res.body()) << jsonstr;
+        return true;
+    });
+
+    RegPost("/session_renew", [](std::shared_ptr<HttpConnection> connection) {
+        connection->_res.set(http::field::content_type, "application/json");
+        Json::Value request, response;
+        Json::Reader reader;
+        if (!reader.parse(boost::beast::buffers_to_string(connection->_req.body().data()), request) ||
+            !hasStringFields(request, {"resume_token"})) {
+            connection->_res.result(http::status::bad_request);
+            response["error"] = ERROR_CODE_BAD_REQUEST;
+            beast::ostream(connection->_res.body()) << response.toStyledString();
+            return true;
+        }
+        const auto token = request["resume_token"].asString();
+        int uid = 0;
+        std::string record;
+        if (!readResumeSession(connection, token, response, uid, record))
+            return true;
+        // 比较记录并续期是单个 Redis 脚本，防止与退出撤销竞争时复活凭证。
+        const auto result = RedisMgr::GetInstance()->RenewSession(
+            "resume_session_" + hexDigest(token), record, kResumeSeconds);
+        if (result != RedisMgr::SessionReadResult::Found) {
+            sessionError(connection, response, result == RedisMgr::SessionReadResult::Missing
+                                                  ? http::status::unauthorized
+                                                  : http::status::service_unavailable);
+            return true;
+        }
+        response["error"] = 0;
+        response["resume_expires_in"] = kResumeSeconds;
+        beast::ostream(connection->_res.body()) << response.toStyledString();
+        return true;
+    });
+
+    RegPost("/session_refresh", [](std::shared_ptr<HttpConnection> connection) {
+        connection->_res.set(http::field::content_type, "application/json");
+        Json::Value request, response;
+        Json::Reader reader;
+        if (!reader.parse(boost::beast::buffers_to_string(connection->_req.body().data()), request) ||
+            !hasStringFields(request, {"resume_token"})) {
+            connection->_res.result(http::status::bad_request);
+            response["error"] = ERROR_CODE_BAD_REQUEST;
+            beast::ostream(connection->_res.body()) << response.toStyledString();
+            return true;
+        }
+        const auto token = request["resume_token"].asString();
+        int uid = 0;
+        std::string record;
+        if (!readResumeSession(connection, token, response, uid, record))
+            return true;
+        auto reply = StatusGrpcClient::GetInstance()->GetChatServer(uid, connection->_request_id);
+        if (reply.error()) {
+            sessionError(connection, response, http::status::service_unavailable);
+            return true;
+        }
+        // Status RPC 期间可能发生退出或密码重置；回包前再次确认凭证仍有效。
+        int current_uid = 0;
+        std::string current_record;
+        if (!readResumeSession(connection, token, response, current_uid, current_record))
+            return true;
+        if (current_uid != uid || current_record != record) {
+            sessionError(connection, response, http::status::unauthorized);
+            return true;
+        }
+        response["error"] = 0;
+        addChatEndpoint(response, uid, reply);
+        beast::ostream(connection->_res.body()) << response.toStyledString();
+        return true;
+    });
+
+    RegPost("/session_logout", [](std::shared_ptr<HttpConnection> connection) {
+        connection->_res.set(http::field::content_type, "application/json");
+        Json::Value request, response;
+        Json::Reader reader;
+        if (!reader.parse(boost::beast::buffers_to_string(connection->_req.body().data()), request) ||
+            !hasStringFields(request, {"resume_token"}) ||
+            !validResumeToken(request["resume_token"].asString())) {
+            connection->_res.result(http::status::bad_request);
+            response["error"] = ERROR_CODE_BAD_REQUEST;
+        } else if (!RedisMgr::GetInstance()->Del(
+                       "resume_session_" + hexDigest(request["resume_token"].asString()))) {
+            connection->_res.result(http::status::service_unavailable);
+            response["error"] = ERROR_CODE_SERVICE_UNAVAILABLE;
+        } else {
+            response["error"] = 0;
+        }
+        beast::ostream(connection->_res.body()) << response.toStyledString();
         return true;
     });
 }

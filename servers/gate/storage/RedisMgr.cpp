@@ -82,6 +82,59 @@ bool RedisMgr::Set(const std::string& key, const std::string& value) {
     return true;
 }
 
+bool RedisMgr::SetWithTtl(const std::string& key, const std::string& value, int ttl_seconds) {
+    auto* connection = _con_pool->getContext();
+    if (!connection || ttl_seconds <= 0)
+        return false;
+    auto* reply = static_cast<redisReply*>(
+        redisCommand(connection, "SET %s %s EX %d", key.c_str(), value.c_str(), ttl_seconds));
+    const bool ok = reply && reply->type == REDIS_REPLY_STATUS && reply->str &&
+                    std::strcmp(reply->str, "OK") == 0;
+    if (reply)
+        freeReplyObject(reply);
+    _con_pool->returnContext(connection);
+    return ok;
+}
+
+RedisMgr::SessionReadResult RedisMgr::ReadSession(const std::string& key, std::string& value) {
+    auto* connection = _con_pool->getContext();
+    if (!connection)
+        return SessionReadResult::RedisError;
+    auto* reply = static_cast<redisReply*>(redisCommand(connection, "GET %s", key.c_str()));
+    SessionReadResult result = SessionReadResult::RedisError;
+    if (reply && reply->type == REDIS_REPLY_NIL)
+        result = SessionReadResult::Missing;
+    else if (reply && reply->type == REDIS_REPLY_STRING && reply->str) {
+        value.assign(reply->str, reply->len);
+        result = SessionReadResult::Found;
+    }
+    if (reply)
+        freeReplyObject(reply);
+    _con_pool->returnContext(connection);
+    return result;
+}
+
+RedisMgr::SessionReadResult RedisMgr::RenewSession(const std::string& key,
+                                                   const std::string& expected,
+                                                   int ttl_seconds) {
+    static constexpr const char* script =
+        "if redis.call('GET',KEYS[1]) == ARGV[1] then "
+        "return redis.call('EXPIRE',KEYS[1],ARGV[2]) else return 0 end";
+    auto* connection = _con_pool->getContext();
+    if (!connection)
+        return SessionReadResult::RedisError;
+    auto* reply = static_cast<redisReply*>(redisCommand(connection, "EVAL %s 1 %s %s %d",
+                                                        script, key.c_str(), expected.c_str(),
+                                                        ttl_seconds));
+    SessionReadResult result = SessionReadResult::RedisError;
+    if (reply && reply->type == REDIS_REPLY_INTEGER)
+        result = reply->integer == 1 ? SessionReadResult::Found : SessionReadResult::Missing;
+    if (reply)
+        freeReplyObject(reply);
+    _con_pool->returnContext(connection);
+    return result;
+}
+
 bool RedisMgr::LPush(const std::string& key, const std::string& value) {
     auto connect = _con_pool->getContext();
     if (connect == nullptr) {
@@ -379,4 +432,54 @@ return 1
     if (result == -3)
         return VerificationResult::TooManyAttempts;
     return VerificationResult::RedisError;
+}
+
+RedisMgr::ResetGrantResult RedisMgr::ConsumeResetCodeAndGrant(
+    const std::string& email, const std::string& submitted_code,
+    const std::string& grant_key, const std::string& payload) {
+    static constexpr const char* script = R"lua(
+if redis.call('EXISTS', KEYS[3]) == 1 then return 2 end
+local expected = redis.call('GET', KEYS[1])
+if not expected then return -1 end
+if expected ~= ARGV[1] then
+  local attempts = redis.call('INCR', KEYS[2])
+  if attempts == 1 then
+    local ttl = redis.call('TTL', KEYS[1])
+    if ttl < 1 then ttl = 300 end
+    redis.call('EXPIRE', KEYS[2], ttl)
+  end
+  if attempts >= 5 then
+    redis.call('DEL', KEYS[1], KEYS[2])
+    return -3
+  end
+  return -2
+end
+redis.call('SET', KEYS[3], ARGV[2], 'EX', 300)
+redis.call('DEL', KEYS[1], KEYS[2])
+return 1
+)lua";
+    auto* connection = _con_pool->getContext();
+    if (!connection)
+        return ResetGrantResult::RedisError;
+    const std::string code_key = CODE_HEAD + email;
+    const std::string attempts_key = "code_attempts_" + email;
+    const char* argv[] = {"EVAL", script, "3", code_key.c_str(), attempts_key.c_str(),
+                          grant_key.c_str(), submitted_code.c_str(), payload.c_str()};
+    const size_t lengths[] = {4, std::strlen(script), 1, code_key.size(), attempts_key.size(),
+                              grant_key.size(), submitted_code.size(), payload.size()};
+    auto* reply = static_cast<redisReply*>(redisCommandArgv(connection, 8, argv, lengths));
+    _con_pool->returnContext(connection);
+    if (!reply || reply->type != REDIS_REPLY_INTEGER) {
+        if (reply)
+            freeReplyObject(reply);
+        return ResetGrantResult::RedisError;
+    }
+    const auto value = reply->integer;
+    freeReplyObject(reply);
+    if (value == 1) return ResetGrantResult::Created;
+    if (value == 2) return ResetGrantResult::Exists;
+    if (value == -1) return ResetGrantResult::Expired;
+    if (value == -2) return ResetGrantResult::Mismatch;
+    if (value == -3) return ResetGrantResult::TooManyAttempts;
+    return ResetGrantResult::RedisError;
 }

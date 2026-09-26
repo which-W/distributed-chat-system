@@ -3,7 +3,6 @@
 #include "ChatGrpcClient.h"
 #include "DeliveryWindow.h"
 #include "KeyedExecutor.h"
-#include "LogicWorker.h"
 #include "MysqlMgr.h"
 #include "RedisMgr.h"
 #include "Singleton.h"
@@ -30,7 +29,7 @@ class LogicSystem : public Singleton<LogicSystem> {
   public:
     ~LogicSystem();
     bool PostMsgToQueue(std::shared_ptr<LogicNode> msg);
-    bool PostMsgToFileQue(std::shared_ptr<LogicNode> msg, int index);
+    bool ScheduleResourceRevocation(const std::string& session_id);
     bool WakeDelivery(int receiver_uid);
     void Shutdown();
     void SetServer(std::shared_ptr<CServer> pserver);
@@ -68,10 +67,9 @@ class LogicSystem : public Singleton<LogicSystem> {
     std::unique_ptr<chat::runtime::KeyedExecutor> _executor;
     std::unique_ptr<chat::runtime::KeyedExecutor> _notifications;
     std::atomic<std::uint64_t> _delivered{0}, _retries{0}, _ack_failures{0}, _query_failures{0};
-    std::atomic<std::uint64_t> _persist_us{0}, _persist_batches{0};
+    std::atomic<std::uint64_t> _persist_us{0}, _persist_batches{0}, _revoke_failures{0};
     std::atomic<bool> _ready{false}, _shutdown{false};
     // 将消息的id与回调函数相绑定
     std::map<short, FunCallBack> _func_callback;
     std::shared_ptr<CServer> _pre_server;
-    std::vector<std::shared_ptr<LogicWorker>> _workers;
 };

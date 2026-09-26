@@ -1,9 +1,10 @@
 #include "IOContextPooL.h"
 #include "ChatLogger.h"
 #include <iostream>
+#include <algorithm>
 using namespace std;
 IOContextPool::IOContextPool(std::size_t size)
-    : _size(size), _ioContexts(size), _works(size), _nextIOContext(0) {
+    : _size(std::max<std::size_t>(1, size)), _ioContexts(_size), _works(_size), _nextIOContext(0) {
     // 将ioContext和work相绑定防止run后直接退出
     for (std::size_t i = 0; i < size; i++) {
         _works[i] = std::make_unique<Work>(_ioContexts[i].get_executor());
@@ -16,6 +17,8 @@ IOContextPool::IOContextPool(std::size_t size)
 }
 
 IOContextPool::~IOContextPool() {
+    // 析构可能晚于显式 Stop；只 join 仍可 join 的线程。
+    Stop();
     chat::observability::stream(chat::observability::Level::Info)
         << "AsioIOServicePool destruct" << std::endl;
 }
@@ -35,6 +38,7 @@ void IOContextPool::Stop() {
     }
 
     for (auto& t : _threads) {
-        t.join();
+        if (t.joinable())
+            t.join();
     }
 }

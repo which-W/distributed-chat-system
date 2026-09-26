@@ -1,9 +1,6 @@
 add_executable(chat_server
     app/main.cpp
     config/ConfigMgr.cpp
-    files/FileSystem.cpp
-    files/FileWorker.cpp
-    files/EncryptedFileStore.cpp
     network/CServer.cpp
     network/CSession.cpp
     network/MsgNode.cpp
@@ -13,7 +10,6 @@ add_executable(chat_server
     runtime/AsioIOServicePool.cpp
     runtime/IOThreadPool.cpp
     service/LogicSystem.cpp
-    service/LogicWorker.cpp
     service/UserMgr.cpp
     storage/DistLock.cpp
     storage/MysqlDao.cpp
@@ -21,7 +17,7 @@ add_executable(chat_server
     storage/RedisMgr.cpp)
 
 target_include_directories(chat_server PRIVATE
-    config core files network rpc runtime service storage
+    config core network rpc runtime service storage
     "${PROJECT_SOURCE_DIR}/common")
 target_link_libraries(chat_server PRIVATE chat_server_dependencies chat_security chat_observability)
 

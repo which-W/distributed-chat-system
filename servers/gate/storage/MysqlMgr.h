@@ -12,10 +12,14 @@ class MysqlMgr : public Singleton<MysqlMgr> {
     ~MysqlMgr();
     int RegUser(const std::string& name, const std::string& email, const std::string& pwd,
                 const std::string& icon);
-    bool CheckEmail(const std::string& name, const std::string& email);
+    bool CheckEmail(const std::string& name, const std::string& email,
+                    bool* unavailable = nullptr);
     bool UpdatePwd(const std::string& name, const std::string& pwd);
+    bool UpdatePwdHash(const std::string& name, const std::string& email,
+                       const std::string& encoded_hash);
     bool CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userinfo,
                   bool* unavailable = nullptr);
+    bool PasswordFingerprint(int uid, std::string& fingerprint, bool* unavailable = nullptr);
 
   private:
     MysqlMgr();

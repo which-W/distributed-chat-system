@@ -106,6 +106,6 @@ int main() {
             while (!stopping) { try { service.maintenance(); } catch (...) {} for (int i=0;i<10 && !stopping;++i) std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
         });
         net::signal_set signals(io,SIGINT,SIGTERM); signals.async_wait([&](beast::error_code,int) { acceptor.close(); stopping=true; io.stop(); });
-        io.run(); stopping=true; maintenance.join(); rpc->Shutdown(); workers.stop(true); return 0;
+        io.run(); stopping=true; maintenance.join(); service.stopNotifications(); rpc->Shutdown(); workers.stop(true); return 0;
     } catch (const std::exception& e) { std::cerr << "resource startup failed: " << e.what() << '\n'; return 1; }
 }

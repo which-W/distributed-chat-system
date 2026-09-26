@@ -3,8 +3,8 @@
 #include <iostream>
 using namespace std;
 AsioIOServicePool::AsioIOServicePool(std::size_t size)
-    : _size(size), _ioServces(size), _works(size), _nextIOService(0) {
-    for (std::size_t i = 0; i < size; i++) {
+    : _size(std::max<std::size_t>(1, size)), _ioServces(_size), _works(_size), _nextIOService(0) {
+    for (std::size_t i = 0; i < _size; i++) {
         _works[i] = std::make_unique<Work>(_ioServces[i].get_executor());
     }
 
@@ -15,6 +15,7 @@ AsioIOServicePool::AsioIOServicePool(std::size_t size)
 }
 
 AsioIOServicePool::~AsioIOServicePool() {
+    Stop();
     chat::observability::stream(chat::observability::Level::Info)
         << "AsioIOServicePool destruct" << std::endl;
 }
@@ -28,12 +29,16 @@ boost::asio::io_context& AsioIOServicePool::GetIOServer() {
 }
 
 void AsioIOServicePool::Stop() {
+    // 信号回调、异常清理和析构都可能触发停止，因此重复调用必须安全。
     for (auto& work : _works) {
+        if (!work)
+            continue;
         static_cast<boost::asio::io_context&>(work->get_executor().context()).stop();
         work.reset();
     }
 
     for (auto& t : _threads) {
-        t.join();
+        if (t.joinable())
+            t.join();
     }
 }

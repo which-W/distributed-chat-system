@@ -23,7 +23,7 @@ sh scripts/configure-fresh.sh linux-server-release
 
 ## 测试
 
-测试随构建选项而异。当前仓库缺少根 `tests/` 目录，不能把服务端 CTest 运行成功视为密码哈希或端到端测试已经执行。先列出实际注册的测试；桌面客户端有独立 CTest 用例，Node 测试单独运行：
+测试随构建选项而异。服务端和桌面客户端分别运行 CTest；Node 测试单独运行。容器端到端入口位于 `tests/e2e/chat_e2e.py`，需通过 `scripts/demo.sh` 启动完整依赖：
 
 ```sh
 ctest --test-dir build/linux-server-release -N
@@ -85,4 +85,4 @@ CI 配置包含 Linux Server Release、Windows Client Release、CTest、Node 依
 
 ## 演示与性能验证的当前限制
 
-当前工作区缺少 `tests/e2e/chat_e2e.py`，`scripts/demo.sh` 无法完成其 E2E 阶段；故障与基准脚本也需要先检查测试模块及运行环境。不要把这些脚本作为已验证的一键入口。脚本用途见 [脚本导航](../scripts/README.md)。
+`scripts/demo.sh` 会运行真实 Gate/Chat 会话恢复冒烟测试；故障与基准脚本仍需 Docker 和完整依赖环境，当前开发机未执行这两项，不能据此报告性能收益。脚本用途见 [脚本导航](../scripts/README.md)。

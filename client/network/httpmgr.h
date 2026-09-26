@@ -2,6 +2,8 @@
 #include "Singleton.h"
 #include "global.h"
 #include <QNetworkAccessManager>
+#include <QPointer>
+#include <QHash>
 class Httpmgr : public QObject,
                 public Singleton<Httpmgr>,
                 public std::enable_shared_from_this<Httpmgr> {
@@ -14,6 +16,7 @@ class Httpmgr : public QObject,
     friend class Singleton<Httpmgr>;
     Httpmgr();
     QNetworkAccessManager _manager;
+    QHash<int, QPointer<QNetworkReply>> _pending;
 
   public slots:
     void slot_http_finished(Req id, QString res, ErrorCode error, Modules mod);

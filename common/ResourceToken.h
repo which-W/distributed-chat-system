@@ -5,6 +5,7 @@
 
 namespace chat::resources {
 inline constexpr int TokenSeconds = 900;
+inline constexpr int SessionSeconds = 90;
 inline std::string tokenDigest(const std::string& token) {
     unsigned char digest[crypto_hash_sha256_BYTES];
     crypto_hash_sha256(digest, reinterpret_cast<const unsigned char*>(token.data()), token.size());

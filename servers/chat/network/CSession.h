@@ -59,8 +59,8 @@ class CSession : public std::enable_shared_from_this<CSession> {
     void StartWrite();
     tcp::socket _socket;
     std::string _session_id;
-    // 文件分片允许较大帧；普通聊天消息仍在解析头时维持 2 KB 上限。
-    char _data[MAX_FILE_FRAME_LENGTH];
+    // 旧 TCP 文件分片已移除，会话固定接收缓冲区只需 2 KiB。
+    char _data[MAX_LENGTH];
     CServer* _server;
     std::atomic<bool> _b_close;
     std::queue<shared_ptr<SendNode>> _send_que;
@@ -70,8 +70,6 @@ class CSession : public std::enable_shared_from_this<CSession> {
     std::size_t _send_bytes = 0;
     // Independent request classes, touched only on the socket strand.
     chat::runtime::TokenBucket _chat_requests{200, 100};
-    chat::runtime::TokenBucket _file_requests{256, 128};
-    chat::runtime::TokenBucket _file_bytes{8 * 1024 * 1024, 4 * 1024 * 1024};
     // 收到的消息结构
     std::shared_ptr<RecvNode> _recv_msg_node;
     bool _b_head_parse;

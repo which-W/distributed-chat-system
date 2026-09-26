@@ -38,6 +38,8 @@ class ResetDialog : public QDialog {
     QMap<Req, std::function<void(const QJsonObject&)>> _handlers;
     QTimer* _timer;
     int _counter;
+    QString _reset_request_token;
+    QByteArray _reset_payload_fingerprint;
   signals:
     void switchLogin();
 };

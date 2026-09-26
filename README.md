@@ -80,7 +80,7 @@ npm ci --prefix VarifyServer
 
 生产环境使用 [生产部署指南](deploy/production/README.md)；升级已有数据库时，先核对其中的迁移步骤。
 
-**演示脚本状态**：仓库保留了 `scripts/demo.sh`，但当前缺少它依赖的 `tests/e2e/chat_e2e.py`，暂不能作为开箱即用的演示入口。测试与相关工具的适用范围见 [开发指南](docs/DEVELOPMENT.md)。
+**演示脚本状态**：`scripts/demo.sh` 使用 `tests/e2e/chat_e2e.py` 验证真实 Gate/Chat 会话恢复；运行前需要 Docker 与 Compose。测试与相关工具的适用范围见 [开发指南](docs/DEVELOPMENT.md)。
 
 ## 目录
 

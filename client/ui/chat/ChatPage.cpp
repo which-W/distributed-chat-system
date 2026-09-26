@@ -89,18 +89,18 @@ ChatPage::ChatPage(QWidget* parent) : QWidget(parent), ui(new Ui::ChatPageClass(
             });
     connect(manager.get(), &FileTransferManager::progressChanged, this,
             [this](const QString& id, qint64 cur, qint64 total) {
-                if (_file_bubbles.contains(id))
-                    _file_bubbles[id]->setProgress(cur, total);
+                if (auto bubble = _file_bubbles.value(id))
+                    bubble->setProgress(cur, total);
             });
     connect(manager.get(), &FileTransferManager::transferFinished, this,
             [this](const QString& id, const QString& path) {
-                if (_file_bubbles.contains(id))
-                    _file_bubbles[id]->setFinished(path);
+                if (auto bubble = _file_bubbles.value(id))
+                    bubble->setFinished(path);
             });
     connect(manager.get(), &FileTransferManager::transferFailed, this,
             [this](const QString& id, const QString& reason) {
-                  if (_file_bubbles.contains(id))
-                      _file_bubbles[id]->setFailed(reason);
+                  if (auto bubble = _file_bubbles.value(id))
+                      bubble->setFailed(reason);
                   else if (id.isEmpty())
                       ElaMessageBar::warning(ElaMessageBarType::TopRight, tr("文件未发送"), reason, 5000, window());
             });
@@ -150,7 +150,7 @@ void ChatPage::SetUserInfo(std::shared_ptr<UserInfo> user_info) {
 
 void ChatPage::appendFileBubble(const QJsonObject& metadata, ChatRole role, bool incoming) {
     const auto id = metadata["id"].toString();
-    if (_file_bubbles.contains(id))
+    if (_file_bubbles.value(id))
         return;
     auto* item = new ChatItemBase(role);
     auto self = UserMgr::Getinstance()->GetUserInfo();
@@ -193,7 +193,7 @@ void ChatPage::chooseFile(QString, ClickLbState) {
         return;
     metadata["id"] = local;
     appendFileBubble(metadata, ChatRole::Self, false);
-    if (_file_bubbles.contains(local)) _file_bubbles[local]->setLocalPreview(path);
+    if (auto bubble = _file_bubbles.value(local)) bubble->setLocalPreview(path);
 }
 
 void ChatPage::AppendChatMsg(std::shared_ptr<TextChatData> msg) {

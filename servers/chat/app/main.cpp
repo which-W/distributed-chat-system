@@ -7,11 +7,6 @@
 #include "InternalRpcAuth.h"
 #include "LogicSystem.h"
 #include <csignal>
-#include <mutex>
-#include <thread>
-bool bstop = false;
-std::condition_variable cond_quit;
-std::mutex mutex_quit;
 
 int main() {
     auto& cfg = ConfigMgr::Inst();
@@ -54,14 +49,25 @@ int main() {
         service.RegisterServer(pointer_server);
         // 构建并启动gRPC服务器
         std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+        if (!server)
+            throw std::runtime_error("Chat gRPC bind failed: " + server_address);
+        // gRPC 自己维护工作线程；退出时在当前线程等待，避免异常路径留下未 join 的线程。
+        Defer grpc_cleanup([&server]() {
+            server->Shutdown();
+            server->Wait();
+        });
+        Defer chat_cleanup([&pointer_server, &pool, &io_context]() {
+            pointer_server->Stop();
+            pointer_server->StopTimer();
+            LogicSystem::GetInstance()->Shutdown();
+            io_context.stop();
+            pool->Stop();
+        });
         chat::observability::log(chat::observability::Level::Info, "server.started",
                                  "chat server is listening",
                                  {{"server", server_name},
                                   {"tcp_address", listen_host + ":" + port_str},
                                   {"rpc_address", server_address}});
-
-        // 单独启动一个线程处理grpc服务
-        std::thread grpc_server_thread([&server]() { server->Wait(); });
 
         boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
         signals.async_wait([&io_context, pool, &server, pointer_server](auto, auto) {
@@ -79,9 +85,6 @@ int main() {
         LogicSystem::GetInstance()->SetServer(pointer_server);
         io_context.run();
 
-        grpc_server_thread.join();
-        pointer_server->Stop();
-        pointer_server->StopTimer();
         chat::observability::log(chat::observability::Level::Info, "server.stopped",
                                  "chat server stopped");
         chat::observability::shutdown();

@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "serve": "node server.js",
-    "check": "node --check server.js && node --check redis.js && node --check email.js && node --check config.js && node --check security.js && node --check logger.js",
+    "check": "node --check server.js && node --check redis.js && node --check verification.js && node --check email.js && node --check config.js && node --check security.js && node --check logger.js",
     "deps:check": "npm ls --all",
     "test": "node --test"
   },

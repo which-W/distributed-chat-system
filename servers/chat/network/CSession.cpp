@@ -132,6 +132,8 @@ void CSession::StartWrite() {
 void CSession::Close() {
     if (_b_close.exchange(true))
         return;
+    if (GetUserId() > 0)
+        LogicSystem::GetInstance()->ScheduleResourceRevocation(_session_id);
     auto self = shared_from_this();
     boost::asio::post(_socket.get_executor(), [self] {
         boost::system::error_code ignored;
@@ -205,20 +207,8 @@ void CSession::AsyncReadBody(int total_len) {
                 Close();
                 return;
             }
-            // 上传任务只进入文件队列，避免同一帧在两个队列中重复占用内存。
-            if (IsFileTransferMessage(_recv_msg_node->GetRecMsgNodeID())) {
-                std::hash<std::string> hash_fn;
-                size_t hash_value = hash_fn(_session_id); // 生成哈希值
-                int index = hash_value % LOGIC_WORKER_COUNT;
-                chat::observability::stream(chat::observability::Level::Info)
-                    << "Hash value: " << hash_value << std::endl;
-                if (!LogicSystem::GetInstance()->PostMsgToFileQue(
-                        make_shared<LogicNode>(shared_from_this(), _recv_msg_node), index)) {
-                    Close();
-                    return;
-                }
-            } else if (!LogicSystem::GetInstance()->PostMsgToQueue(
-                           make_shared<LogicNode>(shared_from_this(), _recv_msg_node))) {
+            if (!LogicSystem::GetInstance()->PostMsgToQueue(
+                    make_shared<LogicNode>(shared_from_this(), _recv_msg_node))) {
                 Close();
                 return;
             }
@@ -281,9 +271,7 @@ void CSession::AsyncReadHead(int total_len) {
             msg_len = boost::asio::detail::socket_ops::network_to_host_short(msg_len);
 
             // id非法
-            const auto allowed_length =
-                IsFileTransferMessage(msg_id) ? MAX_FILE_FRAME_LENGTH : MAX_LENGTH;
-            if (msg_len == 0 || msg_len > allowed_length) {
+            if (msg_len == 0 || msg_len > MAX_LENGTH) {
                 chat::observability::log(chat::observability::Level::Warn,
                                          "protocol.invalid_message_length",
                                          "invalid client message length",
@@ -294,11 +282,7 @@ void CSession::AsyncReadHead(int total_len) {
                 return;
             }
 
-            const bool file = IsFileTransferMessage(msg_id);
-            const bool allowed =
-                file ? (_file_requests.consume(1) && _file_bytes.consume(msg_len + HEAD_TOTAL_LEN))
-                     : _chat_requests.consume(1);
-            if (!allowed) {
+            if (!_chat_requests.consume(1)) {
                 chat::observability::log(
                     chat::observability::Level::Warn, "session.rate_limited",
                     "connection request budget exceeded",

@@ -3,6 +3,9 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QNetworkProxy>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QHostAddress>
 #include <QStandardPaths>
 #include <QUuid>
 
@@ -12,6 +15,11 @@ TcpMgr::TcpMgr()
       _manual_disconnect(false), _retry_attempt(0), _missed_heartbeats(0), _b_recv_pending(false),
       _message_id(0), _message_len(0) {
     _retry_timer.setSingleShot(true);
+    _renew_timer.setInterval(5 * 60 * 1000);
+    connect(&_renew_timer, &QTimer::timeout, this, [this]() {
+        if (_authenticated && !_resume_token.isEmpty())
+            requestSession(true);
+    });
     _friend_timer.setSingleShot(true);
     _friend_timer.setInterval(10000);
     connect(&_friend_timer, &QTimer::timeout, this, [this]() {
@@ -89,10 +97,8 @@ TcpMgr::TcpMgr()
                     _socket.abort();
                     return;
                 }
-                const bool fileFrame = responseId == Req::ID_DOWNLOAD_FILE_CHUNK;
                 const int allowedLength =
-                    fileFrame ? 60 * 1024
-                              : (responseId == Req::ID_CHAT_LOGIN_RSP ? 65535 : 16 * 1024);
+                    responseId == Req::ID_CHAT_LOGIN_RSP ? 65535 : 16 * 1024;
                 if (_message_len > allowedLength) {
                     qWarning() << "Rejected oversized chat frame" << _message_id << _message_len;
                     _socket.abort();
@@ -171,17 +177,22 @@ TcpMgr::TcpMgr()
     connect(&_socket, &QTcpSocket::disconnected, this, [this]() {
         qDebug() << "Disconnected from server.";
         _heartbeat_timer.stop();
+        const bool was_authenticated = _authenticated;
         _authenticated = false;
-        if (!_manual_disconnect && !_login_payload.isEmpty()) {
+        if (!_manual_disconnect && !_resume_token.isEmpty()) {
             _reconnecting = true;
             emit sig_connection_state(
                 tr("Chat connection lost. Reconnecting through the selected route..."), false);
             scheduleReconnect();
+        } else if (!_manual_disconnect && was_authenticated) {
+            emit sig_connection_state(
+                tr("Gate 未提供会话续期凭证，请重新登录以恢复聊天。"), false);
         }
     });
     connect(&_retry_timer, &QTimer::timeout, this, [this]() {
         if (!_manual_disconnect && _reconnecting) {
-            beginConnection();
+            // 一次性 Chat 票据在断线后不可重用，每次都先从 Gate 换新票据。
+            requestSession(false);
         }
     });
     connect(&_heartbeat_timer, &QTimer::timeout, this, [this]() {
@@ -317,10 +328,13 @@ void TcpMgr::initHandlers() {
 
         const bool restored = _reconnecting;
         _authenticated = true;
+        _login_payload.clear();
         _reconnecting = false;
         _retry_attempt = 0;
         _missed_heartbeats = 0;
         _heartbeat_timer.start();
+        if (!_resume_token.isEmpty())
+            _renew_timer.start();
         _outbox_timer.start();
         if (restored) {
             emit sig_connection_state(tr("Chat connection is healthy again."), true);
@@ -626,15 +640,6 @@ void TcpMgr::initHandlers() {
                          for (const auto& file : snapshot["pending_files"].toArray())
                              emit sig_file_available(file.toObject());
                      });
-    const Req fileResponses[] = {Req::ID_UPLOAD_FILE_RSP, Req::ID_UPLOAD_FILE_CHUNK_RSP,
-                                 Req::ID_UPLOAD_FILE_FINISH_RSP, Req::ID_DOWNLOAD_FILE_CHUNK};
-    for (const auto responseId : fileResponses) {
-        _handlers.insert(responseId, [this](Req id, int, QByteArray data) {
-            const auto document = QJsonDocument::fromJson(data);
-            if (document.isObject())
-                emit sig_file_frame(id, document.object());
-        });
-    }
     _handlers.insert(Req::ID_NOTIFY_FILE_REQ, [this](Req, int, QByteArray data) {
         const auto document = QJsonDocument::fromJson(data);
         if (document.isObject() && document.object()["error"].toInt() == 0)
@@ -652,14 +657,24 @@ void TcpMgr::handleMsg(Req id, int len, QByteArray data) {
 }
 
 void TcpMgr::slot_tcp_connect(ServerInfo info) {
+    logoutResumeToken();
+    cancelCredentialRequest();
     _messages.close();
     _outbox_timer.stop();
-    _manual_disconnect = false;
+    // 先屏蔽旧连接的 disconnected 回调，避免新登录被误判成自动重连。
+    _manual_disconnect = true;
     _reconnecting = false;
     _authenticated = false;
     _retry_attempt = 0;
     _login_payload.clear();
+    _renew_timer.stop();
+    _resume_token = info.ResumeToken;
+    _gate_base_url = gate_url_prefix;
+    _resource_base_url = info.ResourceBaseUrl;
+    _uid = info.Uid;
+    _allow_insecure = info.AllowInsecure;
     _socket.abort();
+    _manual_disconnect = false;
     resetParser();
     _host = info.Host;
     _port = static_cast<uint16_t>(info.Port.toUShort());
@@ -717,6 +732,7 @@ void TcpMgr::handleTransportReady() {
         emit sig_connection_state(tr("Transport restored. Re-authenticating the session..."),
                                   false);
         slot_send_data(Req::ID_CHAT_LOGIN, _login_payload);
+        _login_payload.clear();
         return;
     }
     emit sig_con_success(true);
@@ -846,9 +862,7 @@ void TcpMgr::writeFrame(Req reqId, const QByteArray& data) {
         qWarning() << "Refusing to send chat data before TLS is established";
         return;
     }
-    const int maxMessageLength =
-        reqId >= Req::ID_UPLOAD_FILE_REQ && reqId <= Req::ID_FILE_TRANSFER_CANCEL ? 60 * 1024
-                                                                                  : 2048;
+    const int maxMessageLength = 2048;
     if (data.isEmpty() || data.size() > maxMessageLength) {
         qWarning() << "Refusing invalid chat payload length:" << data.size();
         return;
@@ -881,13 +895,135 @@ void TcpMgr::writeFrame(Req reqId, const QByteArray& data) {
     qDebug() << "tcp send frame id" << reqId << "length" << data.size();
 }
 
+bool TcpMgr::credentialUrlAllowed(const QUrl& url) const {
+    if (url.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0)
+        return true;
+    const auto host = url.host();
+    return url.scheme().compare(QStringLiteral("http"), Qt::CaseInsensitive) == 0 &&
+           _allow_insecure &&
+           (host == QStringLiteral("localhost") || QHostAddress(host).isLoopback());
+}
+
+void TcpMgr::cancelCredentialRequest() {
+    ++_credential_generation;
+    if (_credential_reply) {
+        _credential_reply->abort();
+        _credential_reply = nullptr;
+    }
+}
+
+void TcpMgr::logoutResumeToken() {
+    if (_resume_token.isEmpty())
+        return;
+    const auto token = _resume_token;
+    _resume_token.clear();
+    const QUrl url(_gate_base_url + QStringLiteral("/session_logout"));
+    if (!credentialUrlAllowed(url))
+        return;
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::ManualRedirectPolicy);
+    request.setTransferTimeout(5000);
+    auto* reply = _credential_manager.post(
+        request, QJsonDocument(QJsonObject{{"resume_token", token}}).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, reply, &QNetworkReply::deleteLater);
+}
+
+void TcpMgr::requestSession(bool renew) {
+    if (_resume_token.isEmpty() || _credential_reply || (_manual_disconnect && !renew))
+        return;
+    const QUrl url(_gate_base_url + (renew ? QStringLiteral("/session_renew")
+                                          : QStringLiteral("/session_refresh")));
+    if (!credentialUrlAllowed(url)) {
+        _resume_token.clear();
+        _reconnecting = false;
+        emit sig_connection_state(tr("Gate 地址必须使用 HTTPS；请重新登录。"), false);
+        emit sig_login_failed(ErrorCode::ERR_FAIL);
+        return;
+    }
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    // 凭证请求绝不跟随重定向，避免续期凭证被转发到其他站点。
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::ManualRedirectPolicy);
+    request.setTransferTimeout(5000);
+    const auto generation = ++_credential_generation;
+    auto* reply = _credential_manager.post(
+        request, QJsonDocument(QJsonObject{{"resume_token", _resume_token}})
+                     .toJson(QJsonDocument::Compact));
+    _credential_reply = reply;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, generation, renew]() {
+        if (generation != _credential_generation) {
+            reply->deleteLater();
+            return;
+        }
+        _credential_reply = nullptr;
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto body = QJsonDocument::fromJson(reply->readAll());
+        const auto response = body.isObject() ? body.object() : QJsonObject{};
+        const bool transportFailed = reply->error() != QNetworkReply::NoError;
+        reply->deleteLater();
+        if (_manual_disconnect)
+            return;
+        if (status == 400 || status == 401 || status == 404) {
+            _resume_token.clear();
+            _renew_timer.stop();
+            _reconnecting = false;
+            _retry_timer.stop();
+            emit sig_connection_state(
+                status == 404 ? tr("Gate 版本不支持自动恢复，请重新登录。")
+                              : tr("登录凭证已失效，请重新登录。"), false);
+            emit sig_login_failed(ErrorCode::ERR_FAIL);
+            return;
+        }
+        if (transportFailed || status != 200 || response["error"].toInt(-1) != 0) {
+            if (!renew)
+                scheduleReconnect();
+            return;
+        }
+        if (renew)
+            return;
+        if (response["uid"].toInt() != _uid || response["token"].toString().isEmpty() ||
+            response["host"].toString().isEmpty() || response["port"].toString().isEmpty()) {
+            scheduleReconnect();
+            return;
+        }
+        _host = response["host"].toString();
+        _port = static_cast<uint16_t>(response["port"].toString().toUShort());
+        _transport = response["transport"].toString().trimmed().toLower();
+        _tls_server_name = response["tls_server_name"].toString();
+        if (_tls_server_name.isEmpty())
+            _tls_server_name = _host;
+        _use_tls = _transport == QStringLiteral("tls");
+        if (_port == 0 || (!_use_tls && (_transport != QStringLiteral("insecure") ||
+                                           !_allow_insecure))) {
+            scheduleReconnect();
+            return;
+        }
+        if (response["resource_base_url"].isString()) {
+            _resource_base_url = response["resource_base_url"].toString();
+            ResourceHttp::instance().configure(_resource_base_url, _uid);
+        }
+        // 构造新的认证帧；旧票据在上次连接时已消费，不能再次投递。
+        _login_payload = QJsonDocument(QJsonObject{{"uid", _uid},
+                                                   {"token", response["token"].toString()},
+                                                   {"resource_protocol_version", 1}})
+                             .toJson(QJsonDocument::Compact);
+        beginConnection();
+    });
+}
+
 void TcpMgr::slot_disconnect() {
-    if (_authenticated) writeFrame(Req::ID_RESOURCE_REVOKE_REQ,QByteArrayLiteral("{}"));
+    _manual_disconnect = true;
+    // 服务端关闭连接时撤销资源会话；这里额外撤销 Gate 的续期凭证。
+    logoutResumeToken();
+    cancelCredentialRequest();
     ResourceHttp::instance().reset();
     _outbox_timer.stop();
     _messages.close();
-    _manual_disconnect = true;
     _retry_timer.stop();
+    _renew_timer.stop();
     _heartbeat_timer.stop();
     _socket.abort();
     resetParser();
@@ -903,7 +1039,7 @@ void TcpMgr::slot_disconnect() {
 }
 
 void TcpMgr::slot_reconnect_for_proxy() {
-    if (_login_payload.isEmpty() || _host.isEmpty() || _port == 0) {
+    if (_resume_token.isEmpty()) {
         return;
     }
     _manual_disconnect = false;

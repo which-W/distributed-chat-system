@@ -26,7 +26,6 @@
 #include "RegisterDialog.h"
 #include "LoginDialog.h"
 #include <QStackedWidget>
-
 int runResourceBoundaryTests();
 
 int main(int argc, char** argv) {
@@ -336,27 +335,19 @@ int main(int argc, char** argv) {
     sendFrame(Req::ID_HEARTBEAT_RSP, fileSnapshot);
     settle();
     check(page->findChildren<FileBubble*>().size() == fileCount, "repeated snapshots must not duplicate attachments");
+    // 历史消息裁剪会销毁气泡；迟到的进度回调不能再解引用旧控件。
+    delete restoredSent->parentWidget();
+    emit FileTransferManager::Getinstance()->progressChanged("wire-sent-file", 1, 2);
+    page->SetUserInfo(std::make_shared<UserInfo>(user->GetFriendById(31)));
+    settle();
+    check(findFile("wire-sent-file"), "conversation reload must restore a trimmed attachment bubble");
     auto transfers = FileTransferManager::Getinstance();
-    QString failedTransfer;
-    const auto failedConnection = QObject::connect(transfers.get(), &FileTransferManager::transferFailed,
-        &app, [&](const QString& id, const QString&) { failedTransfer = id; });
-    const auto rejectedUpload = transfers->startUpload(imagePath, 31);
+    // 文件传输只通过 HTTPS 资源服务；聊天 TCP 不应再发送旧上传帧。
+    const auto previousId = lastId;
+    const auto upload = transfers->startUpload(imagePath, 31);
     settle();
-    check(!rejectedUpload.isEmpty() && lastId == Req::ID_UPLOAD_FILE_REQ, "new upload must send initialization");
-    sendFrame(Req::ID_UPLOAD_FILE_RSP, {{"error", 1}});
-    settle();
-    check(failedTransfer == rejectedUpload, "ID-less initialization failure must identify the local bubble");
-    const auto retryUpload = transfers->startUpload(imagePath, 31);
-    settle();
-    check(!retryUpload.isEmpty(), "rejected upload must release the slot for a new file");
-    auto* uploadTimer = transfers->findChild<QTimer*>("uploadAckTimer");
-    check(uploadTimer && uploadTimer->isActive(), "upload must have a response deadline");
-    if (uploadTimer) QMetaObject::invokeMethod(uploadTimer, "timeout", Qt::DirectConnection);
-    check(failedTransfer == retryUpload, "unacknowledged upload must fail with the correct local token");
-    const auto nextUpload = transfers->startUpload(imagePath, 31);
-    check(!nextUpload.isEmpty(), "timeout must not block the next upload");
-    transfers->cancel(nextUpload);
-    QObject::disconnect(failedConnection);
+    check(!upload.isEmpty() && lastId == previousId, "upload must stay off the chat TCP channel");
+    transfers->cancel(upload);
     for (auto mode : {ElaThemeType::Light, ElaThemeType::Dark}) {
         eTheme->setThemeMode(mode);
         emit ThemeManager::instance().themeChanged(mode);

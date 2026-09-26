@@ -29,6 +29,8 @@ void RunServer() {
     builder.RegisterService(&service);
     // 构建并启动gRPC服务器
     std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+    if (!server)
+        throw std::runtime_error("Status gRPC bind failed: " + server_address);
     chat::observability::log(chat::observability::Level::Info, "server.started",
                              "status server is listening", {{"address", server_address}});
     // 创建Boost.Asio的io_context
@@ -44,11 +46,11 @@ void RunServer() {
             server->Shutdown(); // 优雅地关闭服务器
         }
     });
-    // 在单独的线程中运行io_context
-    std::thread([&io_context]() { io_context.run(); }).detach();
-    // 等待服务器关闭
+    // 信号线程必须在局部 io_context 销毁前结束。
+    std::thread signal_thread([&io_context]() { io_context.run(); });
     server->Wait();
-    io_context.stop(); // 停止io_context
+    io_context.stop();
+    signal_thread.join();
 }
 int main(int argc, char** argv) {
     (void)argc;

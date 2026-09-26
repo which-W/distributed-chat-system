@@ -143,6 +143,7 @@ void LogicSystem::Tick(std::size_t shard) {
          {"pending_query_failures", _query_failures.load()},
          {"persist_us", _persist_us.load()},
          {"persist_batches", _persist_batches.load()},
+         {"resource_revoke_failures", _revoke_failures.load()},
          {"mysql_borrows", chat::observability::mysql_pool_metrics.borrows.load()},
          {"mysql_borrow_failures", chat::observability::mysql_pool_metrics.failed_borrows.load()},
          {"mysql_pool_wait_us", chat::observability::mysql_pool_metrics.wait_us.load()},
@@ -152,10 +153,19 @@ void LogicSystem::Tick(std::size_t shard) {
          {"log_dropped", chat::observability::droppedCount()}});
 }
 
-bool LogicSystem::PostMsgToFileQue(shared_ptr<LogicNode> msg, int index) {
-    if (index < 0 || static_cast<std::size_t>(index) >= _workers.size())
-        return false;
-    return _workers[index]->PostTask(msg);
+bool LogicSystem::ScheduleResourceRevocation(const std::string& session_id) {
+    const auto key = std::hash<std::string>{}(session_id);
+    // 同一会话的关闭任务排在其消息后面，且由逻辑工作池在退出时排空。
+    const bool queued = _executor->post(key, [this, session_id]() {
+        if (!RedisMgr::GetInstance()->Del(chat::resources::sessionKey(session_id))) {
+            ++_revoke_failures;
+            chat::observability::log(chat::observability::Level::Warn,
+                                     "resource.revocation_failed", "resource lease deletion failed");
+        }
+    });
+    if (!queued)
+        ++_revoke_failures;
+    return queued;
 }
 
 void LogicSystem::SetServer(std::shared_ptr<CServer> pserver) {
@@ -911,14 +921,13 @@ void LogicSystem::RegisterCallBacks() {
         const auto token = chat::resources::newToken();
         Json::Value record; record["uid"] = session->GetUserId(); record["session"] = session->GetSessionId();
         record["generation"] = session->GetSessionId();
-        const bool ok = redis->SetWithTtl(chat::resources::sessionKey(session->GetSessionId()), session->GetSessionId(), chat::resources::TokenSeconds) &&
+        const bool ok = redis->SetWithTtl(chat::resources::sessionKey(session->GetSessionId()), session->GetSessionId(), chat::resources::SessionSeconds) &&
             redis->SetWithTtl(chat::resources::tokenKey(token), record.toStyledString(), chat::resources::TokenSeconds);
         if (ok) { response["token"] = token; response["expires_in"] = chat::resources::TokenSeconds; }
         else response["error"] = 503;
         session->Send(response.toStyledString(), ID_RESOURCE_TOKEN_RSP);
     };
     _func_callback[ID_RESOURCE_REVOKE_REQ] = [](std::shared_ptr<CSession> session, const short&, const std::string&) {
-        RedisMgr::GetInstance()->Del(chat::resources::sessionKey(session->GetSessionId()));
         session->Close();
     };
     _func_callback[MSG_CHAT_LOGIN] =
@@ -946,6 +955,13 @@ void LogicSystem::RegisterCallBacks() {
 
 void LogicSystem::HeartbeatCallback(std::shared_ptr<CSession> session, short, string msg_data) {
     session->TouchActivity();
+    // 只有已经通过 Chat 票据认证的会话能刷新资源租约。
+    if (!RedisMgr::GetInstance()->SetWithTtl(
+            chat::resources::sessionKey(session->GetSessionId()), session->GetSessionId(),
+            chat::resources::SessionSeconds)) {
+        chat::observability::log(chat::observability::Level::Warn,
+                                 "resource.lease_refresh_failed", "resource lease refresh failed");
+    }
     Json::Value request;
     Json::Reader reader;
     if (!reader.parse(msg_data, request) || !request.isObject() || !request["sync_friends"].isBool() ||

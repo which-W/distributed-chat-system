@@ -90,8 +90,7 @@ void HttpConnection::HandleReq() {
             WriteResponse();
             return;
         }
-        // 如果处理成功，返回 200 OK
-        _res.result(http::status::ok);
+        // 处理器可返回更明确的错误状态；仅保留默认的 200 状态。
         _res.set(http::field::server, "GateServer");
         WriteResponse();
         return;
@@ -106,7 +105,7 @@ void HttpConnection::HandleReq() {
             return;
         }
 
-        _res.result(http::status::ok);
+        // 保留处理器设置的状态码。
         _res.set(http::field::server, "GateServer");
         WriteResponse();
         return;
@@ -117,6 +116,14 @@ void HttpConnection::HandleReq() {
     _res.set(http::field::content_type, "text/plain");
     beast::ostream(_res.body()) << "method not allowed";
     WriteResponse();
+}
+
+void HttpConnection::SetJsonError(http::status status, int error) {
+    _res.result(status);
+    _res.set(http::field::content_type, "application/json");
+    Json::Value response;
+    response["error"] = error;
+    beast::ostream(_res.body()) << response.toStyledString();
 }
 
 bool HttpConnection::PreParseGetParam() {

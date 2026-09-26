@@ -4,6 +4,7 @@
 #include "CServer.h"
 #include "ChatLogger.h"
 #include "ConfigMgr.h"
+#include "IOContextPooL.h"
 #include <hiredis/hiredis.h>
 #include <iostream>
 
@@ -23,20 +24,25 @@ int main() {
         const auto gate_port = static_cast<unsigned short>(configured_port);
         net::io_context ioc{1};
         boost::asio::signal_set signals(ioc, SIGINT, SIGTERM);
-        signals.async_wait([&ioc](const boost::system::error_code& error, int signal_number) {
+        auto server = std::make_shared<CServer>(ioc, gate_host, gate_port);
+        signals.async_wait([&ioc, server](const boost::system::error_code& error, int signal_number) {
             if (error) {
                 return;
             }
             chat::observability::log(chat::observability::Level::Info, "server.shutdown_requested",
                                      "shutdown signal received",
                                      {{"signal", std::int64_t(signal_number)}});
+            server->Stop();
             ioc.stop();
         });
-        std::make_shared<CServer>(ioc, gate_host, gate_port)->do_accept();
+        server->do_accept();
         chat::observability::log(chat::observability::Level::Info, "server.started",
                                  "gate server is listening",
                                  {{"host", gate_host}, {"port", std::int64_t(gate_port)}});
         ioc.run();
+        // 先停止接收，再排空工作池，避免接受回调访问已销毁的池。
+        server->Stop();
+        IOContextPool::GetInstance()->Stop();
         chat::observability::log(chat::observability::Level::Info, "server.stopped",
                                  "gate server stopped");
     } catch (std::exception const& e) {
